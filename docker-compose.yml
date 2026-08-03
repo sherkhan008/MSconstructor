@@ -1,0 +1,59 @@
+name: ms-shelving
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://ms_shelving:ms_shelving@postgres:5432/ms_shelving?schema=public
+      DIRECT_URL: postgresql://ms_shelving:ms_shelving@postgres:5432/ms_shelving?schema=public
+      APP_URL: http://localhost:3000
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      AUTH_URL: http://localhost:3000
+      AUTH_SECRET: ${AUTH_SECRET:-change-me-in-production}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@ms-stellazh.kz}
+      ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:-ChangeMe123!}
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ms_shelving
+      POSTGRES_PASSWORD: ms_shelving
+      POSTGRES_DB: ms_shelving
+    ports:
+      - "5432:5432"
+    volumes:
+      - ms_shelving_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ms_shelving -d ms_shelving"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - ms_shelving_redis_data:/data
+    restart: unless-stopped
+
+volumes:
+  ms_shelving_postgres_data:
+  ms_shelving_redis_data:

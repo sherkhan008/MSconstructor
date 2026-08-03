@@ -1,0 +1,228 @@
+@import 'tailwindcss';
+
+/* ==========================================================================
+   MS Shelving — central design tokens.
+   Every colour, font and radius used anywhere in the app must come from here.
+   Never hardcode a hex value inside a component.
+   ========================================================================== */
+
+@theme {
+  /* --- Palette ---------------------------------------------------------- */
+  --color-background: #f6f7f5;
+  --color-foreground: #1c2024;
+  --color-steel: #5b6470;
+  --color-line: #d8dce0;
+  --color-accent: #f0a202;
+  --color-blueprint: #2f5d8a;
+  --color-success: #2f6b4f;
+  --color-danger: #a63d40;
+
+  /* Derived surfaces — kept as tokens so components never invent shades. */
+  --color-surface: #ffffff;
+  --color-surface-muted: #eceee9;
+  --color-surface-dark: #1c2024;
+  --color-steel-soft: #8b939d;
+  --color-accent-soft: #fdf1d5;
+  --color-blueprint-soft: #e4ecf4;
+  --color-success-soft: #e3efe8;
+  --color-danger-soft: #f6e5e5;
+
+  /* --- Typography --------------------------------------------------------
+     Loaded via next/font/google in src/app/layout.tsx. Oswald stands in for
+     Yanone Kaffeesatz as the display face: Yanone Kaffeesatz does not ship a
+     Cyrillic subset, and every display font here must render Russian/Kazakh
+     text correctly. Inter and IBM Plex Mono both cover Cyrillic natively. */
+  --font-display: var(--font-oswald), 'Oswald', 'Arial Narrow', system-ui, sans-serif;
+  --font-sans: var(--font-inter), 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  --font-mono: var(--font-plex-mono), 'IBM Plex Mono', 'JetBrains Mono', 'Courier New', ui-monospace, monospace;
+
+  /* --- Shape ------------------------------------------------------------ */
+  --radius-none: 0px;
+  --radius-xs: 1px;
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+
+  /* --- Motion ----------------------------------------------------------- */
+  --ease-technical: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@layer base {
+  :root {
+    --blueprint-grid: color-mix(in srgb, var(--color-blueprint) 12%, transparent);
+    --blueprint-grid-strong: color-mix(in srgb, var(--color-blueprint) 22%, transparent);
+    --header-height: 64px;
+  }
+
+  * {
+    border-color: var(--color-line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    line-height: 1.05;
+    text-wrap: balance;
+  }
+
+  /* Numeric / technical values always render in the mono face. */
+  .mono,
+  code,
+  kbd,
+  samp {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-blueprint);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--color-accent);
+    color: var(--color-foreground);
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  /* Hide number-input spinners — quantities use explicit +/- controls. */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+}
+
+@layer components {
+  /* Blueprint grid used behind CAD-style previews and hero panels. */
+  .blueprint-grid {
+    background-image:
+      linear-gradient(to right, var(--blueprint-grid) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--blueprint-grid) 1px, transparent 1px),
+      linear-gradient(to right, var(--blueprint-grid-strong) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--blueprint-grid-strong) 1px, transparent 1px);
+    background-size:
+      10px 10px,
+      10px 10px,
+      50px 50px,
+      50px 50px;
+  }
+
+  .hairline {
+    border-width: 1px;
+    border-style: solid;
+    border-color: var(--color-line);
+  }
+
+  /* Small uppercase technical caption used across spec sheets. */
+  .tech-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1.2;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-steel);
+  }
+
+  .price-flash {
+    animation: price-flash 420ms var(--ease-technical);
+  }
+
+  /* Shared text input styling for hand-rolled forms (order, contact). */
+  .input {
+    height: 2.75rem;
+    width: 100%;
+    border: 1px solid var(--color-line);
+    background-color: var(--color-surface);
+    padding-inline: 0.75rem;
+    font-size: 0.875rem;
+    outline: none;
+  }
+  .input:focus {
+    border-color: var(--color-blueprint);
+  }
+  textarea.input {
+    height: auto;
+    padding-block: 0.5rem;
+  }
+}
+
+@keyframes price-flash {
+  0% {
+    background-color: var(--color-accent-soft);
+    transform: translateY(-1px);
+  }
+  100% {
+    background-color: transparent;
+    transform: translateY(0);
+  }
+}
+
+/* Accessibility: honour the user's reduced-motion preference. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Thin industrial scrollbars. */
+@media (pointer: fine) {
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-surface-muted);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-steel-soft);
+    border: 2px solid var(--color-surface-muted);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-steel);
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
