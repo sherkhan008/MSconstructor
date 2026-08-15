@@ -1,7 +1,7 @@
 export { calculatePrice } from './engine';
 export type { PricingContext } from './engine';
 export { validateCompatibility } from './compatibility';
-export { buildBom, buildFormulaScope, stripBomCosts } from './bom';
+export { buildBom, stripBomCosts } from './bom';
 export {
   shelvingConfigurationSchema,
   configurationAccessorySchema,

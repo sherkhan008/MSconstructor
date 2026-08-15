@@ -124,9 +124,12 @@ function CartRow({
           )}
         </div>
         <div className="tech-label flex flex-wrap gap-x-3 gap-y-1">
-          <span>{item.configuration.height}×{item.configuration.width}×{item.configuration.depth} мм</span>
+          <span>
+            {item.configuration.height}×{item.configuration.sections.map((s) => s.width).join('+')}×
+            {item.configuration.depth} мм
+          </span>
           <span>{item.configuration.shelves} полок</span>
-          <span>{item.configuration.sections} секц.</span>
+          <span>{item.configuration.sections.length} секц.</span>
           <span>{item.configuration.loadCapacity} кг/полка</span>
         </div>
 

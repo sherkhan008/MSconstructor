@@ -143,7 +143,8 @@ export function OrderForm() {
           {items.map((item) => (
             <li key={item.id} className="flex justify-between gap-2">
               <span className="text-steel">
-                {item.modelName} ({item.configuration.height}×{item.configuration.width}×{item.configuration.depth})
+                {item.modelName} ({item.configuration.height}×{item.configuration.sections.map((s) => s.width).join('+')}×
+                {item.configuration.depth})
                 {item.configuration.quantity > 1 ? ` × ${item.configuration.quantity}` : ''}
               </span>
               <span className="mono shrink-0">{item.priceSnapshot ? formatPrice(item.priceSnapshot.breakdown.total) : '…'}</span>

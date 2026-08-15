@@ -15,6 +15,7 @@ export function useLivePrice(config: ShelvingConfiguration): void {
   const setPriceResult = useConfiguratorStore((s) => s.setPriceResult);
   const setPricingError = useConfiguratorStore((s) => s.setPricingError);
   const setIsPricing = useConfiguratorStore((s) => s.setIsPricing);
+  const retryNonce = useConfiguratorStore((s) => s.pricingRetryNonce);
   const configJson = JSON.stringify(config);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -49,5 +50,5 @@ export function useLivePrice(config: ShelvingConfiguration): void {
 
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [configJson]);
+  }, [configJson, retryNonce]);
 }

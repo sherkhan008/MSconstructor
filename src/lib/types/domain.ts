@@ -35,25 +35,6 @@ export type ShelfType =
   | 'PERFORATED'
   | 'GALVANIZED';
 
-export type ConfigurationType =
-  | 'SINGLE'
-  | 'MULTIPLE_INDEPENDENT'
-  | 'STARTER_WITH_EXTENSIONS'
-  | 'CONTINUOUS_ROW'
-  /* Prepared, not exposed in the MVP UI. */
-  | 'L_SHAPE'
-  | 'U_SHAPE';
-
-export type RearOption = 'NONE' | 'CROSS_BRACE' | 'SOLID' | 'PERFORATED';
-export type SideOption =
-  | 'NONE'
-  | 'LEFT'
-  | 'RIGHT'
-  | 'BOTH'
-  | 'LEFT_PERFORATED'
-  | 'RIGHT_PERFORATED'
-  | 'BOTH_PERFORATED';
-
 export type AssemblyMethod = 'FIXED' | 'PER_SECTION' | 'PERCENT' | 'INDIVIDUAL';
 export type DeliveryMethodKind =
   | 'PICKUP'
@@ -287,20 +268,37 @@ export interface ConfigurationAccessorySelection {
   quantity: number;
 }
 
-/** The complete, serialisable description of what the customer configured. */
+/**
+ * One section of the shelving row. Width is independent per section; wall
+ * panels are independent per section too. Height and depth are deliberately
+ * NOT here — they are global to the whole row (see ShelvingConfiguration).
+ */
+export interface ShelvingSection {
+  id: string;
+  width: number;
+  rearWall: boolean;
+  leftWall: boolean;
+  rightWall: boolean;
+}
+
+/**
+ * The complete, serialisable description of what the customer configured.
+ * A configuration is a single shelving row made of one or more sections that
+ * share a common height and depth. When more than one section is present the
+ * row is always built with shared uprights between adjacent sections — this
+ * mirrors the real product (a starter section plus bolt-on extensions) and
+ * is what makes multi-section pricing cheaper than independent stand-alone
+ * units. Multi-row layouts are reserved for a future iteration.
+ */
 export interface ShelvingConfiguration {
   modelSlug: string;
-  configurationType: ConfigurationType;
   height: number;
-  width: number;
   depth: number;
   shelves: number;
-  sections: number;
+  sections: ShelvingSection[];
   loadCapacity: number;
   shelfType: ShelfType;
   colorId: string;
-  rear: RearOption;
-  side: SideOption;
   accessories: ConfigurationAccessorySelection[];
   assemblyId: string;
   deliveryId: string;

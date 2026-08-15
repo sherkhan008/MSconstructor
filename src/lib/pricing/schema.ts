@@ -7,33 +7,12 @@ import { z } from 'zod';
  * what the client-side configurator already checked.
  */
 
-export const configurationTypeSchema = z.enum([
-  'SINGLE',
-  'MULTIPLE_INDEPENDENT',
-  'STARTER_WITH_EXTENSIONS',
-  'CONTINUOUS_ROW',
-  'L_SHAPE',
-  'U_SHAPE',
-]);
-
 export const shelfTypeSchema = z.enum([
   'STANDARD',
   'REINFORCED',
   'EXTRA_REINFORCED',
   'PERFORATED',
   'GALVANIZED',
-]);
-
-export const rearOptionSchema = z.enum(['NONE', 'CROSS_BRACE', 'SOLID', 'PERFORATED']);
-
-export const sideOptionSchema = z.enum([
-  'NONE',
-  'LEFT',
-  'RIGHT',
-  'BOTH',
-  'LEFT_PERFORATED',
-  'RIGHT_PERFORATED',
-  'BOTH_PERFORATED',
 ]);
 
 export const priceLevelSchema = z.enum(['RETAIL', 'WHOLESALE', 'DEALER', 'CORPORATE', 'GOVERNMENT']);
@@ -43,23 +22,37 @@ export const configurationAccessorySchema = z.object({
   quantity: z.number().int().min(1).max(200),
 });
 
+export const MIN_SECTIONS = 1;
+export const MAX_SECTIONS = 10;
+
+export const shelvingSectionSchema = z.object({
+  id: z.string().min(1).max(64),
+  width: z.number().int().min(300).max(6000),
+  rearWall: z.boolean(),
+  leftWall: z.boolean(),
+  rightWall: z.boolean(),
+});
+
 export const shelvingConfigurationSchema = z.object({
   modelSlug: z
     .string()
     .min(1)
     .max(100)
     .regex(/^[a-z0-9-]+$/, 'Недопустимый идентификатор модели'),
-  configurationType: configurationTypeSchema,
   height: z.number().int().min(500).max(6000),
-  width: z.number().int().min(300).max(6000),
   depth: z.number().int().min(150).max(2000),
   shelves: z.number().int().min(1).max(20),
-  sections: z.number().int().min(1).max(20),
+  sections: z
+    .array(shelvingSectionSchema)
+    .min(MIN_SECTIONS, `Должна быть хотя бы одна секция`)
+    .max(MAX_SECTIONS, `Достигнуто максимальное количество секций (${MAX_SECTIONS})`)
+    .refine(
+      (sections) => new Set(sections.map((s) => s.id)).size === sections.length,
+      'Идентификаторы секций должны быть уникальными',
+    ),
   loadCapacity: z.number().int().min(1).max(2000),
   shelfType: shelfTypeSchema,
   colorId: z.string().min(1).max(100),
-  rear: rearOptionSchema,
-  side: sideOptionSchema,
   accessories: z.array(configurationAccessorySchema).max(50),
   assemblyId: z.string().min(1).max(100),
   deliveryId: z.string().min(1).max(100),

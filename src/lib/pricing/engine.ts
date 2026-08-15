@@ -84,7 +84,7 @@ export function calculatePrice(rawConfig: unknown, catalog: Catalog, context: Pr
   if (assembly.method === 'FIXED') {
     assemblyTotal = roundTenge(assembly.value);
   } else if (assembly.method === 'PER_SECTION') {
-    assemblyTotal = multiply(assembly.value, config.sections * config.quantity);
+    assemblyTotal = multiply(assembly.value, config.sections.length * config.quantity);
   } else if (assembly.method === 'PERCENT') {
     assemblyTotal = percentOf(itemsNet, assembly.value);
   } else {
@@ -188,7 +188,7 @@ export function calculatePrice(rawConfig: unknown, catalog: Catalog, context: Pr
   const leadTimeDays = Math.max(
     color.leadTimeDays,
     catalog.heights.find((h) => h.value === config.height)?.leadTimeDays ?? 0,
-    catalog.widths.find((w) => w.value === config.width)?.leadTimeDays ?? 0,
+    ...config.sections.map((s) => catalog.widths.find((w) => w.value === s.width)?.leadTimeDays ?? 0),
     catalog.depths.find((d) => d.value === config.depth)?.leadTimeDays ?? 0,
     2,
   );

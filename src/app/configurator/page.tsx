@@ -12,9 +12,15 @@ export const metadata: Metadata = buildMetadata({
   path: '/configurator',
 });
 
+/** The customer configurator currently offers MS Standard only — the other
+ * models stay fully intact server-side (pricing, BOM, catalog browsing) and
+ * are only excluded from this one page's model list. */
+const CONFIGURATOR_MODEL_SLUG = 'ms-standard';
+
 export default async function ConfiguratorPage() {
   const catalog = await getCatalog();
   const publicCatalog = toPublicCatalog(catalog);
+  publicCatalog.models = publicCatalog.models.filter((m) => m.slug === CONFIGURATOR_MODEL_SLUG);
 
   return (
     <Suspense fallback={<ConfiguratorFallback />}>

@@ -2,22 +2,24 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { getCatalog, resetCatalogCache, type Catalog } from '@/lib/data/repository';
 import { CATALOG_PRODUCTS } from '@/lib/data/seed-data';
 import { calculatePrice } from '@/lib/pricing';
-import type { ShelvingConfiguration } from '@/lib/types/domain';
+import type { ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
+
+let sectionCounter = 0;
+function section(width: number, overrides: Partial<ShelvingSection> = {}): ShelvingSection {
+  sectionCounter += 1;
+  return { id: `sec-${sectionCounter}`, width, rearWall: false, leftWall: false, rightWall: false, ...overrides };
+}
 
 function baseConfig(overrides: Partial<ShelvingConfiguration>): ShelvingConfiguration {
   return {
     modelSlug: 'ms-standard',
-    configurationType: 'SINGLE',
     height: 2000,
-    width: 1000,
     depth: 400,
     shelves: 5,
-    sections: 1,
+    sections: [section(1000)],
     loadCapacity: 150,
     shelfType: 'STANDARD',
     colorId: 'color-grey',
-    rear: 'CROSS_BRACE',
-    side: 'NONE',
     accessories: [],
     assemblyId: 'assembly-self',
     deliveryId: 'delivery-pickup',
@@ -67,23 +69,90 @@ describe('pricing engine', () => {
     expect(result.breakdown.total).toBeGreaterThan(1);
   });
 
-  it('reduces upright and tie quantities for shared-upright row configurations', () => {
-    const independent = calculatePrice(
-      baseConfig({ configurationType: 'MULTIPLE_INDEPENDENT', sections: 3 }),
-      catalog,
-    );
+  it('reduces upright and tie quantities for shared-upright multi-section rows', () => {
+    const single = calculatePrice(baseConfig({ sections: [section(1000)] }), catalog);
     const shared = calculatePrice(
-      baseConfig({ configurationType: 'STARTER_WITH_EXTENSIONS', sections: 3 }),
+      baseConfig({ sections: [section(1000), section(1000), section(1000)] }),
       catalog,
     );
-    expect(independent.ok).toBe(true);
+    expect(single.ok).toBe(true);
     expect(shared.ok).toBe(true);
-    if (!independent.ok || !shared.ok) return;
+    if (!single.ok || !shared.ok) return;
 
-    const uprightQty = (r: typeof independent) => r.bom.find((l) => l.type === 'UPRIGHT')?.quantity ?? 0;
-    expect(uprightQty(independent)).toBe(12); // sections * 4
-    expect(uprightQty(shared)).toBe(8); // (sections + 1) * 2 — shared uprights are not double-counted
-    expect(shared.breakdown.total).toBeLessThan(independent.breakdown.total);
+    const uprightQty = (r: typeof single) => r.bom.find((l) => l.type === 'UPRIGHT')?.quantity ?? 0;
+    // A lone section has nothing to share with, so it prices as `sections * 4`
+    // = 4. Three sections in one row always share boundary uprights:
+    // `(sections + 1) * 2` = 8, not the independent `sections * 4` = 12.
+    expect(uprightQty(single)).toBe(4);
+    expect(uprightQty(shared)).toBe(8);
+    expect(uprightQty(shared)).toBeLessThan(3 * uprightQty(single));
+  });
+
+  it('prices mixed section widths using each section\'s own width, not the first section\'s', () => {
+    const mixed = calculatePrice(baseConfig({ sections: [section(700), section(1500), section(1000)] }), catalog);
+    const uniform = calculatePrice(
+      baseConfig({ sections: [section(700), section(700), section(700)] }),
+      catalog,
+    );
+    expect(mixed.ok).toBe(true);
+    expect(uniform.ok).toBe(true);
+    if (!mixed.ok || !uniform.ok) return;
+
+    // A row with a 1500mm section must cost strictly more in shelves/beams than
+    // an all-700mm row of the same section count — proof the wider section's own
+    // width drove its BOM, not a single shared global width.
+    expect(mixed.breakdown.componentsSubtotal).toBeGreaterThan(uniform.breakdown.componentsSubtotal);
+    expect(mixed.rowLengthMm).toBe(700 + 1500 + 1000);
+  });
+
+  it('aggregates identical SKUs across sections into one BOM line', () => {
+    const result = calculatePrice(baseConfig({ sections: [section(1000), section(1000), section(1000)] }), catalog);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const shelfLines = result.bom.filter((l) => l.type === 'SHELF');
+    // All three sections share one width, so despite being section-level rules
+    // they must collapse into a single aggregated SHELF line, not three.
+    expect(shelfLines.length).toBe(1);
+    expect(shelfLines[0].quantity).toBe(5 * 3); // shelves * sections
+  });
+
+  it('prices independent wall panels per section', () => {
+    const noWalls = calculatePrice(baseConfig({ sections: [section(1000), section(1000)] }), catalog);
+    const oneWall = calculatePrice(
+      baseConfig({ sections: [section(1000, { rearWall: true }), section(1000)] }),
+      catalog,
+    );
+    expect(noWalls.ok).toBe(true);
+    expect(oneWall.ok).toBe(true);
+    if (!noWalls.ok || !oneWall.ok) return;
+    const rearLine = oneWall.bom.find((l) => l.type === 'REAR_WALL');
+    expect(rearLine?.quantity).toBe(1);
+    expect(noWalls.bom.find((l) => l.type === 'REAR_WALL')).toBeUndefined();
+    expect(oneWall.breakdown.total).toBeGreaterThan(noWalls.breakdown.total);
+  });
+
+  it('rejects more than the maximum of 10 sections', () => {
+    const result = calculatePrice(
+      baseConfig({ sections: Array.from({ length: 11 }, () => section(1000)) }),
+      catalog,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('rejects an empty section array', () => {
+    const result = calculatePrice(baseConfig({ sections: [] }), catalog);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('rejects a section width unsupported by the selected model', () => {
+    const result = calculatePrice(baseConfig({ sections: [section(1500)], modelSlug: 'archive-ms' }), catalog);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe('INCOMPATIBLE_CONFIGURATION');
   });
 
   it('includes accessories in the bill of materials and the price', () => {
@@ -129,19 +198,29 @@ describe('pricing engine', () => {
     expect(city.deliveryNote).toMatch(/менеджер/i);
   });
 
+  it('charges assembly per section for the PER_SECTION method', () => {
+    const one = calculatePrice(baseConfig({ sections: [section(1000)], assemblyId: 'assembly-professional' }), catalog);
+    const three = calculatePrice(
+      baseConfig({ sections: [section(1000), section(1000), section(1000)], assemblyId: 'assembly-professional' }),
+      catalog,
+    );
+    expect(one.ok).toBe(true);
+    expect(three.ok).toBe(true);
+    if (!one.ok || !three.ok) return;
+    expect(three.breakdown.assembly).toBe(one.breakdown.assembly * 3);
+  });
+
   it('prices every published catalog product without requiring an individual quote', () => {
     for (const product of CATALOG_PRODUCTS) {
       const config = baseConfig({
         modelSlug: product.modelSlug,
         height: product.height,
-        width: product.width,
         depth: product.depth,
         shelves: product.shelves,
-        sections: product.sections,
+        sections: Array.from({ length: Math.max(1, product.sections) }, () => section(product.width)),
         loadCapacity: product.loadCapacity,
         shelfType: product.shelfType,
         colorId: product.color,
-        configurationType: product.sections > 1 ? 'STARTER_WITH_EXTENSIONS' : 'SINGLE',
       });
       const result = calculatePrice(config, catalog);
       expect(result.ok, `expected catalog product "${product.slug}" to price successfully`).toBe(true);

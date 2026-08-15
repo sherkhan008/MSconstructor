@@ -25,9 +25,14 @@ export function validateCompatibility(
     issues.push({ field: 'height', message: `Высота ${config.height} мм недоступна для модели «${model.name.ru}»` });
   }
 
-  const widthOption = catalog.widths.find((w) => w.value === config.width && w.active);
-  if (!widthOption || !model.widths.includes(config.width)) {
-    issues.push({ field: 'width', message: `Ширина ${config.width} мм недоступна для модели «${model.name.ru}»` });
+  for (const section of config.sections) {
+    const widthOption = catalog.widths.find((w) => w.value === section.width && w.active);
+    if (!widthOption || !model.widths.includes(section.width)) {
+      issues.push({
+        field: 'sections',
+        message: `Ширина ${section.width} мм недоступна для модели «${model.name.ru}»`,
+      });
+    }
   }
 
   const depthOption = catalog.depths.find((d) => d.value === config.depth && d.active);
@@ -53,10 +58,10 @@ export function validateCompatibility(
     if (loadOption.models.length > 0 && !loadOption.models.includes(model.slug)) {
       issues.push({ field: 'loadCapacity', message: `Нагрузка ${config.loadCapacity} кг недоступна для модели «${model.name.ru}»` });
     }
-    if (config.width > loadOption.maxWidth) {
+    if (config.sections.some((s) => s.width > loadOption.maxWidth)) {
       issues.push({
         field: 'loadCapacity',
-        message: `Нагрузка ${config.loadCapacity} кг доступна только при ширине до ${loadOption.maxWidth} мм`,
+        message: `Нагрузка ${config.loadCapacity} кг доступна только при ширине секции до ${loadOption.maxWidth} мм`,
       });
     }
     if (config.depth > loadOption.maxDepth) {
@@ -70,25 +75,6 @@ export function validateCompatibility(
   const color = findColor(catalog, config.colorId);
   if (!color) {
     issues.push({ field: 'colorId', message: 'Выбранный цвет недоступен' });
-  }
-
-  if (config.configurationType === 'SINGLE' && config.sections !== 1) {
-    issues.push({ field: 'sections', message: 'Одна секция допускает только одну секцию (sections = 1)' });
-  }
-  if (
-    (config.configurationType === 'STARTER_WITH_EXTENSIONS' || config.configurationType === 'CONTINUOUS_ROW') &&
-    config.sections < 2
-  ) {
-    issues.push({
-      field: 'sections',
-      message: 'Стартовая секция с пристройками требует минимум 2 секции',
-    });
-  }
-  if (config.configurationType === 'L_SHAPE' || config.configurationType === 'U_SHAPE') {
-    issues.push({
-      field: 'general',
-      message: 'Г-образная и П-образная конфигурации пока недоступны онлайн — оставьте заявку на индивидуальный расчёт',
-    });
   }
 
   const assembly = findAssembly(catalog, config.assemblyId);
@@ -113,7 +99,10 @@ export function validateCompatibility(
         message: `Аксессуар «${accessory.name.ru}» недоступен для модели «${model.name.ru}»`,
       });
     }
-    if (accessory.maxQuantityPerSection && selection.quantity > accessory.maxQuantityPerSection * config.sections) {
+    if (
+      accessory.maxQuantityPerSection &&
+      selection.quantity > accessory.maxQuantityPerSection * config.sections.length
+    ) {
       issues.push({
         field: 'accessories',
         message: `Максимальное количество «${accessory.name.ru}» — ${accessory.maxQuantityPerSection} на секцию`,

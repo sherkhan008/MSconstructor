@@ -23,22 +23,14 @@ export function whatsAppProductUrl(modelNameRu: string, url: string): string {
   return buildWhatsAppUrl(site.whatsapp, message);
 }
 
-const CONFIG_TYPE_LABEL: Record<string, string> = {
-  SINGLE: 'одна секция',
-  MULTIPLE_INDEPENDENT: 'несколько независимых секций',
-  STARTER_WITH_EXTENSIONS: 'стартовая + пристроенные секции',
-  CONTINUOUS_ROW: 'сплошной ряд',
-  L_SHAPE: 'Г-образная',
-  U_SHAPE: 'П-образная',
-};
-
 export function whatsAppConfiguratorUrl(price: PriceResult, modelNameRu: string, shareUrl: string): string {
   const c = price.configuration;
+  const widths = c.sections.map((s) => s.width).join('+');
   const lines = [
     'Здравствуйте! Хочу заказать стеллаж со следующей конфигурацией:',
     `Модель: ${modelNameRu}`,
-    `Размеры: ${c.height}×${c.width}×${c.depth} мм`,
-    `Полки: ${c.shelves} шт., секций: ${c.sections} (${CONFIG_TYPE_LABEL[c.configurationType] ?? c.configurationType})`,
+    `Размеры: ${c.height}×${widths}×${c.depth} мм`,
+    `Полки: ${c.shelves} шт., секций: ${c.sections.length}`,
     `Нагрузка: ${c.loadCapacity} кг на полку`,
     c.accessories.length > 0 ? `Аксессуары: ${c.accessories.length} позиций` : undefined,
     `Итоговая цена: ${formatPrice(price.breakdown.total)}`,

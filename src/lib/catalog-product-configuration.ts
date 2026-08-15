@@ -1,11 +1,20 @@
 import type { CatalogProduct, ShelvingConfiguration } from '@/lib/types/domain';
 
+let idCounter = 0;
+function generateSectionId(): string {
+  idCounter += 1;
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
+  return `sec-catalog-${idCounter}`;
+}
+
 /**
  * Builds a full, priceable configuration from a catalog listing entry.
  * CatalogProduct only stores the dimensions/shelves/load a card displays —
  * this fills in the remaining defaults (assembly, delivery, walls, quantity)
  * so the result can be run through the same calculatePrice() every other
- * entry point uses.
+ * entry point uses. `product.sections` is a plain count (identical-width
+ * sections) here — the live configurator's independent per-section widths
+ * only start diverging once the customer opens "Настроить".
  */
 export function catalogProductToConfiguration(
   product: CatalogProduct,
@@ -13,17 +22,19 @@ export function catalogProductToConfiguration(
 ): ShelvingConfiguration {
   return {
     modelSlug: product.modelSlug,
-    configurationType: product.sections > 1 ? 'STARTER_WITH_EXTENSIONS' : 'SINGLE',
     height: product.height,
-    width: product.width,
     depth: product.depth,
     shelves: product.shelves,
-    sections: product.sections,
+    sections: Array.from({ length: Math.max(1, product.sections) }, () => ({
+      id: generateSectionId(),
+      width: product.width,
+      rearWall: false,
+      leftWall: false,
+      rightWall: false,
+    })),
     loadCapacity: product.loadCapacity,
     shelfType: product.shelfType,
     colorId: product.color,
-    rear: 'CROSS_BRACE',
-    side: 'NONE',
     accessories: [],
     assemblyId: 'assembly-self',
     deliveryId: 'delivery-pickup',

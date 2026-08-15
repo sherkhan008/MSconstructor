@@ -17,6 +17,12 @@
   --color-success: #2f6b4f;
   --color-danger: #a63d40;
 
+  /* Restrained red accent reserved for active dimensions, drag state, the
+     section insertion marker and a handful of small configurator controls —
+     never a page-wide colour. See src/components/configurator/ShelvingPreview.tsx. */
+  --color-dimension-accent: #c51f26;
+  --color-dimension-accent-soft: #fbe6e6;
+
   /* Derived surfaces — kept as tokens so components never invent shades. */
   --color-surface: #ffffff;
   --color-surface-muted: #eceee9;
