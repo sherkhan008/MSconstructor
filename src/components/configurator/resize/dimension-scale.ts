@@ -24,7 +24,7 @@ export const VIEWBOX_H = 480;
 /** Visual normalisation ranges — mirrors the constants ShelvingPreview used
  * before drag support existed, now shared so the drag math and the static
  * render agree on the same mm-to-px curve. */
-export const HEIGHT_MM_RANGE: Range = { min: 1200, max: 3200 };
+export const HEIGHT_MM_RANGE: Range = { min: 500, max: 3000 };
 export const HEIGHT_PX_RANGE: Range = { min: 140, max: 320 };
 
 /** Width is stored per-section; the total row width is sectionPx * sections. */
@@ -33,7 +33,7 @@ export const WIDTH_PX_RANGE: Range = { min: 90, max: 170 };
 
 /** Depth has no on-screen footprint in a front elevation — it is drawn as a
  * short receding diagonal, so its "px" is the diagonal's length. */
-export const DEPTH_MM_RANGE: Range = { min: 250, max: 650 };
+export const DEPTH_MM_RANGE: Range = { min: 300, max: 800 };
 export const DEPTH_PX_RANGE: Range = { min: 35, max: 90 };
 export const DEPTH_ANGLE_DEG = 40;
 

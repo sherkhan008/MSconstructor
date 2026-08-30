@@ -135,7 +135,10 @@ function toRule(row: Awaited<ReturnType<typeof prisma.configurationRule.findMany
   };
 }
 
-function toAccessory(row: Awaited<ReturnType<typeof prisma.accessory.findMany>>[number]): Accessory {
+// Exported (not just used internally) so tests/integration/canonical-catalog-ids.test.ts
+// can directly prove these never regenerate an id — every field below is a
+// straight pass-through of the database row, `id` included.
+export function toAccessory(row: Awaited<ReturnType<typeof prisma.accessory.findMany>>[number]): Accessory {
   return {
     id: row.id,
     sku: row.sku,
@@ -154,7 +157,7 @@ function toAccessory(row: Awaited<ReturnType<typeof prisma.accessory.findMany>>[
   };
 }
 
-function toColor(row: Awaited<ReturnType<typeof prisma.colorOption.findMany>>[number]): ColorOption {
+export function toColor(row: Awaited<ReturnType<typeof prisma.colorOption.findMany>>[number]): ColorOption {
   return {
     id: row.id,
     name: { ru: row.nameRu, kk: row.nameKk },
@@ -166,7 +169,7 @@ function toColor(row: Awaited<ReturnType<typeof prisma.colorOption.findMany>>[nu
   };
 }
 
-function toAssembly(row: Awaited<ReturnType<typeof prisma.assemblyService.findMany>>[number]): AssemblyService {
+export function toAssembly(row: Awaited<ReturnType<typeof prisma.assemblyService.findMany>>[number]): AssemblyService {
   return {
     id: row.id,
     name: { ru: row.nameRu, kk: row.nameKk },
@@ -178,7 +181,7 @@ function toAssembly(row: Awaited<ReturnType<typeof prisma.assemblyService.findMa
   };
 }
 
-function toDelivery(row: Awaited<ReturnType<typeof prisma.deliveryMethod.findMany>>[number]): DeliveryMethod {
+export function toDelivery(row: Awaited<ReturnType<typeof prisma.deliveryMethod.findMany>>[number]): DeliveryMethod {
   return {
     id: row.id,
     kind: row.kind as DeliveryMethodKind,

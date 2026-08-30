@@ -64,9 +64,24 @@ export function configurationToSearchParams(config: ShelvingConfiguration): URLS
   params.set('delivery', config.deliveryId);
   params.set('qty', String(config.quantity));
   if (config.accessories.length > 0) {
-    params.set('acc', config.accessories.map((a) => `${a.accessoryId}:${a.quantity}`).join(','));
+    // A section-scoped accessory is encoded with the target section's
+    // *position* in the row, not its internal id — decodeSection always
+    // mints a fresh id on parse (see below), so the original id would never
+    // match anything after a round trip. The position survives intact.
+    params.set(
+      'acc',
+      config.accessories
+        .map((a) => {
+          if (!a.sectionId) return `${a.accessoryId}:${a.quantity}`;
+          const index = config.sections.findIndex((s) => s.id === a.sectionId);
+          return index === -1 ? `${a.accessoryId}:${a.quantity}` : `${a.accessoryId}:${a.quantity}:${index}`;
+        })
+        .join(','),
+    );
   }
   if (config.promoCode) params.set('promo', config.promoCode);
+  if (config.metalFootPad) params.set('metalFootPad', '1');
+  if (config.shelfCornerBrackets) params.set('shelfCornerBrackets', '1');
   return params;
 }
 
@@ -115,18 +130,10 @@ export function parseConfigurationFromSearchParams(
   const promo = params.get('promo');
   if (promo) result.promoCode = promo;
 
-  const acc = params.get('acc');
-  if (acc) {
-    const accessories: ConfigurationAccessorySelection[] = [];
-    for (const entry of acc.split(',')) {
-      const [accessoryId, qtyRaw] = entry.split(':');
-      const quantity = Number.parseInt(qtyRaw ?? '1', 10);
-      if (accessoryId && Number.isFinite(quantity) && quantity > 0) {
-        accessories.push({ accessoryId, quantity });
-      }
-    }
-    result.accessories = accessories;
-  }
+  const metalFootPad = params.get('metalFootPad');
+  if (metalFootPad === '1') result.metalFootPad = true;
+  const shelfCornerBrackets = params.get('shelfCornerBrackets');
+  if (shelfCornerBrackets === '1') result.shelfCornerBrackets = true;
 
   const sectionsParam = params.get('sections');
   const legacyWidth = toInt(params.get('width'));
@@ -151,6 +158,27 @@ export function parseConfigurationFromSearchParams(
   } else if (legacyWidth && legacyWidth > 0) {
     // Pre-section-array legacy URL with only `width` and no `sections` at all.
     result.sections = [{ id: generateSectionId(), width: legacyWidth, rearWall: false, leftWall: false, rightWall: false }];
+  }
+
+  // Parsed after `sections` — a section-scoped accessory's third segment is
+  // a row position, resolved against the *freshly generated* section ids
+  // above (decodeSection never reuses the original sender's ids).
+  const acc = params.get('acc');
+  if (acc) {
+    const accessories: ConfigurationAccessorySelection[] = [];
+    for (const entry of acc.split(',')) {
+      const [accessoryId, qtyRaw, indexRaw] = entry.split(':');
+      const quantity = Number.parseInt(qtyRaw ?? '1', 10);
+      if (!accessoryId || !Number.isFinite(quantity) || quantity <= 0) continue;
+      if (indexRaw === undefined) {
+        accessories.push({ accessoryId, quantity });
+        continue;
+      }
+      const index = Number.parseInt(indexRaw, 10);
+      const sectionId = result.sections?.[index]?.id;
+      accessories.push(sectionId ? { accessoryId, quantity, sectionId } : { accessoryId, quantity });
+    }
+    result.accessories = accessories;
   }
 
   return result;

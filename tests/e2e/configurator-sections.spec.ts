@@ -106,7 +106,8 @@ test('multi-section row: independent widths, single-section drag, cart and check
   await expect(page).toHaveURL(/\/order$/);
 
   await page.getByLabel('ФИО / Контактное лицо').fill('Тест Тестов');
-  await page.getByLabel('Телефон').fill('+77001234567');
+  await page.getByLabel('Телефон *', { exact: true }).fill('+77001234567');
+  await page.getByLabel('Email').fill('test@example.com');
   await page.getByLabel('Город').fill('Алматы');
 
   await page.getByRole('button', { name: /Подтвердить заказ/ }).click();

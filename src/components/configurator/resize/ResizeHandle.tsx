@@ -15,16 +15,38 @@ export interface ResizeHandleProps {
   yPercent: number;
   cursorClassName: string;
   isDragging: boolean;
-  /** Whole-preview hover state (not hover of this 44px hit area itself) —
-   * the marker only needs to be findable once the pointer is already
-   * somewhere over the rack, never before. */
-  previewHovered: boolean;
+  /** True while the pointer is over this axis's dedicated discovery zone
+   * (e.g. the top rack edge for height, a section's right upright for
+   * width, the rear upright/depth edge for depth) — never just "somewhere
+   * over the white preview canvas". See ShelvingPreview for the zone
+   * geometry; this component only renders whatever it's told. */
+  zoneHovered: boolean;
+  /** Also fed by ShelvingPreview's zone-hover handlers: once the pointer
+   * moves off the underlying zone and onto this button itself (a separate,
+   * overlapping DOM element, so the zone's own pointerleave would otherwise
+   * fire), these keep the marker visible instead of letting it vanish right
+   * as the user tries to grab it. */
+  onPointerEnter?: (e: ReactPointerEvent<HTMLButtonElement>) => void;
+  onPointerLeave?: (e: ReactPointerEvent<HTMLButtonElement>) => void;
   onPointerDown: (e: ReactPointerEvent<HTMLButtonElement>) => void;
   onPointerMove: (e: ReactPointerEvent<HTMLButtonElement>) => void;
   onPointerUp: (e: ReactPointerEvent<HTMLButtonElement>) => void;
   onPointerCancel: (e: ReactPointerEvent<HTMLButtonElement>) => void;
   onKeyDown: (e: ReactKeyboardEvent<HTMLButtonElement>) => void;
 }
+
+/**
+ * Small glyph shown inside each marker so the resize direction is legible
+ * at a glance, not just implied by a plain dot: ↕ for height (vertical),
+ * ↔ for width (horizontal), ↗/↙ stacked for depth — matching the rack's
+ * actual perspective direction (the depth diagonal runs up-right toward the
+ * rear, down-left toward the front; see ShelvingPreview's depthVec).
+ */
+const AXIS_ICON: Record<DimensionAxis, string> = {
+  height: '↕',
+  width: '↔',
+  depth: '↗↙',
+};
 
 /**
  * The draggable knob for one axis of ShelvingPreview's resize interaction.
@@ -44,7 +66,9 @@ export function ResizeHandle({
   yPercent,
   cursorClassName,
   isDragging,
-  previewHovered,
+  zoneHovered,
+  onPointerEnter,
+  onPointerLeave,
   onPointerDown,
   onPointerMove,
   onPointerUp,
@@ -62,6 +86,8 @@ export function ResizeHandle({
       aria-valuenow={value}
       aria-valuetext={`${value} мм`}
       aria-orientation={axis === 'height' ? 'vertical' : 'horizontal'}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -77,19 +103,22 @@ export function ResizeHandle({
       <span
         aria-hidden="true"
         className={[
-          'h-2.5 w-2.5 rounded-full border bg-surface transition-opacity',
-          // Hidden until the *whole preview* is hovered — never gated on
-          // finding this 44px hit area first. Keyboard focus on this exact
-          // handle (group-focus-visible) and an active drag on this exact
-          // axis (isDragging) can still reveal it on their own. Coarse
-          // pointers (touch) have no hover concept, so always show there.
+          'grid h-5 w-5 place-items-center rounded-full border text-[10px] font-bold leading-none transition-opacity',
+          // Hidden until the pointer is over this axis's own discovery zone
+          // (see ShelvingPreview) — never gated on the whole white canvas.
+          // Keyboard focus on this exact handle (group-focus-visible) and an
+          // active drag on this exact axis (isDragging) can still reveal it
+          // on their own. Coarse pointers (touch) have no hover concept, so
+          // always show there.
           isDragging
-            ? 'border-dimension-accent bg-dimension-accent-soft opacity-100'
-            : previewHovered
-              ? 'border-steel-soft opacity-100'
-              : 'border-steel-soft opacity-0 group-focus-visible:opacity-100 pointer-coarse:opacity-100',
+            ? 'border-dimension-accent bg-dimension-accent-soft text-dimension-accent opacity-100'
+            : zoneHovered
+              ? 'border-steel-soft bg-surface text-steel opacity-100'
+              : 'border-steel-soft bg-surface text-steel opacity-0 group-focus-visible:opacity-100 pointer-coarse:opacity-100',
         ].join(' ')}
-      />
+      >
+        {AXIS_ICON[axis]}
+      </span>
     </button>
   );
 }

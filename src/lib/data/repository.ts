@@ -1,4 +1,4 @@
-import { hasDatabase } from '@/lib/env';
+import { assertDatabaseConfigured, hasDatabase } from '@/lib/env';
 import type {
   Accessory,
   AssemblyService,
@@ -64,8 +64,16 @@ export interface Catalog {
   useCases: { id: string; ru: string; kk: string }[];
 }
 
+/**
+ * A fresh, independent snapshot on every call — never the shared seed-data
+ * arrays by reference. The Postgres-backed path (db-repository.ts) already
+ * builds new row objects on every query; mirroring that here means no
+ * caller can ever mutate a cached catalog and silently corrupt the shared
+ * seed data for the rest of the process (and it's what makes a catalog
+ * cache genuinely testable — see tests/integration/catalog-cache.test.ts).
+ */
 function buildMockCatalog(): Catalog {
-  return {
+  return structuredClone({
     models: MODELS,
     heights: HEIGHTS,
     widths: WIDTHS,
@@ -81,31 +89,67 @@ function buildMockCatalog(): Catalog {
     promoCodes: PROMO_CODES,
     products: CATALOG_PRODUCTS,
     useCases: USE_CASES,
-  };
+  });
 }
-
-let cached: Catalog | null = null;
 
 /**
- * Returns the full reference catalog. Synchronous today because both the
- * mock source and the eventual Prisma source can be resolved once and
- * cached per server process; the async signature is kept so callers already
- * compose correctly once a real database-backed implementation is wired in.
+ * A changed database price must become visible without an application
+ * restart, but re-querying Postgres on every single request is wasteful for
+ * data that only an admin changes occasionally. A short TTL is the smallest
+ * robust middle ground (spec: "prefer simplicity for MVP"). 60s is a bound
+ * on staleness, not a promise of freshness the moment a price changes.
  */
-export async function getCatalog(): Promise<Catalog> {
-  if (cached) return cached;
-  if (hasDatabase) {
-    const { buildDbCatalog } = await import('./db-repository');
-    cached = await buildDbCatalog();
-    return cached;
-  }
-  cached = buildMockCatalog();
-  return cached;
+export const CATALOG_CACHE_TTL_MS = 60_000;
+
+interface CacheEntry {
+  catalog: Catalog;
+  expiresAt: number;
 }
 
-/** Test-only: force the next getCatalog() call to rebuild. */
+let cacheEntry: CacheEntry | null = null;
+// Shared by every concurrent caller that arrives while a rebuild is already
+// in flight, so an expired cache under load triggers one rebuild, not one
+// per concurrent request (thundering herd).
+let inflight: Promise<Catalog> | null = null;
+
+async function loadCatalog(): Promise<Catalog> {
+  if (hasDatabase) {
+    const { buildDbCatalog } = await import('./db-repository');
+    return buildDbCatalog();
+  }
+  return buildMockCatalog();
+}
+
+/**
+ * Returns the full reference catalog, refreshed at most once per
+ * CATALOG_CACHE_TTL_MS. Throws in production if no real database is
+ * configured — see assertDatabaseConfigured — rather than silently serving
+ * the in-memory sample catalog.
+ */
+export async function getCatalog(): Promise<Catalog> {
+  assertDatabaseConfigured('catalog');
+
+  const now = Date.now();
+  if (cacheEntry && cacheEntry.expiresAt > now) return cacheEntry.catalog;
+  if (inflight) return inflight;
+
+  inflight = loadCatalog()
+    .then((catalog) => {
+      cacheEntry = { catalog, expiresAt: Date.now() + CATALOG_CACHE_TTL_MS };
+      return catalog;
+    })
+    .finally(() => {
+      inflight = null;
+    });
+
+  return inflight;
+}
+
+/** Test-only: force the next getCatalog() call to rebuild — the deterministic
+ * alternative to waiting out CATALOG_CACHE_TTL_MS in a test. */
 export function resetCatalogCache(): void {
-  cached = null;
+  cacheEntry = null;
+  inflight = null;
 }
 
 /* -------------------------------------------------------------------------- */

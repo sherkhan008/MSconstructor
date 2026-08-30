@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server';
-import { findModel, getCatalog } from '@/lib/data/repository';
+import { findDelivery, findModel, getCatalog } from '@/lib/data/repository';
 import { calculatePrice } from '@/lib/pricing';
 import { stripBomCosts } from '@/lib/pricing/bom';
 import { orderRequestSchema } from '@/lib/pricing/schema';
@@ -62,6 +62,19 @@ export async function POST(request: NextRequest) {
         breakdown: result.breakdown,
         modelName: model?.name.ru ?? result.configuration.modelSlug,
       });
+    }
+
+    // A delivery method may require a real address (e.g. city/country
+    // delivery) even though pickup does not — inferred from each item's own
+    // already-validated deliveryId against the catalog, never guessed.
+    const addressRequired = items.some((item) => findDelivery(catalog, item.configuration.deliveryId)?.requiresAddress);
+    if (addressRequired && !input.deliveryAddress?.trim()) {
+      return apiError(
+        'VALIDATION_ERROR',
+        'Проверьте правильность заполнения формы',
+        400,
+        ['deliveryAddress: Укажите адрес доставки'],
+      );
     }
 
     const netTotal = items.reduce((sum, item) => sum + item.breakdown.net, 0);

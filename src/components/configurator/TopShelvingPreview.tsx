@@ -5,6 +5,7 @@ import type { ColorOption, ShelvingConfiguration } from '@/lib/types/domain';
 import { VIEWBOX_W, depthMmToTopPx } from './resize/dimension-scale';
 import { computeSectionLayout, computeBoundaryXs } from './resize/section-geometry';
 import { SectionWidthLabel } from './ShelvingPreview';
+import { resolveRackFill, shade } from './rack-colors';
 
 /**
  * Plan/top view — a bird's-eye footprint of the current shelving row,
@@ -43,7 +44,10 @@ export function TopShelvingPreview({ config, color, className = '', interactive 
   const bottom = TOP_Y + depthPx;
   const viewboxH = bottom + TOTAL_LINE_Y_OFFSET + 34;
 
-  const fill = color?.hex ?? '#D9DBDD';
+  // Same resolved fill as the front view (see rack-colors.ts) so the two
+  // preview modes never disagree on what color the rack is.
+  const fill = resolveRackFill(color);
+  const edgeShade = shade(fill, -6);
   const rowStart = layout[0].x;
   const rowEnd = layout[layout.length - 1].x + layout[layout.length - 1].width;
   const totalLengthMm = config.sections.reduce((sum, s) => sum + s.width, 0);
@@ -73,7 +77,7 @@ export function TopShelvingPreview({ config, color, className = '', interactive 
               }
               style={interactive ? { cursor: 'pointer' } : undefined}
             >
-              <rect x={section.x} y={TOP_Y} width={section.width} height={depthPx} fill={fill} stroke="#8F8F8F" strokeWidth={1} />
+              <rect x={section.x} y={TOP_Y} width={section.width} height={depthPx} fill={fill} stroke={edgeShade} strokeWidth={1} />
               {isActive && layout.length > 1 && (
                 <rect
                   x={section.x - 2}
@@ -91,9 +95,10 @@ export function TopShelvingPreview({ config, color, className = '', interactive 
           );
         })}
 
-        {/* Shared-boundary posts, same idea as the front view's front posts. */}
+        {/* Shared-boundary posts, same idea as the front view's front posts —
+             same resolved fill, not an unrelated color. */}
         {boundaryXs.map((x, i) => (
-          <rect key={i} x={x - 2.5} y={TOP_Y} width={5} height={depthPx} fill="#5B6470" />
+          <rect key={i} x={x - 2.5} y={TOP_Y} width={5} height={depthPx} fill={fill} stroke={edgeShade} strokeWidth={0.5} />
         ))}
 
         {/* Per-section width labels, under each footprint. */}

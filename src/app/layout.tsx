@@ -2,9 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { IBM_Plex_Mono, Inter, Oswald } from 'next/font/google';
 import Script from 'next/script';
 import './globals.css';
-import { Header } from '@/components/layout/Header';
-import { Footer } from '@/components/layout/Footer';
-import { WhatsAppFloatingButton } from '@/components/layout/WhatsAppFloatingButton';
+import { ConditionalChrome } from '@/components/layout/ConditionalChrome';
 import { appUrl, publicEnv } from '@/lib/env';
 import { site } from '@/lib/config/site';
 import { organizationJsonLd, jsonLdScriptProps } from '@/lib/seo';
@@ -76,10 +74,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="ru" className={`${oswald.variable} ${inter.variable} ${plexMono.variable}`}>
       <body className="flex min-h-screen flex-col bg-background text-foreground">
         <script {...jsonLdScriptProps(organizationJsonLd())} type="application/ld+json" />
-        <Header />
-        <main className="flex-1">{children}</main>
-        <Footer />
-        <WhatsAppFloatingButton />
+        <ConditionalChrome>{children}</ConditionalChrome>
 
         {publicEnv.NEXT_PUBLIC_GOOGLE_ANALYTICS_ID && (
           <>

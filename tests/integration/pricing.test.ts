@@ -211,7 +211,7 @@ describe('pricing engine', () => {
   });
 
   it('prices every published catalog product without requiring an individual quote', () => {
-    for (const product of CATALOG_PRODUCTS) {
+    for (const product of CATALOG_PRODUCTS.filter((p) => p.published)) {
       const config = baseConfig({
         modelSlug: product.modelSlug,
         height: product.height,
@@ -225,5 +225,177 @@ describe('pricing engine', () => {
       const result = calculatePrice(config, catalog);
       expect(result.ok, `expected catalog product "${product.slug}" to price successfully`).toBe(true);
     }
+  });
+
+  it('rejects the unpublished ms-standard-2400x1200x500-row product\'s own configuration (2400mm is no longer a valid MS Standard height)', () => {
+    const product = CATALOG_PRODUCTS.find((p) => p.slug === 'ms-standard-2400x1200x500-row');
+    expect(product?.published).toBe(false);
+    if (!product) return;
+    const config = baseConfig({
+      height: product.height,
+      depth: product.depth,
+      shelves: product.shelves,
+      sections: Array.from({ length: Math.max(1, product.sections) }, () => section(product.width)),
+    });
+    const result = calculatePrice(config, catalog);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe('INCOMPATIBLE_CONFIGURATION');
+  });
+
+  // The authoritative current MS Standard matrix (see
+  // src/lib/pricing/ms-standard-compatibility.ts) — every one of these
+  // heights must resolve real UPRIGHT/SHELF/BEAM_DEPTH/SIDE_WALL
+  // components, not just pass compatibility validation, or the customer
+  // hits a "missing component" price failure for a value the UI offers.
+  const MS_STANDARD_HEIGHTS = [1500, 1800, 2000, 2200, 2500, 3000];
+  const MS_STANDARD_DEPTHS = [300, 400, 500, 600, 700, 800];
+
+  it('exposes exactly the specified MS Standard height list', () => {
+    const model = catalog.models.find((m) => m.slug === 'ms-standard');
+    expect(model?.heights).toEqual(MS_STANDARD_HEIGHTS);
+  });
+
+  it('exposes exactly the specified MS Standard depth list', () => {
+    const model = catalog.models.find((m) => m.slug === 'ms-standard');
+    expect(model?.depths).toEqual(MS_STANDARD_DEPTHS);
+  });
+
+  it.each(MS_STANDARD_HEIGHTS)('prices a default MS Standard configuration at height=%dmm', (height) => {
+    const result = calculatePrice(baseConfig({ height }), catalog);
+    expect(result.ok, `height=${height} should price successfully`).toBe(true);
+    if (!result.ok) return;
+    expect(result.breakdown.total).toBeGreaterThan(0);
+  });
+
+  it.each(MS_STANDARD_DEPTHS)('prices a default MS Standard configuration at depth=%dmm', (depth) => {
+    const result = calculatePrice(baseConfig({ depth }), catalog);
+    expect(result.ok, `depth=${depth} should price successfully`).toBe(true);
+    if (!result.ok) return;
+    expect(result.breakdown.total).toBeGreaterThan(0);
+  });
+
+  // A follow-up task restricted the customer-facing MS Standard configurator
+  // to STANDARD shelves only (see seed-data.ts's shelfTypes and
+  // AdvancedSettingsAccordion, which no longer renders a shelf-type
+  // selector). PERFORATED/GALVANIZED are no longer *reachable* through
+  // calculatePrice for this model — that's the new business rule, not a
+  // data gap — but the underlying component data must still exist
+  // untouched (CLAUDE.md: don't delete historical data other architecture
+  // may still use), just gated by model.shelfTypes instead of missing.
+  it('rejects a non-STANDARD shelf type for MS Standard (customer-configurator restriction)', () => {
+    const result = calculatePrice(baseConfig({ shelfType: 'PERFORATED' }), catalog);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe('INCOMPATIBLE_CONFIGURATION');
+  });
+
+  it.each([600, 700, 800])('preserves PERFORATED and GALVANIZED shelf component data at the new depth=%dmm (not reachable by MS Standard, but not deleted)', (depth) => {
+    for (const shelfType of ['PERFORATED', 'GALVANIZED'] as const) {
+      const component = catalog.components.find(
+        (c) => c.type === 'SHELF' && c.shelfType === shelfType && c.width === 1000 && c.depth === depth && c.active,
+      );
+      expect(component, `expected a ${shelfType} SHELF component for 1000×${depth}`).toBeDefined();
+    }
+  });
+
+  /* ------------------------------------------------------------------ */
+  /* Five "Дополнительные параметры" rack options                        */
+  /* ------------------------------------------------------------------ */
+
+  it('prices the cross brace when attached to a 1000mm section', () => {
+    const target = section(1000);
+    const result = calculatePrice(
+      baseConfig({ sections: [target], accessories: [{ accessoryId: 'acc-cross-brace', quantity: 1, sectionId: target.id }] }),
+      catalog,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const line = result.bom.find((l) => l.componentId === 'acc-cross-brace');
+    expect(line?.quantity).toBe(1);
+  });
+
+  it('rejects the cross brace on a section that is not 1000mm wide', () => {
+    const target = section(1200);
+    const result = calculatePrice(
+      baseConfig({ sections: [target], accessories: [{ accessoryId: 'acc-cross-brace', quantity: 1, sectionId: target.id }] }),
+      catalog,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe('INCOMPATIBLE_CONFIGURATION');
+    expect(result.message).toMatch(/1000/);
+  });
+
+  it('rejects a cross brace with no sectionId at all', () => {
+    const result = calculatePrice(
+      baseConfig({ sections: [section(1000)], accessories: [{ accessoryId: 'acc-cross-brace', quantity: 1 }] }),
+      catalog,
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it('does not treat the whole row as eligible just because one section is 1000mm — a brace must name its own qualifying section', () => {
+    const eligible = section(1000);
+    const ineligible = section(700);
+    // Attaching the brace to the 700mm section must fail even though the
+    // row also contains a 1000mm section elsewhere.
+    const result = calculatePrice(
+      baseConfig({
+        sections: [eligible, ineligible],
+        accessories: [{ accessoryId: 'acc-cross-brace', quantity: 1, sectionId: ineligible.id }],
+      }),
+      catalog,
+    );
+    expect(result.ok).toBe(false);
+
+    // The same row prices fine once the brace targets the section that
+    // actually qualifies.
+    const fixed = calculatePrice(
+      baseConfig({
+        sections: [eligible, ineligible],
+        accessories: [{ accessoryId: 'acc-cross-brace', quantity: 1, sectionId: eligible.id }],
+      }),
+      catalog,
+    );
+    expect(fixed.ok).toBe(true);
+  });
+
+  it('prices the adjustable-feet and shelf-reinforcement options', () => {
+    const result = calculatePrice(
+      baseConfig({
+        shelves: 4,
+        sections: [section(1000)],
+        accessories: [
+          { accessoryId: 'acc-adjustable-feet', quantity: 1 },
+          { accessoryId: 'acc-shelf-reinforcement', quantity: 4 },
+        ],
+      }),
+      catalog,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.bom.find((l) => l.componentId === 'acc-adjustable-feet')?.quantity).toBe(1);
+    expect(result.bom.find((l) => l.componentId === 'acc-shelf-reinforcement')?.quantity).toBe(4);
+  });
+
+  it('round-trips metalFootPad, shelfCornerBrackets and a section-scoped accessory through validation without inventing a price for them', () => {
+    const target = section(1000);
+    const before = baseConfig({
+      sections: [target],
+      accessories: [{ accessoryId: 'acc-cross-brace', quantity: 1, sectionId: target.id }],
+      metalFootPad: true,
+      shelfCornerBrackets: true,
+    });
+    const result = calculatePrice(before, catalog);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // These two flags must survive into the echoed configuration (what the
+    // cart/order actually persist) even though neither produces a BOM line —
+    // proof they are real state, not silently dropped by schema validation.
+    expect(result.configuration.metalFootPad).toBe(true);
+    expect(result.configuration.shelfCornerBrackets).toBe(true);
+    expect(result.configuration.accessories).toEqual([{ accessoryId: 'acc-cross-brace', quantity: 1, sectionId: target.id }]);
+    expect(result.bom.some((l) => l.name.includes('подпятник') || l.name.includes('Уголк'))).toBe(false);
   });
 });

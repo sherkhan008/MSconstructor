@@ -1,4 +1,4 @@
-import { hasDatabase } from '@/lib/env';
+import { assertDatabaseConfigured, hasDatabase } from '@/lib/env';
 import type { OrderRecord } from './types';
 
 /**
@@ -27,6 +27,7 @@ export function generateOrderNumber(): string {
 const memoryOrders: OrderRecord[] = [];
 
 export async function saveOrder(order: OrderRecord): Promise<OrderRecord> {
+  assertDatabaseConfigured('order');
   if (hasDatabase) {
     const { saveOrderToDb } = await import('./db-store');
     return saveOrderToDb(order);
@@ -36,6 +37,7 @@ export async function saveOrder(order: OrderRecord): Promise<OrderRecord> {
 }
 
 export async function getOrderByNumber(orderNumber: string): Promise<OrderRecord | undefined> {
+  assertDatabaseConfigured('order');
   if (hasDatabase) {
     const { getOrderByNumberFromDb } = await import('./db-store');
     return getOrderByNumberFromDb(orderNumber);
@@ -46,4 +48,10 @@ export async function getOrderByNumber(orderNumber: string): Promise<OrderRecord
 /** Test/dev-only escape hatch. */
 export function clearMemoryOrders(): void {
   memoryOrders.length = 0;
+}
+
+/** Test-only: lets a rejected-request test assert zero orders were created,
+ * rather than only inferring it from the HTTP status. */
+export function countMemoryOrders(): number {
+  return memoryOrders.length;
 }

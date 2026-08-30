@@ -29,18 +29,25 @@ import type {
  *     the exact same catalog the mock repository serves.
  * ========================================================================== */
 
-export const HEIGHTS: DimensionOption[] = [1600, 1850, 2000, 2200, 2400, 3000].map(
-  (value, i) => ({
-    id: `height-${value}`,
-    value,
-    label: `${value} мм`,
-    priceAdjustment: 0,
-    leadTimeDays: value >= 2400 ? 5 : 2,
-    sortOrder: i,
-    active: true,
-    models: [],
-  }),
-);
+// Union of every height ever offered by any model — includes MS Standard's
+// current [500..3000] set (see MODELS below) plus MS Strong/Archive MS's
+// older values (1600, 1850) that those two models still reference and that
+// therefore must keep a real DimensionOption + UPRIGHT/CROSS_BRACE component
+// behind them. Each model's own `heights` array is still the authoritative
+// per-model allow-list — this is only the catalog-wide superset that
+// component generation below iterates over.
+export const HEIGHTS: DimensionOption[] = [
+  500, 1000, 1200, 1500, 1600, 1800, 1850, 2000, 2200, 2300, 2400, 2500, 3000,
+].map((value, i) => ({
+  id: `height-${value}`,
+  value,
+  label: `${value} мм`,
+  priceAdjustment: 0,
+  leadTimeDays: value >= 2400 ? 5 : 2,
+  sortOrder: i,
+  active: true,
+  models: [],
+}));
 
 export const WIDTHS: DimensionOption[] = [700, 1000, 1200, 1500].map((value, i) => ({
   id: `width-${value}`,
@@ -53,7 +60,7 @@ export const WIDTHS: DimensionOption[] = [700, 1000, 1200, 1500].map((value, i) 
   models: [],
 }));
 
-export const DEPTHS: DimensionOption[] = [300, 400, 500, 600].map((value, i) => ({
+export const DEPTHS: DimensionOption[] = [300, 400, 500, 600, 700, 800].map((value, i) => ({
   id: `depth-${value}`,
   value,
   label: `${value} мм`,
@@ -71,7 +78,10 @@ export const LOAD_CAPACITIES: LoadCapacityOption[] = [
     label: '100 кг на полку',
     models: ['ms-standard', 'archive-ms'],
     maxWidth: 1500,
-    maxDepth: 600,
+    // Raised from 600 alongside MS Standard's new depth ceiling (800mm) —
+    // archive-ms never reaches beyond its own depths ([300, 400]), so this
+    // only actually widens what MS Standard can select.
+    maxDepth: 800,
     sortOrder: 0,
     active: true,
   },
@@ -81,7 +91,9 @@ export const LOAD_CAPACITIES: LoadCapacityOption[] = [
     label: '150 кг на полку',
     models: ['ms-standard', 'ms-strong', 'archive-ms'],
     maxWidth: 1500,
-    maxDepth: 600,
+    // Same reasoning as load-100 — ms-strong/archive-ms stay within their
+    // own (unchanged) depth lists regardless.
+    maxDepth: 800,
     sortOrder: 1,
     active: true,
   },
@@ -188,10 +200,29 @@ export const MODELS: ProductModel[] = [
     gallery: ['/images/models/ms-standard.svg', '/images/gallery/warehouse-1.svg'],
     maxLoadKg: 150,
     loadCapacities: [100, 150],
-    heights: [1600, 1850, 2000, 2200, 2400],
+    // The authoritative current MS Standard matrix — see
+    // src/lib/pricing/ms-standard-compatibility.ts for the real,
+    // cross-dimensional rules (which depths a given section width
+    // supports, which heights allow how many shelves). These flat arrays
+    // are the union/ceiling those rules stay within; they are NOT
+    // themselves a claim that every width×depth or height×shelves
+    // combination they imply is actually valid — the compatibility module
+    // is what enforces that everywhere (UI selects, drag allowedValues,
+    // normalization, server validation). Old heights 500/1000/1200/2300/
+    // 2400 are obsolete for MS Standard as of this matrix and were removed
+    // here; they remain valid HeightOption rows for other models (e.g.
+    // ms-strong still uses 2400) — see HEIGHTS above, never delete a global
+    // dimension row just because one model stops using its value.
+    heights: [1500, 1800, 2000, 2200, 2500, 3000],
     widths: [700, 1000, 1200, 1500],
-    depths: [300, 400, 500],
-    shelfTypes: ['STANDARD', 'PERFORATED', 'GALVANIZED'],
+    depths: [300, 400, 500, 600, 700, 800],
+    // Customer configurator restriction — PERFORATED/GALVANIZED components
+    // stay in the catalog (still real, still generated above) for any other
+    // architecture that references them; only this model's own allow-list
+    // narrows to what the customer-facing configurator may select. See
+    // AdvancedSettingsAccordion.tsx, which no longer renders a shelf-type
+    // selector at all now that this is the only option.
+    shelfTypes: ['STANDARD'],
     minShelves: 2,
     maxShelves: 8,
     useCases: ['warehouse', 'office', 'shop', 'storage'],
@@ -416,6 +447,19 @@ const PERFORATED_COMBOS: [number, number][] = [
   [1000, 400],
   [1200, 400],
   [1200, 500],
+  // New MS Standard depths (600/700/800) for the widths already curated
+  // above — without these, selecting shelfType=PERFORATED at one of these
+  // depths would pass compatibility but fail BOM/pricing with a missing
+  // component.
+  [700, 600],
+  [700, 700],
+  [700, 800],
+  [1000, 600],
+  [1000, 700],
+  [1000, 800],
+  [1200, 600],
+  [1200, 700],
+  [1200, 800],
 ];
 for (const [width, depth] of PERFORATED_COMBOS) {
   const meta = SHELF_TYPE_LABEL.PERFORATED;
@@ -443,6 +487,14 @@ const GALVANIZED_COMBOS: [number, number][] = [
   [1000, 500],
   [1200, 400],
   [1200, 500],
+  // Same reasoning as PERFORATED_COMBOS — cover the new MS Standard depths
+  // for the widths this shelf type already supports.
+  [1000, 600],
+  [1000, 700],
+  [1000, 800],
+  [1200, 600],
+  [1200, 700],
+  [1200, 800],
 ];
 for (const [width, depth] of GALVANIZED_COMBOS) {
   const meta = SHELF_TYPE_LABEL.GALVANIZED;
@@ -1261,7 +1313,12 @@ export const CATALOG_PRODUCTS: CatalogProduct[] = [
     inStock: true,
     popularity: 76,
     featured: false,
-    published: true,
+    // Unpublished, not deleted/rewritten: 2400mm is no longer a valid MS
+    // Standard height under the current matrix (see MODELS above), so this
+    // listing can no longer be purchased with its advertised dimensions as
+    // a NEW order. The historical record stays intact — only its public
+    // storefront visibility changes.
+    published: false,
     createdAt: '2026-02-01T00:00:00.000Z',
     seo: {
       title: 'MS Стандарт 2400×1200×500 ряд 3 секции — складской стеллаж',
@@ -1269,17 +1326,20 @@ export const CATALOG_PRODUCTS: CatalogProduct[] = [
     },
   },
   {
-    id: 'product-standard-1850-700-300',
-    slug: 'ms-standard-1850x700x300',
+    // Was 1850mm — no longer one of MS Standard's supported heights (see
+    // MODELS above), so this catalog listing now uses the nearest supported
+    // value (1800mm) to keep pricing/compatibility passing.
+    id: 'product-standard-1800-700-300',
+    slug: 'ms-standard-1800x700x300',
     modelSlug: 'ms-standard',
-    name: { ru: 'MS Стандарт 1850×700×300, 4 полки', kk: 'MS Стандарт 1850×700×300, 4 сөре' },
+    name: { ru: 'MS Стандарт 1800×700×300, 4 полки', kk: 'MS Стандарт 1800×700×300, 4 сөре' },
     description: {
-      ru: 'Компактный стеллаж для гаража и кладовой: высота 1850 мм, ширина 700 мм, глубина 300 мм.',
-      kk: 'Гараж бен қоймашаға арналған ықшам сөре: биіктігі 1850 мм, ені 700 мм, тереңдігі 300 мм.',
+      ru: 'Компактный стеллаж для гаража и кладовой: высота 1800 мм, ширина 700 мм, глубина 300 мм.',
+      kk: 'Гараж бен қоймашаға арналған ықшам сөре: биіктігі 1800 мм, ені 700 мм, тереңдігі 300 мм.',
     },
     image: '/images/models/ms-standard.svg',
     gallery: ['/images/models/ms-standard.svg'],
-    height: 1850,
+    height: 1800,
     width: 700,
     depth: 300,
     shelves: 4,
@@ -1294,8 +1354,8 @@ export const CATALOG_PRODUCTS: CatalogProduct[] = [
     published: true,
     createdAt: '2026-02-05T00:00:00.000Z',
     seo: {
-      title: 'MS Стандарт 1850×700×300 — гаражный стеллаж | купить',
-      description: 'Компактный гаражный стеллаж MS Стандарт 1850×700×300 мм, 4 полки. Цена и доставка по Казахстану.',
+      title: 'MS Стандарт 1800×700×300 — гаражный стеллаж | купить',
+      description: 'Компактный гаражный стеллаж MS Стандарт 1800×700×300 мм, 4 полки. Цена и доставка по Казахстану.',
     },
   },
   {

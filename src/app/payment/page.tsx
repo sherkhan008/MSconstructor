@@ -30,11 +30,6 @@ const METHODS = [
     description: 'Оплата через приложение Kaspi.kz.',
     available: false,
   },
-  {
-    title: 'Kaspi QR',
-    description: 'Оплата по QR-коду на кассе или при доставке.',
-    available: false,
-  },
 ];
 
 export default function PaymentPage() {

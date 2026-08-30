@@ -1,7 +1,26 @@
+import { publicEnv } from '@/lib/env';
+
 /**
  * Company / site level configuration.
  * Replace these placeholder contact details with the real ones before launch.
  */
+
+/** wa.me only accepts digits (country code + number, no "+"/spaces/punctuation) —
+ * sanitise whatever was typed into the env var so a stray "+7 (707)..." style
+ * value can never produce a broken wa.me link. */
+function digitsOnly(value: string): string {
+  return value.replace(/\D/g, '');
+}
+
+// TODO(production): set NEXT_PUBLIC_WHATSAPP_NUMBER to the real company
+// WhatsApp number (digits only, with country code, e.g. "77071234567") in
+// the production environment. This placeholder is not a real number — every
+// wa.me link generated from it is non-functional until it's replaced.
+const WHATSAPP_PLACEHOLDER = '77718646702';
+
+const whatsappNumber = publicEnv.NEXT_PUBLIC_WHATSAPP_NUMBER
+  ? digitsOnly(publicEnv.NEXT_PUBLIC_WHATSAPP_NUMBER)
+  : WHATSAPP_PLACEHOLDER;
 
 export const site = {
   name: 'MS Стеллажи',
@@ -14,14 +33,14 @@ export const site = {
   currency: 'KZT',
   currencySymbol: '₸',
 
-  phone: '+7 (700) 000-00-00',
-  phoneHref: '+77000000000',
-  whatsapp: '77000000000',
+  phone: '+7 (771) 864-67-02',
+  phoneHref: '+77718646702',
+  whatsapp: whatsappNumber,
   email: 'sales@ms-stellazh.kz',
-  address: 'г. Алматы, ул. Промышленная, 15, склад №3',
+  address: 'г. Астана, ул. Алаш, 22',
   city: 'Алматы',
-  postalCode: '050000',
-  workingHours: 'Пн–Пт 09:00–18:00, Сб 10:00–15:00',
+  postalCode: '010000',
+  workingHours: 'Пн–Пт 09:00–18:00',
   bin: '000000000000',
 
   // Placeholder map embed — replace with the real 2GIS / Yandex widget.

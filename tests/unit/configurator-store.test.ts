@@ -38,6 +38,27 @@ describe('configurator store — section actions', () => {
     expect(useConfiguratorStore.getState().config.sections.length).toBe(MAX_SECTIONS);
   });
 
+  it('addSection reuses the active section\'s width when it is still compatible with the current depth', () => {
+    useConfiguratorStore.setState((state) => ({ config: { ...state.config, depth: 400 } }));
+    const { addSection } = useConfiguratorStore.getState();
+    addSection();
+    const state = useConfiguratorStore.getState();
+    expect(state.config.sections[1].width).toBe(state.config.sections[0].width);
+  });
+
+  it('addSection falls back to a depth-compatible width if the template width would otherwise be invalid (defensive)', () => {
+    // Force an inconsistent state directly (bypassing normal UI/normalization
+    // paths) to exercise addSection's own defensive guard: depth=700 only
+    // supports width 1000, but the template section is 1200mm.
+    useConfiguratorStore.setState((state) => ({
+      config: { ...state.config, depth: 700, sections: [{ ...state.config.sections[0], width: 1200 }] },
+    }));
+    const { addSection } = useConfiguratorStore.getState();
+    addSection();
+    const state = useConfiguratorStore.getState();
+    expect(state.config.sections[1].width).toBe(1000);
+  });
+
   it('removeSection never drops below the minimum of 1 section', () => {
     const { removeSection } = useConfiguratorStore.getState();
     const onlyId = useConfiguratorStore.getState().config.sections[0].id;

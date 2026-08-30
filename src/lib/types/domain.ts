@@ -266,6 +266,12 @@ export interface CatalogProduct {
 export interface ConfigurationAccessorySelection {
   accessoryId: string;
   quantity: number;
+  /** Restricts this selection to one specific section — used by accessories
+   * that are only valid on a section with a particular width (e.g. the
+   * cross brace, real-product-restricted to a 1000mm section). Omitted
+   * means the selection applies to the whole row, as every other accessory
+   * already did before this field existed. */
+  sectionId?: string;
 }
 
 /**
@@ -306,6 +312,14 @@ export interface ShelvingConfiguration {
   promoCode?: string;
   priceLevel?: PriceLevel;
   name?: string;
+  /** Two of the five customer-facing "Дополнительные параметры" rack
+   * options that do not yet have priced catalog/BOM backing (see the task
+   * report for src/components/configurator/AdvancedSettingsAccordion.tsx).
+   * Plain configuration flags, not accessories — they persist real customer
+   * intent without going through accessory-catalog compatibility validation
+   * or fabricating a price. Undefined behaves as false (legacy configs). */
+  metalFootPad?: boolean;
+  shelfCornerBrackets?: boolean;
 }
 
 export interface BomLine {

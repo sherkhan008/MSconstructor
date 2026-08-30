@@ -6,6 +6,7 @@ import {
   DEPTH_ANGLE_DEG,
   VIEWBOX_H,
   VIEWBOX_W,
+  clamp,
   findNearestAllowed,
   maxAllowed,
   minAllowed,
@@ -153,7 +154,24 @@ export function useDimensionDrag({
 
       const deltaAlongAxis = projectDelta(axis, dxViewBox, dyViewBox);
       const startPx = mmToPx(axis, startValueRef.current);
-      const newMm = pxToMm(axis, startPx + deltaAlongAxis);
+      const rawMm = pxToMm(axis, startPx + deltaAlongAxis);
+
+      // Width is a per-section catalog value with a hard min/max (unlike
+      // height/depth, whose mm range is a continuous visual scale) — once the
+      // pointer drags a section past its own allowed max/min, the section
+      // must stop growing/shrinking right there instead of following the
+      // pointer past the legal boundary and snapping back on release. The
+      // pointer itself keeps moving (startClientRef/startValueRef never
+      // rebase), so re-entering the legal range resumes smooth tracking with
+      // no extra drag needed.
+      let newMm = rawMm;
+      if (axis === 'width') {
+        const min = minAllowed(allowedRef.current);
+        const max = maxAllowed(allowedRef.current);
+        if (min !== undefined && max !== undefined) {
+          newMm = clamp(rawMm, min, max);
+        }
+      }
 
       latestRef.current = { tempValue: newMm, snapTarget: findNearestAllowed(newMm, allowedRef.current) };
       if (rafRef.current === null) {
