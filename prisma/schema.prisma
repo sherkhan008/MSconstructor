@@ -7,6 +7,12 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// DATABASE_URL: the runtime connection Prisma Client uses for every query —
+// point this at a pooled connection (e.g. PgBouncer, or your provider's
+// pooler) in production. DIRECT_URL: an unpooled connection used only by
+// `prisma migrate`/`prisma db pull`, which need a direct connection to run
+// schema commands. If your provider doesn't offer a separate pooled
+// endpoint, DIRECT_URL may be omitted or set to the same value.
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")

@@ -53,6 +53,10 @@ const publicSchema = z.object({
   NEXT_PUBLIC_APP_URL: optionalString,
   NEXT_PUBLIC_GOOGLE_ANALYTICS_ID: optionalString,
   NEXT_PUBLIC_YANDEX_METRICA_ID: optionalString,
+  // Digits only, including country code (e.g. "77071234567") — see
+  // src/lib/config/site.ts, which sanitises and falls back to a placeholder
+  // for this specifically because it's what every wa.me deep link uses.
+  NEXT_PUBLIC_WHATSAPP_NUMBER: optionalString,
 });
 
 const parsedServer = serverSchema.safeParse(process.env);
@@ -60,6 +64,7 @@ const parsedPublic = publicSchema.safeParse({
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   NEXT_PUBLIC_GOOGLE_ANALYTICS_ID: process.env.NEXT_PUBLIC_GOOGLE_ANALYTICS_ID,
   NEXT_PUBLIC_YANDEX_METRICA_ID: process.env.NEXT_PUBLIC_YANDEX_METRICA_ID,
+  NEXT_PUBLIC_WHATSAPP_NUMBER: process.env.NEXT_PUBLIC_WHATSAPP_NUMBER,
 });
 
 /** Server-only environment. Never import this from a Client Component. */
@@ -77,9 +82,61 @@ export const isTest = env.NODE_ENV === 'test';
 /**
  * True when a real PostgreSQL connection string is present. When false the app
  * transparently falls back to the in-memory development catalog so the MVP runs
- * from a clean checkout with zero infrastructure.
+ * from a clean checkout with zero infrastructure. In production this fallback
+ * must never be reached — see `isProductionRuntime`/`assertDatabaseConfigured`
+ * below.
  */
 export const hasDatabase = Boolean(env.DATABASE_URL && env.DATABASE_URL.startsWith('postgres'));
+
+/**
+ * `next build` sets NODE_ENV=production for its static-generation phase even
+ * when run in a build pipeline with no database access (a common deploy
+ * pattern: build now, deploy — and connect to the real database — later).
+ * Next.js marks that phase with NEXT_PHASE=phase-production-build. Genuine
+ * production *runtime* (dev server aside, this covers `next start` and every
+ * serverless invocation) is production minus that build phase — this is the
+ * only case where a missing database may never silently fall back to memory.
+ */
+const isProductionBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
+export const isProductionRuntime = isProduction && !isProductionBuildPhase;
+
+export class DatabaseRequiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DatabaseRequiredError';
+  }
+}
+
+/**
+ * Call at the top of every function that can read or write business records
+ * (catalog, orders, payments). No-ops outside genuine production runtime, or
+ * when DATABASE_URL is a real PostgreSQL connection string. Otherwise throws
+ * — deliberately never silently continues on the in-memory/mock path, which
+ * is the whole point (spec: production must never serve orders from RAM).
+ * The message never includes the connection string itself.
+ */
+export function assertDatabaseConfigured(context: string): void {
+  if (!isProductionRuntime) return;
+  if (!env.DATABASE_URL) {
+    throw new DatabaseRequiredError(`DATABASE_URL is required in production (${context}).`);
+  }
+  if (!hasDatabase) {
+    throw new DatabaseRequiredError(`DATABASE_URL must be a PostgreSQL connection string in production (${context}).`);
+  }
+}
+
+/**
+ * Admin is PostgreSQL-only in every environment — there is no in-memory
+ * admin data source (unlike the customer catalog/order paths, which allow a
+ * mock/memory fallback in dev). Call at the top of every admin data
+ * function (src/lib/admin/orders.ts) so a dev machine without DATABASE_URL
+ * fails with a clear message instead of a confusing Prisma connection error.
+ */
+export function assertAdminDatabaseConfigured(): void {
+  if (!hasDatabase) {
+    throw new DatabaseRequiredError('Admin requires a configured PostgreSQL DATABASE_URL.');
+  }
+}
 
 export const appUrl =
   publicEnv.NEXT_PUBLIC_APP_URL ?? env.APP_URL ?? 'http://localhost:3000';
@@ -103,5 +160,6 @@ export function assertProductionEnv(): string[] {
   if (!env.DATABASE_URL) missing.push('DATABASE_URL');
   if (!env.AUTH_SECRET) missing.push('AUTH_SECRET');
   if (!env.APP_URL && !publicEnv.NEXT_PUBLIC_APP_URL) missing.push('APP_URL');
+  if (!publicEnv.NEXT_PUBLIC_WHATSAPP_NUMBER) missing.push('NEXT_PUBLIC_WHATSAPP_NUMBER');
   return missing;
 }

@@ -51,6 +51,42 @@ describe('configurator URL — round trip', () => {
     const restored = parseConfigurationFromSearchParams(configurationToSearchParams(config));
     expect(restored.accessories).toEqual([{ accessoryId: 'acc-extra-shelf', quantity: 2 }]);
   });
+
+  it('preserves a section-scoped accessory (cross brace), remapping to the freshly-decoded section', () => {
+    const config = baseConfig({
+      sections: [
+        { id: 'a', width: 700, rearWall: false, leftWall: false, rightWall: false },
+        { id: 'b', width: 1000, rearWall: false, leftWall: false, rightWall: false },
+      ],
+      accessories: [{ accessoryId: 'acc-cross-brace', quantity: 1, sectionId: 'b' }],
+    });
+    const restored = parseConfigurationFromSearchParams(configurationToSearchParams(config));
+    // Section ids are always regenerated on decode — the restored accessory
+    // must point at whichever decoded section is now in the *same position*
+    // (index 1, the 1000mm one), not the original sender-side id "b".
+    expect(restored.sections).toHaveLength(2);
+    const targetId = restored.sections?.[1]?.id;
+    expect(targetId).toBeDefined();
+    expect(targetId).not.toBe('b');
+    expect(restored.accessories).toEqual([{ accessoryId: 'acc-cross-brace', quantity: 1, sectionId: targetId }]);
+  });
+
+  it('preserves the metalFootPad and shelfCornerBrackets flags', () => {
+    const config = baseConfig({ metalFootPad: true, shelfCornerBrackets: true });
+    const restored = parseConfigurationFromSearchParams(configurationToSearchParams(config));
+    expect(restored.metalFootPad).toBe(true);
+    expect(restored.shelfCornerBrackets).toBe(true);
+  });
+
+  it('omits metalFootPad/shelfCornerBrackets from the URL and the restored partial when unset', () => {
+    const config = baseConfig();
+    const params = configurationToSearchParams(config);
+    expect(params.has('metalFootPad')).toBe(false);
+    expect(params.has('shelfCornerBrackets')).toBe(false);
+    const restored = parseConfigurationFromSearchParams(params);
+    expect(restored.metalFootPad).toBeUndefined();
+    expect(restored.shelfCornerBrackets).toBeUndefined();
+  });
 });
 
 describe('configurator URL — legacy link migration', () => {

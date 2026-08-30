@@ -73,13 +73,13 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
   function handleWhatsApp() {
     if (!priceResult) return;
     trackEvent('whatsapp_clicked', { location: 'configurator' });
-    window.open(whatsAppConfiguratorUrl(priceResult, modelName, shareUrl()), '_blank', 'noopener,noreferrer');
+    window.open(whatsAppConfiguratorUrl(priceResult, catalog.accessories, shareUrl()), '_blank', 'noopener,noreferrer');
   }
 
   const actionsDisabled = !priceResult || isPricing;
 
   return (
-    <div className="no-print fixed inset-x-0 bottom-0 z-30 hairline border-x-0 border-b-0 bg-surface/95 backdrop-blur">
+    <div className="no-print fixed inset-x-0 bottom-0 z-30 hairline border-x-0 border-b-0 bg-surface">
       {detailsOpen && priceResult && (
         <div className="mx-auto max-w-7xl border-b border-line px-4 py-3 sm:px-6 lg:px-8">
           <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-4">
@@ -95,7 +95,7 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
         </div>
       )}
 
-      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-2.5 sm:px-6 lg:px-8">
         <button
           type="button"
           onClick={() => setDetailsOpen((o) => !o)}
@@ -124,10 +124,10 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button onClick={() => handleAddToCart(false)} disabled={actionsDisabled} variant="outline" size="sm">
+            <Button onClick={() => handleAddToCart(false)} disabled={actionsDisabled} variant="outline" size="sm" className="font-display uppercase tracking-wide">
               Добавить в корзину
             </Button>
-            <Button onClick={() => handleAddToCart(true)} disabled={actionsDisabled} size="sm">
+            <Button onClick={() => handleAddToCart(true)} disabled={actionsDisabled} size="sm" className="font-display uppercase tracking-wide">
               Оформить заказ
             </Button>
             <Button onClick={handleWhatsApp} disabled={actionsDisabled} variant="whatsapp" size="sm" type="button" aria-label="WhatsApp">

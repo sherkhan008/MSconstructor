@@ -11,5 +11,7 @@ export {
   phoneSchema,
   customerTypeSchema,
   paymentPreferenceSchema,
+  customerPaymentPreferenceSchema,
+  CUSTOMER_PAYMENT_METHODS,
 } from './schema';
 export type { ShelvingConfigurationInput, OrderRequestInput, OrderFormInput } from './schema';

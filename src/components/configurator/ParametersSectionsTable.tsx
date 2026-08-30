@@ -4,6 +4,13 @@ import { MAX_SECTIONS, MIN_SECTIONS, useConfiguratorStore } from '@/store/config
 import { NumberStepper } from './NumberStepper';
 import type { PublicCatalog } from '@/lib/data/public-catalog';
 import type { ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
+import {
+  getAllowedDepthsForSections,
+  getAllowedHeightsForShelfCount,
+  getAllowedWidthsForDepth,
+  getMaxShelvesForHeight,
+  MS_STANDARD_MIN_SHELVES,
+} from '@/lib/pricing/ms-standard-compatibility';
 
 type ProductModel = PublicCatalog['models'][number];
 type WallField = 'rearWall' | 'leftWall' | 'rightWall';
@@ -34,7 +41,13 @@ export function ParametersSectionsTable({ catalog }: { catalog: PublicCatalog })
   const model = catalog.models.find((m) => m.slug === config.modelSlug);
   if (!model) return null;
 
-  const widths = model.widths ?? catalog.widths.map((w) => w.value);
+  // MS Standard's width select must respect the CURRENT global depth (depth
+  // is per-row, width is per-section — see ms-standard-compatibility.ts):
+  // e.g. depth=700 only leaves width 1000 selectable. Every other model
+  // keeps using its own flat width list — it has no such cross-dimensional
+  // rule today.
+  const widths =
+    model.slug === 'ms-standard' ? getAllowedWidthsForDepth(config.depth) : (model.widths ?? catalog.widths.map((w) => w.value));
   const canAdd = config.sections.length < MAX_SECTIONS;
   const canRemove = config.sections.length > MIN_SECTIONS;
   const n = config.sections.length;
@@ -125,6 +138,19 @@ function RowParamsFields({
   catalog: PublicCatalog;
   setField: <K extends keyof ShelvingConfiguration>(key: K, value: ShelvingConfiguration[K]) => void;
 }) {
+  // MS Standard's height/depth/shelf controls are cross-dimensional (see
+  // ms-standard-compatibility.ts): the height select only offers heights
+  // whose own shelf ceiling can fit the CURRENT shelf count, the depth
+  // select only offers depths valid for EVERY current section's width, and
+  // the shelf stepper's own max follows the CURRENT height. Every other
+  // model keeps its simple flat-list behaviour — it has none of these
+  // cross-rules today.
+  const isMsStandard = model.slug === 'ms-standard';
+  const allowedHeights = isMsStandard ? getAllowedHeightsForShelfCount(config.shelves) : model.heights;
+  const allowedDepths = isMsStandard ? getAllowedDepthsForSections(config.sections) : model.depths;
+  const shelvesMax = isMsStandard ? (getMaxShelvesForHeight(config.height) ?? model.maxShelves) : model.maxShelves;
+  const shelvesMin = isMsStandard ? MS_STANDARD_MIN_SHELVES : model.minShelves;
+
   return (
     <div className="flex flex-col gap-2.5">
       <label className="flex flex-col gap-1">
@@ -135,7 +161,7 @@ function RowParamsFields({
           className="mono h-9 w-full border border-line bg-surface px-2 text-sm outline-none focus:border-blueprint"
         >
           {catalog.heights
-            .filter((h) => model.heights.includes(h.value))
+            .filter((h) => allowedHeights.includes(h.value))
             .map((h) => (
               <option key={h.id} value={h.value}>
                 {h.label}
@@ -152,7 +178,7 @@ function RowParamsFields({
           className="mono h-9 w-full border border-line bg-surface px-2 text-sm outline-none focus:border-blueprint"
         >
           {catalog.depths
-            .filter((d) => model.depths.includes(d.value))
+            .filter((d) => allowedDepths.includes(d.value))
             .map((d) => (
               <option key={d.id} value={d.value}>
                 {d.label}
@@ -163,7 +189,7 @@ function RowParamsFields({
 
       <div className="flex flex-col gap-1">
         <span className="tech-label">Полки</span>
-        <NumberStepper value={config.shelves} min={model.minShelves} max={model.maxShelves} onChange={(v) => setField('shelves', v)} />
+        <NumberStepper value={config.shelves} min={shelvesMin} max={shelvesMax} onChange={(v) => setField('shelves', v)} testId="shelf-count" />
       </div>
 
       <label className="flex flex-col gap-1">

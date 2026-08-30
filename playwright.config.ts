@@ -28,5 +28,12 @@ export default defineConfig({
         url: baseURL,
         reuseExistingServer: !process.env.CI,
         timeout: 180_000,
+        // These tests run the real production build against no database —
+        // NODE_ENV=development keeps src/lib/env.ts's production-requires-
+        // DATABASE_URL guard (see docs/production-database.md) from firing,
+        // so the app serves from the in-memory sample catalog exactly like
+        // local dev, without weakening that guard for an actual deployment
+        // (which sets NODE_ENV=production itself and never touches this file).
+        env: { NODE_ENV: 'development' },
       },
 });

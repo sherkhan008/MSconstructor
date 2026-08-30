@@ -19,7 +19,9 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
     "prisma:studio": "prisma studio",
-    "db:reset": "prisma migrate reset --force"
+    "db:reset": "prisma migrate reset --force",
+    "db:repair-canonical-ids": "tsx scripts/repair-canonical-catalog-ids.ts",
+    "db:sync-ms-standard-constraints": "tsx scripts/sync-ms-standard-constraints.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -19,7 +19,12 @@ const csp = [
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'self'",
-  'upgrade-insecure-requests',
+  // `next dev` only ever serves plain HTTP (including over a LAN IP, where
+  // browsers — unlike on localhost — apply no HTTPS-upgrade exception).
+  // Sending this directive there upgrades /_next/static/* and the HMR
+  // socket to https:// URLs the dev server never listens on, so CSS/JS/HMR
+  // silently fail while the already-fetched HTML still renders.
+  ...(isDev ? [] : ['upgrade-insecure-requests']),
 ].join('; ');
 
 const securityHeaders = [
@@ -29,7 +34,8 @@ const securityHeaders = [
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'X-DNS-Prefetch-Control', value: 'on' },
   { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()' },
-  { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
+  // HSTS only makes sense once the app is actually served over HTTPS.
+  ...(isDev ? [] : [{ key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' }]),
 ];
 
 const nextConfig: NextConfig = {

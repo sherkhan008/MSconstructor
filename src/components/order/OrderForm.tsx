@@ -2,33 +2,30 @@
 
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, LinkButton } from '@/components/ui/Button';
 import { PriceTag } from '@/components/ui/PriceTag';
 import { formatPrice } from '@/lib/money';
 import { trackEvent } from '@/lib/analytics';
-import { orderFormSchema, type OrderFormInput } from '@/lib/pricing/schema';
+import { CUSTOMER_PAYMENT_METHODS, orderFormSchema, type OrderFormInput } from '@/lib/pricing/schema';
+import { PAYMENT_METHOD_DESCRIPTION, PAYMENT_METHOD_LABEL } from '@/lib/orders/payment-methods';
 import { useCartStore } from '@/store/cart-store';
+import type { DeliveryMethod } from '@/lib/types/domain';
 
-const PAYMENT_LABEL: Record<string, string> = {
-  BANK_TRANSFER: 'Безналичный расчёт',
-  BANK_INVOICE: 'Оплата по счёту',
-  CASH: 'Наличными',
-  KASPI_PAY: 'Kaspi Pay (скоро)',
-  KASPI_QR: 'Kaspi QR (скоро)',
-};
-
-export function OrderForm() {
+export function OrderForm({ deliveryMethods = [] }: { deliveryMethods?: DeliveryMethod[] }) {
   const items = useCartStore((s) => s.items);
   const clear = useCartStore((s) => s.clear);
   const router = useRouter();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [serverErrorDetails, setServerErrorDetails] = useState<string[]>([]);
+  const [sameAsPhone, setSameAsPhone] = useState(false);
 
   const {
     register,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<OrderFormInput>({
     resolver: zodResolver(orderFormSchema),
@@ -36,10 +33,24 @@ export function OrderForm() {
   });
 
   const customerType = watch('customerType');
+  const paymentPreference = watch('paymentPreference');
+  const phone = watch('phone');
   const total = items.reduce((sum, item) => sum + (item.priceSnapshot?.breakdown.total ?? 0), 0);
+
+  useEffect(() => {
+    if (sameAsPhone) setValue('whatsapp', phone);
+  }, [sameAsPhone, phone, setValue]);
+
+  // A delivery method may require a real address (e.g. city/country
+  // delivery), even though pickup does not — derived the same way the
+  // server derives it (per-item deliveryId against the catalog), never
+  // guessed. This is a UX hint only; the server enforces it either way.
+  const usedDeliveryIds = new Set(items.map((item) => item.configuration.deliveryId));
+  const addressRequired = deliveryMethods.some((d) => usedDeliveryIds.has(d.id) && d.requiresAddress);
 
   async function onSubmit(data: OrderFormInput) {
     setServerError(null);
+    setServerErrorDetails([]);
     try {
       const response = await fetch('/api/orders', {
         method: 'POST',
@@ -49,6 +60,7 @@ export function OrderForm() {
       const result = await response.json();
       if (!result.ok) {
         setServerError(result.message ?? 'Не удалось оформить заказ');
+        setServerErrorDetails(Array.isArray(result.details) ? result.details : []);
         return;
       }
       trackEvent('order_completed', { orderNumber: result.orderNumber, total: result.grandTotal });
@@ -83,18 +95,36 @@ export function OrderForm() {
           </div>
         </div>
 
-        <Field label="ФИО / Контактное лицо" error={errors.fullName?.message}>
+        <Field label="ФИО / Контактное лицо *" error={errors.fullName?.message}>
           <input {...register('fullName')} className="input" autoComplete="name" />
         </Field>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Телефон" error={errors.phone?.message}>
+          <Field label="Телефон *" error={errors.phone?.message}>
             <input {...register('phone')} placeholder="+7 700 000 00 00" className="input mono" autoComplete="tel" />
           </Field>
-          <Field label="Email" error={errors.email?.message}>
-            <input {...register('email')} type="email" className="input" autoComplete="email" />
+          <Field label="WhatsApp" error={errors.whatsapp?.message}>
+            <input
+              {...register('whatsapp')}
+              placeholder="+7 700 000 00 00"
+              className="input mono"
+              autoComplete="tel"
+              disabled={sameAsPhone}
+            />
           </Field>
         </div>
+        <label className="-mt-3 flex items-center gap-2 text-xs text-steel">
+          <input
+            type="checkbox"
+            checked={sameAsPhone}
+            onChange={(e) => setSameAsPhone(e.target.checked)}
+          />
+          WhatsApp совпадает с телефоном
+        </label>
+
+        <Field label="Email *" error={errors.email?.message}>
+          <input {...register('email')} type="email" className="input" autoComplete="email" />
+        </Field>
 
         <Field label="Город" error={errors.city?.message}>
           <input {...register('city')} className="input" autoComplete="address-level2" />
@@ -102,38 +132,69 @@ export function OrderForm() {
 
         {customerType === 'LEGAL_ENTITY' && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Название компании" error={errors.companyName?.message}>
+            <Field label="Название компании *" error={errors.companyName?.message}>
               <input {...register('companyName')} className="input" />
             </Field>
-            <Field label="БИН" error={errors.binIin?.message}>
+            <Field label="БИН *" error={errors.binIin?.message}>
               <input {...register('binIin')} className="input mono" />
             </Field>
           </div>
         )}
 
-        <Field label="Адрес доставки (если нужна доставка)" error={errors.deliveryAddress?.message}>
-          <input {...register('deliveryAddress')} className="input" autoComplete="street-address" />
+        <Field
+          label={addressRequired ? 'Адрес доставки *' : 'Адрес доставки (если нужна доставка)'}
+          error={errors.deliveryAddress?.message}
+        >
+          <input
+            {...register('deliveryAddress', {
+              validate: (v) => !addressRequired || Boolean(v && v.trim()) || 'Укажите адрес доставки',
+            })}
+            className="input"
+            autoComplete="street-address"
+          />
         </Field>
 
         <div>
-          <span className="tech-label">Способ оплаты</span>
-          <select {...register('paymentPreference')} className="input mt-2">
-            {Object.entries(PAYMENT_LABEL).map(([value, label]) => (
+          <span className="tech-label">Способ оплаты *</span>
+          <select
+            {...register('paymentPreference', {
+              onChange: (e) => trackEvent('payment_method_selected', { method: e.target.value }),
+            })}
+            className="input mt-2"
+          >
+            {CUSTOMER_PAYMENT_METHODS.map((value) => (
               <option key={value} value={value}>
-                {label}
+                {PAYMENT_METHOD_LABEL[value]}
               </option>
             ))}
           </select>
+          {paymentPreference && (
+            <p className="mt-1 text-xs text-steel">{PAYMENT_METHOD_DESCRIPTION[paymentPreference]}</p>
+          )}
+          {errors.paymentPreference?.message && (
+            <span className="text-xs text-danger">{errors.paymentPreference.message}</span>
+          )}
         </div>
 
         <Field label="Комментарий к заказу" error={errors.comment?.message}>
           <textarea {...register('comment')} rows={3} className="input resize-none" />
         </Field>
 
-        {serverError && <p className="border border-danger bg-danger-soft px-4 py-3 text-sm text-danger">{serverError}</p>}
+        {serverError && (
+          <div className="border border-danger bg-danger-soft px-4 py-3 text-sm text-danger">
+            <p>{serverError}</p>
+            {serverErrorDetails.length > 0 && (
+              <ul className="mt-1 list-disc pl-5 text-xs">
+                {serverErrorDetails.map((detail) => (
+                  <li key={detail}>{detail}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
         <Button type="submit" size="lg" disabled={isSubmitting}>
-          {isSubmitting ? 'Оформляем…' : 'Подтвердить заказ'}
+          {isSubmitting ? 'Оформляем заказ…' : 'Подтвердить заказ'}
         </Button>
       </form>
 
@@ -154,6 +215,7 @@ export function OrderForm() {
         <div className="border-t border-line pt-3">
           <div className="tech-label">Итого</div>
           <PriceTag value={total} size="lg" />
+          <p className="mt-1 text-xs text-steel">Точная сумма будет пересчитана и подтверждена сервером при оформлении.</p>
         </div>
       </aside>
     </div>

@@ -8,9 +8,11 @@ import { PriceTag } from '@/components/ui/PriceTag';
 import { ShelvingPreview } from '@/components/configurator/ShelvingPreview';
 import { formatPrice } from '@/lib/money';
 import { configurationToShareQuery } from '@/lib/configurator/url';
+import { reconcileConfiguration } from '@/lib/configurator/reconcile';
 import { trackEvent } from '@/lib/analytics';
 import { useCartStore, type CartItem } from '@/store/cart-store';
 import type { ColorOption } from '@/lib/types/domain';
+import type { PublicCatalog } from '@/lib/data/public-catalog';
 
 /**
  * Every price shown here is either a fresh server response or explicitly
@@ -18,16 +20,47 @@ import type { ColorOption } from '@/lib/types/domain';
  * (see cart-store.setQuantity) and this component immediately re-fetches it,
  * so a stale client-side total is never carried into checkout.
  */
-export function CartClient({ colors }: { colors: ColorOption[] }) {
+export function CartClient({ catalog }: { catalog: PublicCatalog }) {
   const items = useCartStore((s) => s.items);
   const removeItem = useCartStore((s) => s.removeItem);
   const duplicateItem = useCartStore((s) => s.duplicateItem);
   const setQuantity = useCartStore((s) => s.setQuantity);
   const setPriceSnapshot = useCartStore((s) => s.setPriceSnapshot);
+  const setConfiguration = useCartStore((s) => s.setConfiguration);
   const [mounted, setMounted] = useState(false);
+  const [reconcileNotice, setReconcileNotice] = useState<string | null>(null);
+  const [priceErrors, setPriceErrors] = useState<Record<string, string>>({});
   const router = useRouter();
 
   useEffect(() => setMounted(true), []);
+
+  // A cart item's configuration is a snapshot taken when it was added — if
+  // the catalog was re-seeded/repaired since (see
+  // scripts/repair-canonical-catalog-ids.ts) a persisted colorId/
+  // assemblyId/deliveryId/accessoryId may no longer resolve. Without this,
+  // that item's re-price below fails forever and it's stuck showing
+  // "Пересчёт…" with no way to recover except removing it. Runs once per
+  // mount, before the re-price effect, so a repaired item is re-priced with
+  // its corrected configuration on the very first attempt.
+  useEffect(() => {
+    if (!mounted) return;
+    const notices: string[] = [];
+    for (const item of items) {
+      const result = reconcileConfiguration(item.configuration, catalog);
+      if (!result.changed) continue;
+      setConfiguration(item.id, result.config);
+      if (result.removedAccessoryIds.length > 0) {
+        notices.push(`из «${item.modelName}» удалён более недоступный аксессуар`);
+      }
+      if (result.colorReset || result.assemblyReset || result.deliveryReset) {
+        notices.push(`в «${item.modelName}» обновлены недоступные параметры (цвет/сборка/доставка) на значения по умолчанию`);
+      }
+    }
+    if (notices.length > 0) {
+      setReconcileNotice(`Конфигурация в корзине была обновлена: ${notices.join('; ')}.`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted]);
 
   useEffect(() => {
     const stale = items.filter((item) => item.priceSnapshot === null);
@@ -39,9 +72,23 @@ export function CartClient({ colors }: { colors: ColorOption[] }) {
       })
         .then((res) => res.json())
         .then((data) => {
-          if (data.ok) setPriceSnapshot(item.id, data);
+          if (data.ok) {
+            setPriceSnapshot(item.id, data);
+            setPriceErrors((prev) => {
+              if (!(item.id in prev)) return prev;
+              const { [item.id]: _removed, ...rest } = prev;
+              return rest;
+            });
+          } else {
+            // Never leave the row stuck on "Пересчёт…" forever with no
+            // explanation — the reconciliation pass above already fixed
+            // what it safely could; a failure past that point is a real,
+            // server-validated reason (shown verbatim) the customer can
+            // act on (edit or remove the item).
+            setPriceErrors((prev) => ({ ...prev, [item.id]: data.message ?? 'Не удалось рассчитать цену' }));
+          }
         })
-        .catch(() => undefined);
+        .catch(() => setPriceErrors((prev) => ({ ...prev, [item.id]: 'Не удалось связаться с сервером' })));
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items.map((i) => `${i.id}:${i.priceSnapshot === null}`).join(',')]);
@@ -68,11 +115,15 @@ export function CartClient({ colors }: { colors: ColorOption[] }) {
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_340px]">
       <div className="flex flex-col gap-4">
+        {reconcileNotice && (
+          <p className="border border-line bg-surface-muted px-4 py-3 text-sm text-steel">{reconcileNotice}</p>
+        )}
         {items.map((item) => (
           <CartRow
             key={item.id}
             item={item}
-            color={colors.find((c) => c.id === item.configuration.colorId)}
+            color={catalog.colors.find((c) => c.id === item.configuration.colorId)}
+            error={priceErrors[item.id]}
             onRemove={() => removeItem(item.id)}
             onDuplicate={() => duplicateItem(item.id)}
             onQuantityChange={(q) => setQuantity(item.id, q)}
@@ -99,12 +150,14 @@ export function CartClient({ colors }: { colors: ColorOption[] }) {
 function CartRow({
   item,
   color,
+  error,
   onRemove,
   onDuplicate,
   onQuantityChange,
 }: {
   item: CartItem;
   color?: ColorOption;
+  error?: string;
   onRemove: () => void;
   onDuplicate: () => void;
   onQuantityChange: (quantity: number) => void;
@@ -119,10 +172,17 @@ function CartRow({
           <h3 className="font-display text-xl">{item.modelName}</h3>
           {item.priceSnapshot ? (
             <PriceTag value={item.priceSnapshot.breakdown.total} size="md" />
+          ) : error ? (
+            <span className="tech-label text-danger">Ошибка</span>
           ) : (
             <span className="tech-label">Пересчёт…</span>
           )}
         </div>
+        {error && (
+          <p className="border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
+            {error} Измените или удалите эту позицию.
+          </p>
+        )}
         <div className="tech-label flex flex-wrap gap-x-3 gap-y-1">
           <span>
             {item.configuration.height}×{item.configuration.sections.map((s) => s.width).join('+')}×

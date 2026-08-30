@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { PriceFailure, PriceResult, ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
+import { getAllowedWidthsForDepth, isValidMsStandardWidthDepth } from '@/lib/pricing/ms-standard-compatibility';
 
 type PersistedConfiguratorState = { config: ShelvingConfiguration; activeSectionId: string };
 
@@ -44,6 +45,8 @@ export const DEFAULT_CONFIGURATION: ShelvingConfiguration = {
   assemblyId: 'assembly-self',
   deliveryId: 'delivery-pickup',
   quantity: 1,
+  metalFootPad: false,
+  shelfCornerBrackets: false,
 };
 
 interface ConfiguratorState {
@@ -109,7 +112,19 @@ export const useConfiguratorStore = create<ConfiguratorState>()(
           const activeIndex = sections.findIndex((s) => s.id === state.activeSectionId);
           const insertAfter = activeIndex === -1 ? sections.length - 1 : activeIndex;
           const template = sections[insertAfter] ?? sections[sections.length - 1];
-          const next = makeSection(template.width);
+          // The template's width is normally already compatible with the
+          // row's current global depth (every mutation that could change
+          // that is expected to keep the row valid), so this almost always
+          // just reuses it as-is. Defensive fallback only, in case that
+          // invariant is ever violated (e.g. a not-yet-normalized persisted
+          // state): pick a deterministic width the current depth actually
+          // supports (see ms-standard-compatibility.ts) rather than
+          // silently creating a second invalid section.
+          const templateWidth =
+            state.config.modelSlug === 'ms-standard' && !isValidMsStandardWidthDepth(template.width, state.config.depth)
+              ? (getAllowedWidthsForDepth(state.config.depth)[0] ?? template.width)
+              : template.width;
+          const next = makeSection(templateWidth);
           const nextSections = [...sections.slice(0, insertAfter + 1), next, ...sections.slice(insertAfter + 1)];
           return { config: { ...state.config, sections: nextSections }, activeSectionId: next.id };
         }),

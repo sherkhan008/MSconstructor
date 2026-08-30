@@ -1,6 +1,7 @@
 import type { Catalog } from '@/lib/data/repository';
 import { findAccessory, findAssembly, findColor, findDelivery, findModel } from '@/lib/data/repository';
 import type { CompatibilityIssue, ShelvingConfiguration } from '@/lib/types/domain';
+import { isValidMsStandardConfiguration } from './ms-standard-compatibility';
 
 /**
  * Server-side compatibility validation. The configurator UI disables
@@ -20,31 +21,57 @@ export function validateCompatibility(
     return issues;
   }
 
+  // The GLOBAL dimension row must exist and be active regardless of model —
+  // an admin deactivating a HeightOption/WidthOption/DepthOption row blocks
+  // it everywhere, independent of whichever model-specific rules run below.
   const heightOption = catalog.heights.find((h) => h.value === config.height && h.active);
-  if (!heightOption || !model.heights.includes(config.height)) {
-    issues.push({ field: 'height', message: `Высота ${config.height} мм недоступна для модели «${model.name.ru}»` });
+  if (!heightOption) {
+    issues.push({ field: 'height', message: `Высота ${config.height} мм недоступна` });
   }
-
   for (const section of config.sections) {
     const widthOption = catalog.widths.find((w) => w.value === section.width && w.active);
-    if (!widthOption || !model.widths.includes(section.width)) {
-      issues.push({
-        field: 'sections',
-        message: `Ширина ${section.width} мм недоступна для модели «${model.name.ru}»`,
-      });
+    if (!widthOption) {
+      issues.push({ field: 'sections', message: `Ширина ${section.width} мм недоступна` });
     }
   }
-
   const depthOption = catalog.depths.find((d) => d.value === config.depth && d.active);
-  if (!depthOption || !model.depths.includes(config.depth)) {
-    issues.push({ field: 'depth', message: `Глубина ${config.depth} мм недоступна для модели «${model.name.ru}»` });
+  if (!depthOption) {
+    issues.push({ field: 'depth', message: `Глубина ${config.depth} мм недоступна` });
   }
 
-  if (config.shelves < model.minShelves || config.shelves > model.maxShelves) {
-    issues.push({
-      field: 'shelves',
-      message: `Число полок должно быть от ${model.minShelves} до ${model.maxShelves}`,
-    });
+  if (model.slug === 'ms-standard') {
+    // The authoritative MS Standard matrix — cross-dimensional rules (which
+    // depths a section width supports, which heights allow how many
+    // shelves) that a flat ProductModel.heights/widths/depths list cannot
+    // express. Single source of truth shared with the customer UI's
+    // dimension selects, width/height drag allowedValues, and editable-state
+    // normalization — see ms-standard-compatibility.ts.
+    for (const issue of isValidMsStandardConfiguration(config)) {
+      issues.push({ field: issue.field, message: issue.message });
+    }
+  } else {
+    // Every other model still uses its own flat per-model lists — no
+    // cross-dimensional rules exist for them today.
+    if (!model.heights.includes(config.height)) {
+      issues.push({ field: 'height', message: `Высота ${config.height} мм недоступна для модели «${model.name.ru}»` });
+    }
+    for (const section of config.sections) {
+      if (!model.widths.includes(section.width)) {
+        issues.push({
+          field: 'sections',
+          message: `Ширина ${section.width} мм недоступна для модели «${model.name.ru}»`,
+        });
+      }
+    }
+    if (!model.depths.includes(config.depth)) {
+      issues.push({ field: 'depth', message: `Глубина ${config.depth} мм недоступна для модели «${model.name.ru}»` });
+    }
+    if (config.shelves < model.minShelves || config.shelves > model.maxShelves) {
+      issues.push({
+        field: 'shelves',
+        message: `Число полок должно быть от ${model.minShelves} до ${model.maxShelves}`,
+      });
+    }
   }
 
   if (!model.shelfTypes.includes(config.shelfType)) {
@@ -107,6 +134,20 @@ export function validateCompatibility(
         field: 'accessories',
         message: `Максимальное количество «${accessory.name.ru}» — ${accessory.maxQuantityPerSection} на секцию`,
       });
+    }
+    // The real product's cross brace only fits a 1000mm section — this is a
+    // per-section restriction (a row can mix a 1000mm section with others),
+    // so it must name the specific section, not just "some section in the
+    // row is 1000mm". Authoritative here because client state is untrusted;
+    // the configurator UI enforces the same rule proactively.
+    if (accessory.id === 'acc-cross-brace') {
+      const section = selection.sectionId ? config.sections.find((s) => s.id === selection.sectionId) : undefined;
+      if (!section || section.width !== 1000) {
+        issues.push({
+          field: 'accessories',
+          message: 'Крестовина жёсткости доступна только для секции шириной 1000 мм',
+        });
+      }
     }
   }
 

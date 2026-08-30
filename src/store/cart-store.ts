@@ -29,6 +29,12 @@ interface CartState {
   duplicateItem: (id: string) => void;
   setQuantity: (id: string, quantity: number) => void;
   setPriceSnapshot: (id: string, priceSnapshot: PriceResult | null) => void;
+  /** Replaces one item's persisted configuration and clears its price
+   * snapshot (forcing a fresh server re-price) — used only to repair a
+   * configuration whose colorId/assemblyId/deliveryId/accessoryId no
+   * longer resolves in the current catalog (see
+   * src/lib/configurator/reconcile.ts). Never computes or assumes a price. */
+  setConfiguration: (id: string, configuration: ShelvingConfiguration) => void;
   clear: () => void;
   count: () => number;
 }
@@ -91,6 +97,11 @@ export const useCartStore = create<CartState>()(
       setPriceSnapshot: (id, priceSnapshot) =>
         set((state) => ({
           items: state.items.map((item) => (item.id === id ? { ...item, priceSnapshot } : item)),
+        })),
+
+      setConfiguration: (id, configuration) =>
+        set((state) => ({
+          items: state.items.map((item) => (item.id === id ? { ...item, configuration, priceSnapshot: null } : item)),
         })),
 
       clear: () => set({ items: [] }),

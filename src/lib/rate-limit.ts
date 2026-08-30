@@ -54,6 +54,7 @@ export const RATE_LIMITS = {
   orders: { limit: 5, windowMs: 60_000 },
   contact: { limit: 5, windowMs: 60_000 },
   promoCode: { limit: 20, windowMs: 60_000 },
+  adminLogin: { limit: 10, windowMs: 60_000 },
 } as const;
 
 export const isRedisConfigured = Boolean(env.REDIS_URL);

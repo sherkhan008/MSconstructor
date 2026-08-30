@@ -4,12 +4,16 @@ export function NumberStepper({
   max,
   onChange,
   suffix,
+  testId,
 }: {
   value: number;
   min: number;
   max: number;
   onChange: (value: number) => void;
   suffix?: string;
+  /** Purely a test hook (no visual/behavioral effect) — the current value
+   * has no other reliable, style-independent way to query in a test. */
+  testId?: string;
 }) {
   return (
     <div className="inline-flex items-stretch border border-line">
@@ -22,7 +26,10 @@ export function NumberStepper({
       >
         −
       </button>
-      <div className="mono flex min-w-[64px] items-center justify-center border-x border-line px-2 text-base font-semibold">
+      <div
+        data-testid={testId}
+        className="mono flex min-w-[64px] items-center justify-center border-x border-line px-2 text-base font-semibold"
+      >
         {value}
         {suffix && <span className="ml-1 text-xs font-normal text-steel">{suffix}</span>}
       </div>
