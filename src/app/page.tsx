@@ -39,6 +39,10 @@ const HOW_IT_WORKS = [
   { step: 5, title: 'Оформите заказ', description: 'Онлайн, по телефону или в WhatsApp' },
 ];
 
+// Reads the runtime catalog, so it renders per request — never prerendered
+// during `next build`. See getCatalog() in src/lib/data/repository.ts.
+export const dynamic = 'force-dynamic';
+
 const USE_CASE_ICONS: Record<string, string> = {
   warehouse: '🏭',
   archive: '🗄️',

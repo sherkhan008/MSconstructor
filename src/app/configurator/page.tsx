@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { getCatalog } from '@/lib/data/repository';
 import { toPublicCatalog } from '@/lib/data/public-catalog';
 import { buildMetadata } from '@/lib/seo';
-import { ConfiguratorClient } from '@/components/configurator/ConfiguratorClient';
+import { ClientOnlyConfigurator } from '@/components/configurator/ClientOnlyConfigurator';
 
 export const metadata: Metadata = buildMetadata({
   title: 'Конфигуратор стеллажей MS — расчёт цены онлайн',
@@ -11,6 +11,10 @@ export const metadata: Metadata = buildMetadata({
     'Соберите стеллаж MS под свои задачи: модель, размеры, полки, нагрузка, стенки, аксессуары. Цена рассчитывается мгновенно.',
   path: '/configurator',
 });
+
+// Reads the runtime catalog, so it renders per request — never prerendered
+// during `next build`. See getCatalog() in src/lib/data/repository.ts.
+export const dynamic = 'force-dynamic';
 
 /** The customer configurator currently offers MS Standard only — the other
  * models stay fully intact server-side (pricing, BOM, catalog browsing) and
@@ -24,7 +28,7 @@ export default async function ConfiguratorPage() {
 
   return (
     <Suspense fallback={<ConfiguratorFallback />}>
-      <ConfiguratorClient catalog={publicCatalog} />
+      <ClientOnlyConfigurator catalog={publicCatalog} fallback={<ConfiguratorFallback />} />
     </Suspense>
   );
 }

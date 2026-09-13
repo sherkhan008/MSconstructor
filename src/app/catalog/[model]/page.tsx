@@ -13,10 +13,10 @@ import { LinkButton } from '@/components/ui/Button';
 import { ProductImage } from '@/components/ui/ProductImage';
 import { ProductCard } from '@/components/catalog/ProductCard';
 
-export async function generateStaticParams() {
-  const catalog = await getCatalog();
-  return catalog.models.map((model) => ({ model: model.slug }));
-}
+// Rendered per request from the runtime catalog — no generateStaticParams, so
+// neither the image build nor a newly added model depends on a database
+// snapshot taken at build time. See getCatalog() in src/lib/data/repository.ts.
+export const dynamic = 'force-dynamic';
 
 export async function generateMetadata({ params }: { params: Promise<{ model: string }> }): Promise<Metadata> {
   const { model: slug } = await params;

@@ -118,7 +118,7 @@ export const hasDatabase = Boolean(env.DATABASE_URL && env.DATABASE_URL.startsWi
  * serverless invocation) is production minus that build phase — this is the
  * only case where a missing database may never silently fall back to memory.
  */
-const isProductionBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
+export const isProductionBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
 export const isProductionRuntime = isProduction && !isProductionBuildPhase;
 
 export class DatabaseRequiredError extends Error {

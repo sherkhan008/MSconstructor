@@ -11,6 +11,10 @@ export const metadata: Metadata = buildMetadata({
   path: '/delivery',
 });
 
+// Reads the runtime catalog, so it renders per request — never prerendered
+// during `next build`. See getCatalog() in src/lib/data/repository.ts.
+export const dynamic = 'force-dynamic';
+
 export default async function DeliveryPage() {
   const catalog = await getCatalog();
 
