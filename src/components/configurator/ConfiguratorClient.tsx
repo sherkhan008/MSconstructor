@@ -196,7 +196,7 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
   }
 
   return (
-    <div className="pb-40 lg:pb-28">
+    <div className="pb-56 lg:pb-28">
       <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-4 px-4 py-6 sm:px-6 lg:px-8">
         <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="font-display text-xl uppercase tracking-wide sm:text-2xl">Конфигуратор стеллажей МС Стандарт</h1>

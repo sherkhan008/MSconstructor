@@ -7,7 +7,7 @@ import { createSessionToken, sessionCookieOptions, SESSION_COOKIE_NAME, SESSION_
 import { recordAuditLog, requestMeta } from '@/lib/admin/audit';
 import { adminLoginSchema } from '@/lib/admin/schema';
 import { apiError, apiOk, internalError } from '@/lib/api/response';
-import { checkRateLimit, clientKeyFromHeaders, RATE_LIMITS } from '@/lib/rate-limit';
+import { enforceRateLimit } from '@/lib/rate-limit';
 import type { AdminRole } from '@/lib/types/domain';
 
 export const runtime = 'nodejs';
@@ -19,8 +19,11 @@ export const runtime = 'nodejs';
  * for internal review.
  */
 export async function POST(request: NextRequest) {
-  const key = `admin-login:${clientKeyFromHeaders(request.headers)}`;
-  const rate = checkRateLimit(key, RATE_LIMITS.adminLogin.limit, RATE_LIMITS.adminLogin.windowMs);
+  const rate = await enforceRateLimit('adminLogin', request.headers);
+  if (rate.reason === 'store-unavailable') {
+    // Shared limiter unreachable: refuse rather than allow unmetered attempts.
+    return apiError('INTERNAL_ERROR', 'Вход временно недоступен. Попробуйте позже.', 503);
+  }
   if (!rate.allowed) {
     return apiError('RATE_LIMITED', 'Слишком много попыток входа. Попробуйте через минуту.', 429);
   }

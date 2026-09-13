@@ -106,7 +106,12 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
           Детали стоимости {detailsOpen ? '▲' : '▼'}
         </button>
 
-        <div className="flex items-center gap-3">
+        {/* Both rows wrap: at narrow widths the total + four actions need more
+            width than the viewport, and this bar is `fixed`, so anything past
+            the right edge is clipped and unreachable (the page itself cannot
+            scroll to it). Wrapping keeps every action on screen. No effect at
+            desktop widths, where the row already fits on one line. */}
+        <div className="flex flex-wrap items-center gap-3">
           <div>
             <div className="tech-label">Итого</div>
             {priceResult ? (
@@ -123,7 +128,7 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button onClick={() => handleAddToCart(false)} disabled={actionsDisabled} variant="outline" size="sm" className="font-display uppercase tracking-wide">
               Добавить в корзину
             </Button>

@@ -16,19 +16,19 @@ export function NumberStepper({
   testId?: string;
 }) {
   return (
-    <div className="inline-flex items-stretch border border-line">
+    <div className="inline-flex h-9 items-stretch border border-line">
       <button
         type="button"
         aria-label="Уменьшить"
         onClick={() => onChange(Math.max(min, value - 1))}
         disabled={value <= min}
-        className="grid h-11 w-11 place-items-center text-lg text-foreground hover:bg-surface-muted disabled:opacity-30"
+        className="grid w-9 place-items-center text-sm text-foreground hover:bg-surface-muted disabled:opacity-30"
       >
         −
       </button>
       <div
         data-testid={testId}
-        className="mono flex min-w-[64px] items-center justify-center border-x border-line px-2 text-base font-semibold"
+        className="mono flex min-w-[48px] items-center justify-center border-x border-line px-2 text-sm font-medium"
       >
         {value}
         {suffix && <span className="ml-1 text-xs font-normal text-steel">{suffix}</span>}
@@ -38,7 +38,7 @@ export function NumberStepper({
         aria-label="Увеличить"
         onClick={() => onChange(Math.min(max, value + 1))}
         disabled={value >= max}
-        className="grid h-11 w-11 place-items-center text-lg text-foreground hover:bg-surface-muted disabled:opacity-30"
+        className="grid w-9 place-items-center text-sm text-foreground hover:bg-surface-muted disabled:opacity-30"
       >
         +
       </button>

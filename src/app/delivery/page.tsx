@@ -64,7 +64,7 @@ export default async function DeliveryPage() {
       </section>
 
       <div className="mt-10">
-        <LinkButton href="/configurator" size="lg">
+        <LinkButton href="/configurator" size="lg" className="!whitespace-normal text-center">
           Рассчитать стоимость стеллажа
         </LinkButton>
       </div>

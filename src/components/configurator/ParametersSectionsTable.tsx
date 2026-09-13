@@ -114,7 +114,7 @@ export function ParametersSectionsTable({ catalog }: { catalog: PublicCatalog })
             onClick={addSection}
             aria-label="Добавить секцию"
             title="Добавить секцию"
-            className="tech-label flex w-full items-center justify-center gap-1.5 border border-dimension-accent py-2 text-dimension-accent hover:bg-dimension-accent-soft disabled:cursor-not-allowed disabled:opacity-30 lg:h-7 lg:w-7 lg:rounded-full lg:border lg:p-0"
+            className="tech-label flex h-11 w-full items-center justify-center gap-1.5 border border-dimension-accent text-dimension-accent hover:bg-dimension-accent-soft disabled:cursor-not-allowed disabled:opacity-30 lg:h-8 lg:w-8 lg:rounded-full lg:p-0"
           >
             <span className="lg:hidden">+ Секция</span>
             <span className="hidden lg:inline">+</span>

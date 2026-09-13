@@ -16,6 +16,7 @@ export type ApiErrorCode =
   | 'NOT_FOUND'
   | 'UNAUTHORIZED'
   | 'FORBIDDEN'
+  | 'CONFLICT'
   | 'INTERNAL_ERROR';
 
 export function apiError(code: ApiErrorCode, message: string, status: number, details?: string[]) {

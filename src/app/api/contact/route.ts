@@ -1,14 +1,13 @@
 import type { NextRequest } from 'next/server';
 import { contactRequestSchema } from '@/lib/contact-schema';
 import { apiError, apiOk, internalError } from '@/lib/api/response';
-import { checkRateLimit, clientKeyFromHeaders, RATE_LIMITS } from '@/lib/rate-limit';
+import { enforceRateLimit } from '@/lib/rate-limit';
 import { notifyContactRequest } from '@/lib/notifications';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
-  const key = `contact:${clientKeyFromHeaders(request.headers)}`;
-  const rate = checkRateLimit(key, RATE_LIMITS.contact.limit, RATE_LIMITS.contact.windowMs);
+  const rate = await enforceRateLimit('contact', request.headers);
   if (!rate.allowed) {
     return apiError('RATE_LIMITED', 'Слишком много обращений. Попробуйте через минуту.', 429);
   }

@@ -19,11 +19,11 @@ import { ACCESSORIES, ASSEMBLY_SERVICES, COLORS, DELIVERY_METHODS } from '../src
  *   - never touches Order/OrderItem/OrderStatusHistory/Payment/Customer;
  *   - never touches prices (sellingPrice/purchasePrice/unitPrice/value/etc);
  *   - never touches the admin User table;
- *   - updates PriceHistory.entityId alongside an Accessory rename, since
- *     that table has a real foreign key to Accessory.id (see
- *     prisma/schema.prisma's price_history_accessory_fkey) — everything
- *     else here has no incoming foreign key at all, confirmed by reading
- *     the schema before writing this script;
+ *   - updates PriceHistory.entityId alongside an Accessory rename, so an
+ *     accessory's price trail keeps pointing at it (that column is a
+ *     logical reference, not a foreign key — see prisma/schema.prisma);
+ *     nothing else here has an incoming reference at all, confirmed by
+ *     reading the schema before writing this script;
  *   - refuses (reports, does not apply) any mapping that isn't an exact,
  *     unambiguous 1:1 match, or whose target id is already taken by a
  *     different row;
@@ -166,10 +166,10 @@ async function applyRenames() {
   await prisma.$transaction(async (tx) => {
     for (const item of toRename) {
       if (item.table === 'accessory') {
-        // Real FK: prisma/schema.prisma's PriceHistory.entityId ->
-        // Accessory.id (price_history_accessory_fkey). Update dependents
-        // first so the rename never leaves a dangling reference, even
-        // mid-transaction.
+        // PriceHistory.entityId is a *logical* reference to Accessory.id
+        // (no FK — see prisma/schema.prisma). Repoint it as part of the
+        // rename anyway, so an accessory's price trail keeps resolving to
+        // the row it belongs to.
         await tx.priceHistory.updateMany({ where: { entityId: item.currentId }, data: { entityId: item.targetId } });
         await tx.accessory.update({ where: { id: item.currentId }, data: { id: item.targetId } });
       } else if (item.table === 'colorOption') {

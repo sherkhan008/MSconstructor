@@ -644,7 +644,7 @@ const GENERIC_COMPONENTS: ShelvingComponent[] = [
     id: 'fastener-generic',
     sku: nextSku('FST'),
     type: 'FASTENER',
-    name: { ru: 'Комплект крепежа (болт+гайка)', kk: 'Бекіту жинағы (болт+сомын)' },
+    name: { ru: 'Комплект крепежа (болт + гайка)', kk: 'Бекіту жинағы (болт+сомын)' },
     sellingPrice: 120,
     purchasePrice: 70,
     weightKg: 0.05,
@@ -761,6 +761,18 @@ export const CONFIGURATION_RULES: ConfigurationRule[] = [
     componentType: 'FASTENER',
     name: 'Крепёж',
     formula: 'shelves * sections * 8 + sections * 16',
+    priority: 0,
+    active: true,
+  },
+  {
+    // MS Standard only — replaces rule-fastener for this model (see runRules
+    // in src/lib/pricing/bom.ts). One unit = one bolt + nut pair: 24 for a
+    // 2-shelf section, +4 per additional shelf, per section as before.
+    id: 'rule-fastener-ms-standard',
+    models: ['ms-standard'],
+    componentType: 'FASTENER',
+    name: 'Крепёж MS Стандарт (болт + гайка)',
+    formula: '(24 + (shelves - 2) * 4) * sections',
     priority: 0,
     active: true,
   },

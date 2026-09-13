@@ -1,4 +1,12 @@
 import { test, expect } from '@playwright/test';
+import type { PrismaClient } from '@prisma/client';
+import { createPrismaClient } from './helpers/admin-order-fixtures';
+import {
+  checkoutFixturePrefix,
+  checkoutIdentity,
+  isolateOrderRequests,
+  removeCheckoutFixtures,
+} from './helpers/checkout-order-fixtures';
 
 /**
  * Checkout/payment-foundation coverage (production-readiness task): an
@@ -6,7 +14,31 @@ import { test, expect } from '@playwright/test';
  * entity blocked by an invalid BIN, a legal entity completing checkout with
  * an invoice, the success page rendering order number/total/status/payment
  * method, and double-submit prevention.
+ *
+ * Every test here submits its own deterministic, isolated customer identity
+ * (see helpers/checkout-order-fixtures.ts) instead of one hardcoded phone
+ * shared by every test/file/project — that is what previously funneled
+ * every order-creating request from this suite into one shared rate-limit
+ * bucket and left permanent rows in the local database. Rows created here
+ * are deleted in afterAll by their deterministic prefix; the production
+ * rate limiter is untouched.
  */
+
+const hasDatabase = Boolean(process.env.DATABASE_URL);
+
+let prisma: PrismaClient | undefined;
+let prefix: string;
+
+test.beforeAll(({}, testInfo) => {
+  prefix = checkoutFixturePrefix('CHECKOUT', testInfo.project.name);
+  if (hasDatabase) prisma = createPrismaClient();
+});
+
+test.afterAll(async () => {
+  if (!prisma) return;
+  await removeCheckoutFixtures(prisma, prefix);
+  await prisma.$disconnect();
+});
 
 async function addRackToCart(page: import('@playwright/test').Page) {
   await page.goto('/configurator');
@@ -16,12 +48,14 @@ async function addRackToCart(page: import('@playwright/test').Page) {
   await page.goto('/order');
 }
 
-test('individual customer completes checkout with bank transfer', async ({ page }) => {
+test('individual customer completes checkout with bank transfer', async ({ page }, testInfo) => {
+  await isolateOrderRequests(page, prefix, testInfo);
   await addRackToCart(page);
 
-  await page.getByLabel('ФИО / Контактное лицо').fill('Тест Тестов');
-  await page.getByLabel('Телефон *', { exact: true }).fill('+77001234567');
-  await page.getByLabel('Email').fill('test@example.com');
+  const identity = checkoutIdentity(prefix, testInfo);
+  await page.getByLabel('ФИО / Контактное лицо').fill(identity.fullName);
+  await page.getByLabel('Телефон *', { exact: true }).fill(identity.phone);
+  await page.getByLabel('Email').fill(identity.email);
   await page.getByLabel('Город').fill('Алматы');
 
   const paymentSelect = page.locator('select').filter({ has: page.locator('option', { hasText: 'Безналичный расчёт' }) });
@@ -41,12 +75,14 @@ test('individual customer completes checkout with bank transfer', async ({ page 
   await expect(page.locator('main').getByRole('link', { name: 'Написать в WhatsApp' })).toBeVisible();
 });
 
-test('legal entity checkout is blocked by a missing/invalid BIN', async ({ page }) => {
+test('legal entity checkout is blocked by a missing/invalid BIN', async ({ page }, testInfo) => {
+  await isolateOrderRequests(page, prefix, testInfo);
   await addRackToCart(page);
 
-  await page.getByLabel('ФИО / Контактное лицо').fill('Тест Тестов');
-  await page.getByLabel('Телефон *', { exact: true }).fill('+77001234567');
-  await page.getByLabel('Email').fill('test@example.com');
+  const identity = checkoutIdentity(prefix, testInfo);
+  await page.getByLabel('ФИО / Контактное лицо').fill(identity.fullName);
+  await page.getByLabel('Телефон *', { exact: true }).fill(identity.phone);
+  await page.getByLabel('Email').fill(identity.email);
   await page.getByLabel('Город').fill('Алматы');
   await page.getByText('Юридическое лицо').click();
   await page.getByLabel('Название компании *').fill('ТОО Ромашка');
@@ -62,12 +98,14 @@ test('legal entity checkout is blocked by a missing/invalid BIN', async ({ page 
   await expect(page).not.toHaveURL(/\/order\/success/);
 });
 
-test('legal entity completes checkout with a valid BIN and invoice payment', async ({ page }) => {
+test('legal entity completes checkout with a valid BIN and invoice payment', async ({ page }, testInfo) => {
+  await isolateOrderRequests(page, prefix, testInfo);
   await addRackToCart(page);
 
-  await page.getByLabel('ФИО / Контактное лицо').fill('ИП Тестов');
-  await page.getByLabel('Телефон *', { exact: true }).fill('+77001234567');
-  await page.getByLabel('Email').fill('test@example.com');
+  const identity = checkoutIdentity(prefix, testInfo);
+  await page.getByLabel('ФИО / Контактное лицо').fill(identity.fullName);
+  await page.getByLabel('Телефон *', { exact: true }).fill(identity.phone);
+  await page.getByLabel('Email').fill(identity.email);
   await page.getByLabel('Город').fill('Алматы');
   await page.getByText('Юридическое лицо').click();
   await page.getByLabel('Название компании *').fill('ТОО Ромашка');
@@ -82,23 +120,31 @@ test('legal entity completes checkout with a valid BIN and invoice payment', asy
   await expect(page.getByText('Оплата по счёту')).toBeVisible();
 });
 
-test('the submit button disables immediately to prevent a duplicate submission', async ({ page }) => {
-  await addRackToCart(page);
-
-  await page.getByLabel('ФИО / Контактное лицо').fill('Тест Тестов');
-  await page.getByLabel('Телефон *', { exact: true }).fill('+77001234567');
-  await page.getByLabel('Email').fill('test@example.com');
-  await page.getByLabel('Город').fill('Алматы');
-
+test('the submit button disables immediately to prevent a duplicate submission', async ({ page }, testInfo) => {
   // Slow the order request down just enough to observe the transient
   // disabled state — the in-memory dev backend otherwise resolves and
-  // navigates away before an assertion could ever catch it.
-  await page.route('**/api/orders', async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    await route.continue();
-  });
+  // navigates away before an assertion could ever catch it. Folded into the
+  // same isolateOrderRequests call (rather than a second page.route) since
+  // Playwright route handlers are LIFO and a second registration would just
+  // shadow the rate-limit isolation header instead of layering with it.
+  await isolateOrderRequests(page, prefix, testInfo, 800);
+  await addRackToCart(page);
+
+  const identity = checkoutIdentity(prefix, testInfo);
+  await page.getByLabel('ФИО / Контактное лицо').fill(identity.fullName);
+  await page.getByLabel('Телефон *', { exact: true }).fill(identity.phone);
+  await page.getByLabel('Email').fill(identity.email);
+  await page.getByLabel('Город').fill('Алматы');
 
   const submitButton = page.getByRole('button', { name: /Подтвердить заказ|Оформляем/ });
+  const orderResponse = page.waitForResponse(
+    (res) => res.url().includes('/api/orders') && res.request().method() === 'POST',
+  );
   await submitButton.click();
   await expect(submitButton).toBeDisabled();
+
+  // Let the deliberately-delayed request actually land before the test ends
+  // — otherwise its write can complete after afterAll has already started
+  // deleting this test's fixture rows, racing the FK constraint.
+  await orderResponse;
 });

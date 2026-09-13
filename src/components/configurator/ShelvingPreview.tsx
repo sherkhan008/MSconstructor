@@ -97,12 +97,11 @@ function perforationYs(top: number, bottom: number): number[] {
   return Array.from({ length: count + 1 }, (_, i) => from + (i * (to - from)) / count);
 }
 
-// Shared "industrial glossy" language for every circular control around the
-// rack (section add/remove, shelf count +/-): soft grey gradient, a subtle
-// outer shadow plus an inner top highlight for a slight glossy dome feel,
-// light border — deliberately not a flat modern SaaS button.
+// Shared flat, compact language for every circular control around the rack
+// (section add/remove, shelf count +/-): plain surface fill, thin border,
+// no gradient/shadow — consistent with the rest of the configurator's UI.
 const CIRCLE_CONTROL =
-  'grid place-items-center rounded-full border border-line bg-[linear-gradient(180deg,#ffffff_0%,#eceef0_55%,#d9dce0_100%)] font-semibold text-steel shadow-[0_1px_2px_rgba(28,32,36,0.2),inset_0_1px_0_rgba(255,255,255,0.95)] transition-colors disabled:cursor-not-allowed disabled:opacity-30 disabled:shadow-none';
+  'grid place-items-center rounded-full border border-line bg-surface font-medium text-steel transition-colors disabled:cursor-not-allowed disabled:opacity-30';
 
 export interface AllowedDimensions {
   heights: number[];
@@ -357,22 +356,6 @@ export function ShelvingPreview({
              stroke below, never from a darker "far" color. */}
         {boundaryXs.map((x, i) => (
           <g key={`rear-post-${i}`}>
-            <line
-              x1={x}
-              y1={top}
-              x2={x + depthVec.dx}
-              y2={top + depthVec.dy}
-              stroke={darkFill}
-              strokeWidth={1}
-            />
-            <line
-              x1={x}
-              y1={FLOOR_Y}
-              x2={x + depthVec.dx}
-              y2={FLOOR_Y + depthVec.dy}
-              stroke={darkFill}
-              strokeWidth={1}
-            />
             <rect
               x={x + depthVec.dx - POST_WIDTH / 2}
               y={top + depthVec.dy}
@@ -434,6 +417,7 @@ export function ShelvingPreview({
             {shelfCornersBySection[si].map((c, i) => (
               <polygon
                 key={i}
+                data-shelf-part="top-surface"
                 points={`${c.frontLeft.x},${c.frontLeft.y} ${c.frontRight.x},${c.frontRight.y} ${c.rearRight.x},${c.rearRight.y} ${c.rearLeft.x},${c.rearLeft.y}`}
                 fill={fill}
               />
@@ -451,11 +435,11 @@ export function ShelvingPreview({
               <g key={i}>
                 <polygon
                   points={`${c.frontLeft.x},${c.frontLeft.y} ${c.rearLeft.x},${c.rearLeft.y} ${c.rearLeft.x},${c.rearLeft.y + SHELF_LIP_HEIGHT_PX} ${c.frontLeft.x},${c.frontLeft.y + SHELF_LIP_HEIGHT_PX}`}
-                  fill={darkFill}
+                  fill={fill}
                 />
                 <polygon
                   points={`${c.frontRight.x},${c.frontRight.y} ${c.rearRight.x},${c.rearRight.y} ${c.rearRight.x},${c.rearRight.y + SHELF_LIP_HEIGHT_PX} ${c.frontRight.x},${c.frontRight.y + SHELF_LIP_HEIGHT_PX}`}
-                  fill={darkFill}
+                  fill={fill}
                 />
               </g>
             ))}
@@ -473,7 +457,7 @@ export function ShelvingPreview({
                 y={c.frontLeft.y}
                 width={section.width}
                 height={SHELF_LIP_HEIGHT_PX}
-                fill={darkFill}
+                fill={fill}
                 stroke="#1C2024"
                 strokeOpacity={0.16}
                 strokeWidth={0.5}

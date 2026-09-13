@@ -66,7 +66,7 @@ export function Header() {
             <CartBadge />
           </Link>
 
-          <LinkButton href="/configurator" size="sm" className="hidden sm:inline-flex">
+          <LinkButton href="/configurator" size="sm" className="!hidden sm:!inline-flex">
             Конфигурировать
           </LinkButton>
 

@@ -111,6 +111,17 @@ let cacheEntry: CacheEntry | null = null;
 // in flight, so an expired cache under load triggers one rebuild, not one
 // per concurrent request (thundering herd).
 let inflight: Promise<Catalog> | null = null;
+/**
+ * Bumped by every invalidateCatalogCache() call. A rebuild captures the
+ * generation it started under and refuses to publish its result if that
+ * generation is no longer current — which is the whole point: an admin who
+ * changes a price while a rebuild is already reading the old rows must not
+ * have the cache repopulated with that stale snapshot a moment later.
+ * The stale result is still returned to the caller that asked for it (it was
+ * correct when the query ran); it simply never becomes the active cache
+ * entry, so the next read rebuilds from the database.
+ */
+let cacheGeneration = 0;
 
 async function loadCatalog(): Promise<Catalog> {
   if (hasDatabase) {
@@ -133,23 +144,48 @@ export async function getCatalog(): Promise<Catalog> {
   if (cacheEntry && cacheEntry.expiresAt > now) return cacheEntry.catalog;
   if (inflight) return inflight;
 
-  inflight = loadCatalog()
+  const generation = cacheGeneration;
+  const tracked: Promise<Catalog> = loadCatalog()
     .then((catalog) => {
-      cacheEntry = { catalog, expiresAt: Date.now() + CATALOG_CACHE_TTL_MS };
+      // Publish only if nothing invalidated the cache while this rebuild was
+      // reading the database — see cacheGeneration.
+      if (generation === cacheGeneration) {
+        cacheEntry = { catalog, expiresAt: Date.now() + CATALOG_CACHE_TTL_MS };
+      }
       return catalog;
     })
     .finally(() => {
-      inflight = null;
+      // Only clear the slot if it is still ours: an invalidation may already
+      // have replaced it with a newer rebuild, which must not be dropped.
+      if (inflight === tracked) inflight = null;
     });
 
-  return inflight;
+  inflight = tracked;
+  return tracked;
 }
 
-/** Test-only: force the next getCatalog() call to rebuild — the deterministic
- * alternative to waiting out CATALOG_CACHE_TTL_MS in a test. */
-export function resetCatalogCache(): void {
+/**
+ * Production-safe cache invalidation: call it right after a committed admin
+ * change to catalog data so the very next read rebuilds from the database
+ * instead of waiting out CATALOG_CACHE_TTL_MS. Safe against a rebuild that is
+ * already in flight — that older rebuild can no longer become the active
+ * cache entry (see cacheGeneration).
+ *
+ * Scope note: the cache lives in the Node process, so this clears *this*
+ * instance. Other instances behind a load balancer still converge within
+ * CATALOG_CACHE_TTL_MS, which remains the upper bound on staleness.
+ */
+export function invalidateCatalogCache(): void {
+  cacheGeneration += 1;
   cacheEntry = null;
   inflight = null;
+}
+
+/** Test-only alias for invalidateCatalogCache() — the deterministic
+ * alternative to waiting out CATALOG_CACHE_TTL_MS in a test. Application
+ * code calls invalidateCatalogCache() instead. */
+export function resetCatalogCache(): void {
+  invalidateCatalogCache();
 }
 
 /* -------------------------------------------------------------------------- */
@@ -231,5 +267,17 @@ export function stripComponentSecrets(component: ShelvingComponent) {
 
 export function stripAccessorySecrets(accessory: Accessory) {
   const { purchasePrice: _purchasePrice, ...rest } = accessory;
+  return rest;
+}
+
+/**
+ * markupPercent/markupFixed are what turn component cost into the selling
+ * price (src/lib/pricing/engine.ts) — publishing them lets anyone derive our
+ * purchase cost from a quoted price, so they stay server-side exactly like
+ * purchasePrice does. Only the pricing engine, which reads the internal
+ * Catalog, ever needs them.
+ */
+export function stripModelSecrets(model: ProductModel) {
+  const { markupPercent: _markupPercent, markupFixed: _markupFixed, ...rest } = model;
   return rest;
 }

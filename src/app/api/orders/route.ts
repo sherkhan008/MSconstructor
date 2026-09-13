@@ -4,7 +4,7 @@ import { calculatePrice } from '@/lib/pricing';
 import { stripBomCosts } from '@/lib/pricing/bom';
 import { orderRequestSchema } from '@/lib/pricing/schema';
 import { apiError, apiOk, internalError } from '@/lib/api/response';
-import { checkRateLimit, clientKeyFromHeaders, RATE_LIMITS } from '@/lib/rate-limit';
+import { enforceRateLimit } from '@/lib/rate-limit';
 import { generateOrderNumber, saveOrder } from '@/lib/orders/store';
 import type { OrderItemRecord, OrderRecord } from '@/lib/orders/types';
 import { notifyNewOrder } from '@/lib/notifications';
@@ -17,8 +17,7 @@ export const runtime = 'nodejs';
  * the client are never written to the database as-is.
  */
 export async function POST(request: NextRequest) {
-  const key = `orders:${clientKeyFromHeaders(request.headers)}`;
-  const rate = checkRateLimit(key, RATE_LIMITS.orders.limit, RATE_LIMITS.orders.windowMs);
+  const rate = await enforceRateLimit('orders', request.headers);
   if (!rate.allowed) {
     return apiError('RATE_LIMITED', 'Слишком много заявок. Попробуйте через минуту.', 429);
   }
@@ -58,6 +57,12 @@ export async function POST(request: NextRequest) {
       const model = findModel(catalog, result.configuration.modelSlug);
       items.push({
         configuration: result.configuration,
+        // Internal snapshot: full component-level detail (beams, frame ties
+        // and all), cost stripped. It is read only by the admin order view
+        // and production/notification output, never rendered to a customer —
+        // the customer-facing kit composition is toPublicBom() in
+        // /api/pricing/calculate. Keeping the detail here is what lets an
+        // order still be picked and assembled.
         bom: stripBomCosts(result.bom),
         breakdown: result.breakdown,
         modelName: model?.name.ru ?? result.configuration.modelSlug,

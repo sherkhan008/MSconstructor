@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { AdminNav } from '@/components/admin/AdminNav';
 import { LogoutButton } from '@/components/admin/LogoutButton';
 import type { AdminSessionPayload } from '@/lib/auth/session';
 
@@ -10,8 +11,8 @@ const ADMIN_ROLE_LABEL_RU: Record<string, string> = {
   CONTENT_MANAGER: 'Контент-менеджер',
 };
 
-/** Minimal internal shell — one nav item today ("Заказы"), by design (spec:
- * keep scope small, no products/prices/customers/analytics sections yet). */
+/** Minimal internal shell. Sections live in AdminNav, which also decides
+ * which of them the signed-in role may see. */
 export function AdminShell({ admin, children }: { admin: AdminSessionPayload; children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-surface-muted">
@@ -20,11 +21,7 @@ export function AdminShell({ admin, children }: { admin: AdminSessionPayload; ch
           <Link href="/admin/orders" className="font-display text-lg tracking-wide">
             MS Admin
           </Link>
-          <nav className="flex items-center gap-4">
-            <Link href="/admin/orders" className="tech-label hover:text-blueprint">
-              Заказы
-            </Link>
-          </nav>
+          <AdminNav role={admin.role} />
         </div>
         <div className="flex items-center gap-3">
           <div className="text-right text-sm">
