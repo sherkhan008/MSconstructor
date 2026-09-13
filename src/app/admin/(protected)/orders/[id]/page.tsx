@@ -27,9 +27,8 @@ import { LinkButton } from '@/components/ui/Button';
 import { OrderStatusForm } from '@/components/admin/OrderStatusForm';
 import { OrderManagerForm, type OrderManagerMode } from '@/components/admin/OrderManagerForm';
 import { OrderInternalNotes } from '@/components/admin/OrderInternalNotes';
-import { OrderDocuments, type OrderDocumentEntry } from '@/components/admin/OrderDocuments';
-import { ORDER_DOCUMENT_KINDS, ORDER_DOCUMENT_TITLE_RU, orderDocumentNumber } from '@/lib/documents/kinds';
-import { describeSellerIssue, readSellerConfig, sellerConfigIssues } from '@/lib/documents/seller';
+import { OrderDocuments } from '@/components/admin/OrderDocuments';
+import { getOrderDocumentStatuses } from '@/lib/documents/readiness';
 
 /**
  * One order, as it was saved.
@@ -212,20 +211,10 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
 
   const whatsAppTarget = order.customer.whatsapp || order.customer.phone;
 
-  // Readiness only — the PDFs themselves are built by the document route from
-  // the persisted order. Seller details come from server-side configuration.
-  const sellerConfig = readSellerConfig();
-  const documents: OrderDocumentEntry[] = ORDER_DOCUMENT_KINDS.map((kind) => ({
-    kind,
-    title: ORDER_DOCUMENT_TITLE_RU[kind],
-    number: orderDocumentNumber(kind, order.orderNumber),
-    href: `/api/admin/orders/${encodeURIComponent(order.id)}/documents/${kind}`,
-    blockers: sellerConfigIssues(kind, sellerConfig).map(describeSellerIssue),
-    notes:
-      kind === 'commercial-proposal' && !sellerConfig.details.legalName
-        ? ['Юридические реквизиты продавца не заданы (SELLER_*): в предложении будет указано только название бренда.']
-        : [],
-  }));
+  // Status only (issued / ready / blocked and why) — the PDFs themselves are
+  // issued and built by the document route. Read-only: nothing is issued here.
+  const canGenerateDocuments = canGenerateOrderDocuments(admin.role);
+  const documents = canGenerateDocuments ? await getOrderDocumentStatuses(order.id) : [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -344,7 +333,7 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
 
       <section className="border border-line bg-background p-4">
         <h2 className="tech-label mb-3">Документы</h2>
-        <OrderDocuments documents={documents} canGenerate={canGenerateOrderDocuments(admin.role)} />
+        <OrderDocuments documents={documents} canGenerate={canGenerateDocuments} />
       </section>
 
       <section className="border border-line bg-background p-4">

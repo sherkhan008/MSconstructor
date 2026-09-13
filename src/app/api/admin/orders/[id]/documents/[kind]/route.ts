@@ -1,15 +1,13 @@
 import type { NextRequest } from 'next/server';
 import { getCurrentAdmin } from '@/lib/auth/current-admin';
 import { canGenerateOrderDocuments } from '@/lib/auth/authorize';
-import { getCatalog } from '@/lib/data/repository';
 import { apiError, internalError } from '@/lib/api/response';
-import { buildOrderDocument, DocumentIntegrityError } from '@/lib/documents/build';
+import { buildOrderDocument, buildOrderDocumentContent, DocumentIntegrityError, DocumentUnavailableError } from '@/lib/documents/build';
+import { findOrderDocumentIssuance } from '@/lib/documents/issuance';
 import { isOrderDocumentKind, orderDocumentFileName } from '@/lib/documents/kinds';
-import { documentLabelsFromCatalog } from '@/lib/documents/labels';
 import { DocumentAmountError } from '@/lib/documents/money';
 import { isPlausibleOrderId, loadOrderDocumentSource } from '@/lib/documents/order-source';
 import { renderOrderDocumentPdf } from '@/lib/documents/pdf';
-import { describeSellerIssue, readSellerConfig, sellerConfigIssues } from '@/lib/documents/seller';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,13 +15,25 @@ export const dynamic = 'force-dynamic';
 /**
  * GET /api/admin/orders/:id/documents/:kind[?download=1]
  *
- * Admin-only PDF of a saved order: `commercial-proposal` or `invoice`.
+ * Admin-only PDF of an ALREADY-ISSUED document: `commercial-proposal` or
+ * `invoice`. Strictly read-only — this handler never creates or mutates an
+ * `OrderDocument`, an order, or anything else. Issuing (freezing the
+ * document's number, date and seller snapshot the first time) is a
+ * separate, explicit action: POST .../documents/:kind/issue. A GET against
+ * a document that has not been issued yet is refused (409) rather than
+ * issuing it as a side effect of a "safe" HTTP method.
  *
- * Read-only by construction: the order is loaded through an explicit column
- * allow-list (loadOrderDocumentSource), projected by a pure builder and
- * rendered — nothing is written, so opening the same document twice returns
- * the same bytes and never touches the order. The request carries no body
- * and no amounts; every number in the PDF comes from the persisted order.
+ * 1. The order is loaded through an explicit column allow-list and validated
+ *    against its order-time snapshots. An order that cannot produce a
+ *    truthful document (placed before snapshots existed, or contradictory)
+ *    is refused here (409), independent of whether it was ever issued.
+ * 2. The persisted issuance (number, date, seller snapshot) is looked up.
+ *    If none exists, 409 — issue it first via the POST route above.
+ * 3. The PDF is rendered from the persisted content and the persisted
+ *    issuance. Nothing is written by this request.
+ *
+ * The request carries no body and no amounts; every number in the PDF comes
+ * from the persisted order.
  */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string; kind: string }> }) {
   const admin = await getCurrentAdmin();
@@ -45,22 +55,21 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return apiError('NOT_FOUND', 'Заказ не найден', 404);
     }
 
-    const seller = readSellerConfig();
-    const issues = sellerConfigIssues(kind, seller);
-    if (issues.length > 0) {
+    const content = buildOrderDocumentContent(source);
+
+    const issuance = await findOrderDocumentIssuance(source.id, kind);
+    if (!issuance) {
       return apiError(
-        'VALIDATION_ERROR',
-        'Не настроены реквизиты продавца, необходимые для документа',
-        422,
-        issues.map(describeSellerIssue),
+        'CONFLICT',
+        'Документ ещё не выставлен.',
+        409,
+        [`Сначала сформируйте его: POST /api/admin/orders/${encodeURIComponent(id)}/documents/${kind}/issue`],
       );
     }
 
-    const labels = documentLabelsFromCatalog(await getCatalog());
-    const model = buildOrderDocument(kind, source, seller.details, labels);
-    const pdf = await renderOrderDocumentPdf(model);
+    const pdf = await renderOrderDocumentPdf(buildOrderDocument(kind, content, issuance));
 
-    const fileName = orderDocumentFileName(kind, source.orderNumber);
+    const fileName = orderDocumentFileName(issuance.number);
     const disposition = request.nextUrl.searchParams.get('download') === '1' ? 'attachment' : 'inline';
 
     return new Response(new Uint8Array(pdf), {
@@ -74,6 +83,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       },
     });
   } catch (error) {
+    if (error instanceof DocumentUnavailableError) {
+      return apiError('CONFLICT', `Документ не сформирован: ${error.message}`, 409, error.details);
+    }
     if (error instanceof DocumentIntegrityError || error instanceof DocumentAmountError) {
       return apiError('CONFLICT', `Документ не сформирован: ${error.message}`, 409);
     }

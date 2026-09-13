@@ -8,6 +8,7 @@ import { enforceRateLimit } from '@/lib/rate-limit';
 import { generateOrderNumber, saveOrder } from '@/lib/orders/store';
 import type { OrderItemRecord, OrderRecord } from '@/lib/orders/types';
 import { notifyNewOrder } from '@/lib/notifications';
+import { createOrderBuyerSnapshot, createOrderItemDocumentSnapshot } from '@/lib/documents/snapshots';
 
 export const runtime = 'nodejs';
 
@@ -66,6 +67,18 @@ export async function POST(request: NextRequest) {
         bom: stripBomCosts(result.bom),
         breakdown: result.breakdown,
         modelName: model?.name.ru ?? result.configuration.modelSlug,
+        // Order-time facts for commercial documents (names, public kit, price
+        // breakdown and VAT basis), frozen now against the same catalog this
+        // item was just priced with — see src/lib/documents/snapshots.ts.
+        documentSnapshot: createOrderItemDocumentSnapshot(
+          {
+            configuration: result.configuration,
+            bom: result.bom,
+            breakdown: result.breakdown,
+            pricesIncludeVat: catalog.pricingSettings.pricesIncludeVat,
+          },
+          catalog,
+        ),
       });
     }
 
@@ -87,20 +100,25 @@ export async function POST(request: NextRequest) {
     const discountTotal = items.reduce((sum, item) => sum + item.breakdown.discount, 0);
     const grandTotal = items.reduce((sum, item) => sum + item.breakdown.total, 0);
 
+    const customer: OrderRecord['customer'] = {
+      fullName: input.fullName,
+      phone: input.phone,
+      whatsapp: input.whatsapp || undefined,
+      email: input.email || undefined,
+      city: input.city,
+      companyName: input.companyName,
+      binIin: input.binIin || undefined,
+      type: input.customerType,
+    };
+
     const order: OrderRecord = {
       id: crypto.randomUUID(),
       orderNumber: generateOrderNumber(),
       status: 'NEW',
-      customer: {
-        fullName: input.fullName,
-        phone: input.phone,
-        whatsapp: input.whatsapp || undefined,
-        email: input.email || undefined,
-        city: input.city,
-        companyName: input.companyName,
-        binIin: input.binIin || undefined,
-        type: input.customerType,
-      },
+      customer,
+      // The shared Customer row is upserted (and overwritten) by the next
+      // order from the same phone; this copy is what documents print.
+      buyerSnapshot: createOrderBuyerSnapshot(customer),
       deliveryAddress: input.deliveryAddress,
       paymentPreference: input.paymentPreference,
       comment: input.comment,

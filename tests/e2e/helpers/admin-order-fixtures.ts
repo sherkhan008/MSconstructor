@@ -126,7 +126,7 @@ function bomJson(): Prisma.InputJsonValue {
   ];
 }
 
-interface CreateOrderInput {
+export interface CreateOrderInput {
   prefix: string;
   index: number;
   status: 'NEW' | 'CONTACTED' | 'PAID';
@@ -137,9 +137,57 @@ interface CreateOrderInput {
   managerId?: string;
   createdAt: Date;
   grandTotal: number;
+  /** false = an order placed before document snapshots existed (legacy). */
+  documentSnapshots?: boolean;
 }
 
-async function createOrder(prisma: PrismaClient, input: CreateOrderInput) {
+/**
+ * The order-time snapshots POST /api/orders writes: the buyer as entered and
+ * the item's labels, public kit and price breakdown (VAT-exclusive, one set,
+ * self-assembly, free pickup). Amounts are consistent with the order columns:
+ * goods = unit × 1 = net, net + vat = total.
+ */
+function documentSnapshotsJson(input: CreateOrderInput, phone: string, email: string, net: number) {
+  const money = (tenge: number) => tenge.toFixed(2);
+  const buyerSnapshot: Prisma.InputJsonValue = {
+    version: 1,
+    type: input.customerType,
+    fullName: input.fullName,
+    phone,
+    email,
+    city: 'Алматы',
+    ...(input.customerType === 'LEGAL_ENTITY' && input.companyName ? { companyName: input.companyName } : {}),
+    ...(input.binIin ? { binIin: input.binIin } : {}),
+  };
+  const documentSnapshot: Prisma.InputJsonValue = {
+    version: 1,
+    modelName: 'MS Стандарт',
+    colorName: 'Стандартный серый',
+    assemblyName: 'Самостоятельная сборка',
+    deliveryName: 'Самовывоз со склада',
+    options: [],
+    kit: [
+      { name: 'Стойка 2000 мм', quantity: 4 },
+      { name: 'Полка 1000×500', quantity: 5 },
+    ],
+    pricing: {
+      pricesIncludeVat: false,
+      vatPercent: 16,
+      quantity: 1,
+      unitPrice: money(net),
+      goodsAmount: money(net),
+      assembly: '0.00',
+      delivery: '0.00',
+      discount: '0.00',
+      net: money(net),
+      vat: money(input.grandTotal - net),
+      total: money(input.grandTotal),
+    },
+  };
+  return { buyerSnapshot, documentSnapshot };
+}
+
+export async function createOrder(prisma: PrismaClient, input: CreateOrderInput) {
   const phone = fixturePhone(input.prefix, input.index);
   const customer = await prisma.customer.create({
     data: {
@@ -154,10 +202,13 @@ async function createOrder(prisma: PrismaClient, input: CreateOrderInput) {
   });
 
   const net = Math.round(input.grandTotal / 1.16);
+  const snapshots =
+    input.documentSnapshots === false ? null : documentSnapshotsJson(input, phone, customer.email ?? '', net);
   const order = await prisma.order.create({
     data: {
       orderNumber: `${input.prefix}-${String(input.index).padStart(4, '0')}`,
       customerId: customer.id,
+      buyerSnapshot: snapshots?.buyerSnapshot,
       status: input.status,
       managerId: input.managerId,
       paymentPreference: 'BANK_TRANSFER',
@@ -173,6 +224,7 @@ async function createOrder(prisma: PrismaClient, input: CreateOrderInput) {
           {
             configuration: configurationJson(1000),
             bomSnapshot: bomJson(),
+            documentSnapshot: snapshots?.documentSnapshot,
             quantity: 1,
             unitNetPrice: new Prisma.Decimal(net),
             totalNetPrice: new Prisma.Decimal(net),
@@ -272,10 +324,10 @@ export async function createOrderFixtures(
 }
 
 /**
- * Removes every row a fixture run created: the orders (their items and status
- * history cascade), the audit entries recorded against them, the customers
- * and the admin accounts. Real orders are never touched because they were
- * never used.
+ * Removes every row a fixture run created: the issued documents, the orders
+ * (their items and status history cascade), the audit entries recorded
+ * against them, the customers and the admin accounts. Real orders are never
+ * touched because they were never used.
  */
 export async function removeOrderFixtures(prisma: PrismaClient, prefix: string): Promise<void> {
   const orders = await prisma.order.findMany({
@@ -285,6 +337,9 @@ export async function removeOrderFixtures(prisma: PrismaClient, prefix: string):
   const orderIds = orders.map((order) => order.id);
 
   if (orderIds.length > 0) {
+    // Issued documents block order deletion (ON DELETE RESTRICT — a real
+    // issued invoice must never vanish with its order), so they go first.
+    await prisma.orderDocument.deleteMany({ where: { orderId: { in: orderIds } } });
     // Audit rows have no FK to Order, so they must go explicitly.
     await prisma.auditLog.deleteMany({ where: { entityId: { in: orderIds } } });
     await prisma.order.deleteMany({ where: { id: { in: orderIds } } });

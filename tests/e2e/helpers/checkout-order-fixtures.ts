@@ -123,6 +123,9 @@ export async function removeCheckoutFixtures(
     // audit entries come from admin actions — but this stays safe if that
     // ever changes.
     await prisma.auditLog.deleteMany({ where: { entityId: { in: orderIds } } });
+    // Issued documents block order deletion (ON DELETE RESTRICT), so any a
+    // test issued go first.
+    await prisma.orderDocument.deleteMany({ where: { orderId: { in: orderIds } } });
     const deleted = await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
     ordersDeleted = deleted.count;
   }

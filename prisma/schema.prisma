@@ -44,6 +44,7 @@ model User {
   auditLogs     AuditLog[]
   priceChanges  PriceHistory[]
   assignedOrders Order[]  @relation("OrderManager")
+  issuedOrderDocuments OrderDocument[] @relation("OrderDocumentIssuer")
 
   @@index([role])
 }
@@ -440,6 +441,9 @@ model Order {
   orderNumber     String      @unique
   customerId      String
   customer        Customer    @relation(fields: [customerId], references: [id])
+  /// Immutable commercial-party data captured when this order is placed.
+  /// Null only for orders created before the document snapshot migration.
+  buyerSnapshot   Json?
   status          OrderStatus @default(NEW)
   items           OrderItem[]
   statusHistory   OrderStatusHistory[]
@@ -464,6 +468,7 @@ model Order {
 
   payments        Payment[]
   quotes          Quote[]
+  documents       OrderDocument[]
 
   @@index([status])
   @@index([customerId])
@@ -475,11 +480,42 @@ model OrderItem {
   order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   configuration   Json
   bomSnapshot     Json
+  /// Versioned customer-facing names, public BOM and the order-time price
+  /// breakdown (goods, assembly, delivery, discount, VAT basis) captured at
+  /// order creation. Deliberately excludes cost, supplier and markup data.
+  documentSnapshot Json?
   quantity        Int      @default(1)
   unitNetPrice    Decimal  @db.Decimal(14, 2)
   totalNetPrice   Decimal  @db.Decimal(14, 2)
   createdAt       DateTime @default(now())
 
+  @@index([orderId])
+}
+
+enum OrderDocumentKind {
+  COMMERCIAL_PROPOSAL
+  INVOICE
+}
+
+/// One formal issued commercial document per order/kind. The PDF itself is
+/// rendered on demand from these immutable issuance and order snapshots.
+/// Rows are only ever created (src/lib/documents/issuance.ts), never updated.
+model OrderDocument {
+  id             String            @id @default(cuid())
+  orderId        String
+  order          Order             @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  kind           OrderDocumentKind
+  documentNumber String            @unique
+  issuedAt       DateTime
+  /// Versioned seller details + brand name as they were at first issuance.
+  sellerSnapshot Json
+  /// The admin who issued it; kept as a name even if the account is removed.
+  issuedById     String?
+  issuedBy       User?             @relation("OrderDocumentIssuer", fields: [issuedById], references: [id], onDelete: SetNull)
+  issuedByName   String
+  createdAt      DateTime          @default(now())
+
+  @@unique([orderId, kind])
   @@index([orderId])
 }
 
