@@ -2,6 +2,10 @@ import type { MetadataRoute } from 'next';
 import { getCatalog } from '@/lib/data/repository';
 import { appUrl } from '@/lib/env';
 
+// Reads the runtime catalog, so it renders per request — never prerendered
+// during `next build`. See getCatalog() in src/lib/data/repository.ts.
+export const dynamic = 'force-dynamic';
+
 /**
  * Only public, indexable marketing/catalog routes belong here. Admin routes,
  * API routes, the cart/order flow and anything containing customer data are

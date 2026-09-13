@@ -102,13 +102,30 @@ describe('production runtime requires a real PostgreSQL DATABASE_URL', () => {
     }
   });
 
-  it('a next build\'s static-generation phase is exempt (NEXT_PHASE=phase-production-build)', async () => {
+  // The production image is built with no database (Dockerfile). A catalog
+  // read during `next build` must fail loudly — never query PostgreSQL and
+  // never quietly substitute the sample catalog for prerendered HTML.
+  it('a next build (NEXT_PHASE=phase-production-build) never reads the catalog, even with a PostgreSQL DATABASE_URL', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    process.env.NEXT_PHASE = 'phase-production-build';
+    process.env.DATABASE_URL = 'postgresql://user:pass@localhost:5432/db';
+    vi.resetModules();
+
+    const buildDbCatalog = vi.fn();
+    vi.doMock('@/lib/data/db-repository', () => ({ buildDbCatalog }));
+
+    const { getCatalog } = await import('@/lib/data/repository');
+    await expect(getCatalog()).rejects.toThrow(/must not be read during `next build`/);
+    expect(buildDbCatalog).not.toHaveBeenCalled();
+  });
+
+  it('a next build with no DATABASE_URL does not fall back to the sample catalog', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     process.env.NEXT_PHASE = 'phase-production-build';
     delete process.env.DATABASE_URL;
     vi.resetModules();
     const { getCatalog } = await import('@/lib/data/repository');
-    await expect(getCatalog()).resolves.toBeDefined();
+    await expect(getCatalog()).rejects.toThrow(/must not be read during `next build`/);
   });
 
   it('production with a valid PostgreSQL DATABASE_URL routes catalog reads through the database-backed repository, not the mock catalog', async () => {

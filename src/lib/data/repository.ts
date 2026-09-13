@@ -1,4 +1,4 @@
-import { assertDatabaseConfigured, hasDatabase } from '@/lib/env';
+import { assertDatabaseConfigured, hasDatabase, isProductionBuildPhase } from '@/lib/env';
 import type {
   Accessory,
   AssemblyService,
@@ -136,8 +136,20 @@ async function loadCatalog(): Promise<Catalog> {
  * CATALOG_CACHE_TTL_MS. Throws in production if no real database is
  * configured — see assertDatabaseConfigured — rather than silently serving
  * the in-memory sample catalog.
+ *
+ * Also throws during `next build`: the production image is built with no
+ * database (Dockerfile), so a catalog read there could only bake the sample
+ * catalog — or a DB snapshot frozen at image-build time — into prerendered
+ * HTML. Every route that reads the catalog renders at request time
+ * (`export const dynamic = 'force-dynamic'`); this makes a route that forgets
+ * to fail the build loudly instead.
  */
 export async function getCatalog(): Promise<Catalog> {
+  if (isProductionBuildPhase) {
+    throw new Error(
+      'The catalog must not be read during `next build`. Render the route that reads it at request time (export const dynamic = \'force-dynamic\').',
+    );
+  }
   assertDatabaseConfigured('catalog');
 
   const now = Date.now();

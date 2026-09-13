@@ -25,10 +25,12 @@ FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npx prisma generate
-# A placeholder DATABASE_URL lets `next build` complete even though no real
-# database is reachable at build time; the runtime container gets the real
-# value injected via docker-compose / the platform's env configuration.
-ENV DATABASE_URL="postgresql://user:password@localhost:5432/ms_shelving"
+# No DATABASE_URL here, on purpose: `next build` needs no database. Every
+# route that reads the catalog renders at request time, and getCatalog()
+# throws during the build (src/lib/data/repository.ts) so a route that tries
+# to prerender database data fails here instead of baking it into the image.
+# The runtime container gets the real DATABASE_URL via docker-compose / the
+# platform's env configuration, where production still requires it.
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
