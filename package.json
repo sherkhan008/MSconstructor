@@ -30,7 +30,7 @@
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
     "@prisma/client": "^6.2.1",
-    "next": "^15.1.6",
+    "next": "^15.5.25",
     "pdfkit": "^0.20.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -49,7 +49,7 @@
     "@types/react-dom": "^19.0.3",
     "@vitejs/plugin-react": "^4.3.4",
     "eslint": "^9.18.0",
-    "eslint-config-next": "^15.1.6",
+    "eslint-config-next": "^15.5.25",
     "jsdom": "^26.0.0",
     "pdfjs-dist": "4.10.38",
     "postcss": "^8.5.1",
@@ -58,6 +58,11 @@
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "vitest": "^2.1.8"
+  },
+  "overrides": {
+    "next": {
+      "postcss": "^8.5.28"
+    }
   },
   "engines": {
     "node": ">=20.19.0"
