@@ -21,6 +21,13 @@ const SIZE_CLASSES: Record<Size, string> = {
 const base =
   'inline-flex items-center justify-center gap-2 font-medium tracking-wide transition-colors duration-150 rounded-[3px] disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap';
 
+/** The same button look for elements that cannot be <Button>/<LinkButton> —
+ * e.g. a plain <a> to a file download, where client-side routing must not
+ * intercept the navigation. */
+export function buttonClassName(variant: Variant = 'primary', size: Size = 'md'): string {
+  return `${base} ${VARIANT_CLASSES[variant]} ${SIZE_CLASSES[size]}`;
+}
+
 export function Button({
   children,
   variant = 'primary',

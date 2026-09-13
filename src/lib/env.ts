@@ -53,6 +53,21 @@ const serverSchema = z.object({
   // exclusively through that proxy — see src/lib/security/client-ip.ts and
   // docs/production-client-ip-and-rate-limiting.md.
   TRUSTED_PROXY_CLIENT_IP_HEADER: optionalString,
+
+  // Seller legal/banking details printed on admin-generated order documents
+  // (commercial proposal, invoice) — see src/lib/documents/seller.ts. Kept in
+  // the environment, never in source: nothing here has a default, and a
+  // missing value is reported to the admin instead of being made up.
+  SELLER_LEGAL_NAME: optionalString,
+  SELLER_BIN: optionalString,
+  SELLER_ADDRESS: optionalString,
+  SELLER_PHONE: optionalString,
+  SELLER_EMAIL: optionalString,
+  SELLER_BANK_NAME: optionalString,
+  SELLER_IBAN: optionalString,
+  SELLER_BIC: optionalString,
+  SELLER_KBE: optionalString,
+  SELLER_KNP: optionalString,
 });
 
 const publicSchema = z.object({

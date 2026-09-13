@@ -43,6 +43,12 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // Lean, self-contained production image for Docker (see Dockerfile).
   output: 'standalone',
+  // The order-document PDF route reads its embedded fonts from disk at
+  // runtime (src/lib/documents/pdf.ts); standalone output only copies files
+  // it can trace, so the font directory is listed explicitly.
+  outputFileTracingIncludes: {
+    '/api/admin/orders/[id]/documents/[kind]': ['./assets/fonts/noto-sans/**/*'],
+  },
   images: {
     formats: ['image/avif', 'image/webp'],
     deviceSizes: [320, 375, 390, 430, 640, 750, 828, 1080, 1200, 1920],

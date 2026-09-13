@@ -69,6 +69,19 @@ export function canEditInternalNotes(role: AdminRole): boolean {
 }
 
 /**
+ * Customer documents (commercial proposal, invoice) generated from a saved
+ * order. Issuing a document to a customer is operational order work — the
+ * same roles that move an order through its statuses — while CONTENT_MANAGER
+ * stays read-only across the order area. Documents print only customer-facing
+ * amounts, never cost or margin, so this needs no price-management right.
+ */
+const ORDER_DOCUMENT_ROLES: readonly AdminRole[] = ['SUPER_ADMIN', 'ADMIN', 'MANAGER'];
+
+export function canGenerateOrderDocuments(role: AdminRole): boolean {
+  return ORDER_DOCUMENT_ROLES.includes(role);
+}
+
+/**
  * Roles that may be put on an order as the responsible person. An order is
  * operational work, so a CONTENT_MANAGER is never a valid assignee even
  * though they can sign in and read the order.
