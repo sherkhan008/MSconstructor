@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
+import { resolveClientIp } from '@/lib/security/client-ip';
 
 /**
  * Thin, consistent wrapper around `prisma.auditLog.create` — every admin
@@ -37,11 +38,10 @@ export async function recordAuditLog(entry: AuditLogEntry, client: PrismaLike = 
   });
 }
 
-/** Best-effort client IP/user-agent extraction for audit rows — mirrors
- * src/lib/rate-limit.ts's clientKeyFromHeaders, kept separate since audit
- * rows want the raw values, not a single rate-limit key. */
+/** Client IP/user-agent for audit rows. The IP comes from the same trusted
+ * resolver rate limiting uses (src/lib/security/client-ip.ts), so an audit
+ * row never records a client-forged forwarding header; when no trusted IP
+ * can be established the row records none rather than a spoofable one. */
 export function requestMeta(headers: Headers): { ipAddress?: string; userAgent?: string } {
-  const forwarded = headers.get('x-forwarded-for');
-  const ipAddress = forwarded ? forwarded.split(',')[0].trim() : (headers.get('x-real-ip') ?? undefined);
-  return { ipAddress, userAgent: headers.get('user-agent') ?? undefined };
+  return { ipAddress: resolveClientIp(headers) ?? undefined, userAgent: headers.get('user-agent') ?? undefined };
 }

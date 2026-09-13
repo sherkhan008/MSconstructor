@@ -42,6 +42,7 @@ model User {
   updatedAt     DateTime  @updatedAt
 
   auditLogs     AuditLog[]
+  priceChanges  PriceHistory[]
   assignedOrders Order[]  @relation("OrderManager")
 
   @@index([role])
@@ -216,8 +217,6 @@ model Component {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  priceHistory   PriceHistory[]
-
   @@index([type, active])
 }
 
@@ -258,8 +257,6 @@ model Accessory {
   active               Boolean  @default(true)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
-
-  priceHistory         PriceHistory[]
 }
 
 model ColorOption {
@@ -333,20 +330,57 @@ model CustomerPriceLevel {
   discountPercent Decimal @db.Decimal(5, 2) @default(0)
 }
 
+enum PriceEntityType {
+  COMPONENT
+  ACCESSORY
+}
+
+/// Which price of an entity changed. Named by business meaning, not by
+/// database column, so the same two values describe a Component
+/// (sellingPrice/purchasePrice) and an Accessory (unitPrice — the public
+/// selling price — and purchasePrice).
+enum PriceField {
+  SELLING_PRICE
+  PURCHASE_PRICE
+}
+
+/// Append-only audit trail of catalog price changes.
+///
+/// `entityId` is a *logical* identifier, deliberately NOT a foreign key.
+/// The original design declared it as an FK to Component AND to Accessory at
+/// the same time, which required one id to exist in two different tables —
+/// so no row could ever be inserted (the live database has 0 rows), and an
+/// ON DELETE CASCADE would have erased the price trail the moment a catalog
+/// entity was removed. History must outlive the entity it describes, so
+/// `entityType` + `entityId` identify it and `entitySku`/`entityName` keep a
+/// readable snapshot even after the catalog row is deactivated or deleted.
+///
+/// One row = one field of one entity changing once. A single admin edit that
+/// changes both the selling and the purchase price writes two rows.
 model PriceHistory {
-  id           String     @id @default(cuid())
-  entityType   String
+  id           String           @id @default(cuid())
+  entityType   PriceEntityType
   entityId     String
-  oldValue     Decimal?   @db.Decimal(12, 2)
-  newValue     Decimal    @db.Decimal(12, 2)
+  /// SKU as it was at the time of the change — survives a later rename/delete.
+  entitySku    String?
+  /// Russian name as it was at the time of the change.
+  entityName   String?
+  /// NULL only on rows written before this column existed; every row the
+  /// admin price service writes always records which field changed.
+  field        PriceField?
+  oldValue     Decimal?         @db.Decimal(12, 2)
+  newValue     Decimal          @db.Decimal(12, 2)
   adminId      String?
+  admin        User?            @relation(fields: [adminId], references: [id], onDelete: SetNull)
+  /// Actor name snapshot, so the trail still names who changed the price
+  /// after that admin account is deleted and adminId is set to NULL.
+  adminName    String?
   reason       String?
-  createdAt    DateTime   @default(now())
+  createdAt    DateTime         @default(now())
 
-  component    Component? @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "price_history_component_fkey")
-  accessory    Accessory? @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "price_history_accessory_fkey")
-
-  @@index([entityType, entityId])
+  @@index([entityType, entityId, createdAt])
+  @@index([adminId])
+  @@index([createdAt])
 }
 
 /* ============================================================================

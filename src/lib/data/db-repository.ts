@@ -120,10 +120,19 @@ function toComponent(row: Awaited<ReturnType<typeof prisma.component.findMany>>[
   };
 }
 
-function toRule(row: Awaited<ReturnType<typeof prisma.configurationRule.findMany>>[number]): ConfigurationRule {
+// buildBom matches ConfigurationRule.models against the configuration's model
+// slug, while the database stores a ProductModel id — so a model-scoped rule
+// is mapped to that model's slug here. Exported for
+// tests/integration/ms-standard-fasteners.test.ts.
+export function toRule(
+  row: Awaited<ReturnType<typeof prisma.configurationRule.findMany>>[number],
+  modelSlugById: ReadonlyMap<string, string>,
+): ConfigurationRule {
   return {
     id: row.id,
-    models: row.modelId ? [row.modelId] : [],
+    // A rule whose model row is missing keeps its raw id: it then matches no
+    // slug and applies to nothing, rather than widening to every model.
+    models: row.modelId ? [modelSlugById.get(row.modelId) ?? row.modelId] : [],
     componentType: row.componentType as ComponentType,
     name: row.name,
     formula: row.formula,
@@ -308,6 +317,8 @@ export async function buildDbCatalog(): Promise<Catalog> {
     }),
   ]);
 
+  const modelSlugById = new Map(models.map((m) => [m.id, m.slug]));
+
   return {
     models: models.map(toModel),
     heights: heights.map(toDimension),
@@ -315,7 +326,7 @@ export async function buildDbCatalog(): Promise<Catalog> {
     depths: depths.map(toDimension),
     loadCapacities: loadCapacities.map(toLoadCapacity),
     components: components.map(toComponent),
-    rules: rules.map(toRule),
+    rules: rules.map((row) => toRule(row, modelSlugById)),
     accessories: accessories.map(toAccessory),
     colors: colors.map(toColor),
     assemblyServices: assemblyServices.map(toAssembly),

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { getCatalog } from '@/lib/data/repository';
+import { getCatalog, stripModelSecrets } from '@/lib/data/repository';
 import { calculatePrice } from '@/lib/pricing';
 import { catalogProductToConfiguration } from '@/lib/catalog-product-configuration';
 import { buildMetadata, breadcrumbJsonLd, jsonLdScriptProps } from '@/lib/seo';
@@ -80,7 +80,12 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
 
       <div className="mt-6 border border-line bg-surface-muted p-4">
         <FilterForm
-          models={catalog.models}
+          // FilterForm is a Client Component ('use client'): whatever it
+          // receives is serialized into the page's HTML/RSC payload, so the
+          // raw internal ProductModel (markupPercent/markupFixed) must never
+          // reach it. stripModelSecrets() is the same boundary
+          // toPublicCatalog() uses — see src/lib/data/repository.ts.
+          models={catalog.models.map(stripModelSecrets)}
           useCases={catalog.useCases}
           defaults={{ model: modelFilter, useCase: useCaseFilter, availability: availabilityFilter, sort }}
         />

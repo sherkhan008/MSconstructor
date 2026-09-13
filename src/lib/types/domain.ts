@@ -143,6 +143,10 @@ export interface ShelvingComponent {
 /** Public-facing projection of a component — purchase price stripped. */
 export type PublicComponent = Omit<ShelvingComponent, 'purchasePrice' | 'supplierRef'>;
 
+/** Public-facing projection of a model — the markup that derives the selling
+ * price from cost is internal commercial data and never leaves the server. */
+export type PublicProductModel = Omit<ProductModel, 'markupPercent' | 'markupFixed'>;
+
 export interface ConfigurationRule {
   id: string;
   /** Empty array = applies to every model. */

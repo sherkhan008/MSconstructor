@@ -1,9 +1,9 @@
 import type { NextRequest } from 'next/server';
 import { getCatalog } from '@/lib/data/repository';
 import { calculatePrice } from '@/lib/pricing';
-import { stripBomCosts } from '@/lib/pricing/bom';
+import { toPublicBom } from '@/lib/pricing/bom';
 import { apiError, apiOk, internalError, type ApiErrorCode } from '@/lib/api/response';
-import { checkRateLimit, clientKeyFromHeaders, RATE_LIMITS } from '@/lib/rate-limit';
+import { enforceRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -14,8 +14,7 @@ export const runtime = 'nodejs';
  * the order flow.
  */
 export async function POST(request: NextRequest) {
-  const key = `pricing:${clientKeyFromHeaders(request.headers)}`;
-  const rate = checkRateLimit(key, RATE_LIMITS.pricing.limit, RATE_LIMITS.pricing.windowMs);
+  const rate = await enforceRateLimit('pricing', request.headers);
   if (!rate.allowed) {
     return apiError('RATE_LIMITED', 'Слишком много запросов. Попробуйте через минуту.', 429);
   }
@@ -46,7 +45,7 @@ export async function POST(request: NextRequest) {
 
     return apiOk({
       configuration: result.configuration,
-      bom: stripBomCosts(result.bom),
+      bom: toPublicBom(result.bom, result.configuration.modelSlug),
       breakdown: result.breakdown,
       totalWeightKg: result.totalWeightKg,
       rowLengthMm: result.rowLengthMm,

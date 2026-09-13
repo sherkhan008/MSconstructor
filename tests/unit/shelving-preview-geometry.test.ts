@@ -122,10 +122,9 @@ describe('ShelvingPreview — shelf rear corners align with the rear uprights', 
  * side-lip polygons, which are also 4-point and `#`-filled but use the
  * darker shade (`darkFill`), not the base resolved rack color. */
 function findAllShelfTopPolygons(svg: SVGSVGElement, baseFillHex: string): SVGPolygonElement[] {
-  return Array.from(svg.querySelectorAll('polygon')).filter((p) => {
-    const points = p.getAttribute('points') ?? '';
-    return points.trim().split(/\s+/).length === 4 && p.getAttribute('fill') === baseFillHex;
-  }) as SVGPolygonElement[];
+  return Array.from(svg.querySelectorAll('polygon[data-shelf-part="top-surface"]')).filter(
+    (p) => p.getAttribute('fill') === baseFillHex,
+  ) as SVGPolygonElement[];
 }
 
 describe('ShelvingPreview — rear alignment holds even when the depth projection is compressed', () => {

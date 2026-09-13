@@ -47,6 +47,12 @@ const serverSchema = z.object({
   STORAGE_BUCKET: optionalString,
 
   REDIS_URL: optionalString,
+
+  // Header a trusted reverse proxy OVERWRITES with the connecting client's
+  // IP (e.g. "x-real-ip"). Only set this when the app port is reachable
+  // exclusively through that proxy — see src/lib/security/client-ip.ts and
+  // docs/production-client-ip-and-rate-limiting.md.
+  TRUSTED_PROXY_CLIENT_IP_HEADER: optionalString,
 });
 
 const publicSchema = z.object({
@@ -161,5 +167,6 @@ export function assertProductionEnv(): string[] {
   if (!env.AUTH_SECRET) missing.push('AUTH_SECRET');
   if (!env.APP_URL && !publicEnv.NEXT_PUBLIC_APP_URL) missing.push('APP_URL');
   if (!publicEnv.NEXT_PUBLIC_WHATSAPP_NUMBER) missing.push('NEXT_PUBLIC_WHATSAPP_NUMBER');
+  if (!env.TRUSTED_PROXY_CLIENT_IP_HEADER) missing.push('TRUSTED_PROXY_CLIENT_IP_HEADER');
   return missing;
 }

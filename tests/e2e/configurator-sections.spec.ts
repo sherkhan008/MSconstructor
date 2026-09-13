@@ -1,11 +1,41 @@
 import { test, expect, type Page } from '@playwright/test';
+import type { PrismaClient } from '@prisma/client';
+import { createPrismaClient } from './helpers/admin-order-fixtures';
+import {
+  checkoutFixturePrefix,
+  checkoutIdentity,
+  isolateOrderRequests,
+  removeCheckoutFixtures,
+} from './helpers/checkout-order-fixtures';
 
 /**
  * End-to-end coverage for the redesigned per-section configurator (spec
  * "Required Playwright test" §48): build a 4-section row with independent
  * widths, drag-resize only one section, confirm the row prices correctly
  * and the exact section layout survives cart persistence and checkout.
+ *
+ * The checkout at the end submits a deterministic, isolated customer
+ * identity (see helpers/checkout-order-fixtures.ts) — its own simulated
+ * client IP keeps it out of the same rate-limit bucket checkout.spec.ts's
+ * orders land in, and its own fullName prefix keeps its database row out of
+ * checkout.spec.ts's cleanup sweep and vice versa.
  */
+
+const hasDatabase = Boolean(process.env.DATABASE_URL);
+
+let prisma: PrismaClient | undefined;
+let prefix: string;
+
+test.beforeAll(({}, testInfo) => {
+  prefix = checkoutFixturePrefix('SECTIONS', testInfo.project.name);
+  if (hasDatabase) prisma = createPrismaClient();
+});
+
+test.afterAll(async () => {
+  if (!prisma) return;
+  await removeCheckoutFixtures(prisma, prefix);
+  await prisma.$disconnect();
+});
 
 async function getVisiblePriceText(page: Page): Promise<string> {
   const candidates = page.locator('text=/[\\d\\s]+\\s?₸/');
@@ -25,7 +55,8 @@ function addSectionButton(page: Page) {
   return page.getByRole('button', { name: 'Добавить секцию', exact: true });
 }
 
-test('multi-section row: independent widths, single-section drag, cart and checkout persistence', async ({ page }) => {
+test('multi-section row: independent widths, single-section drag, cart and checkout persistence', async ({ page }, testInfo) => {
+  await isolateOrderRequests(page, prefix, testInfo);
   await page.goto('/configurator');
 
   // 1–2. Starts with one section; add three more (total 4).
@@ -105,9 +136,10 @@ test('multi-section row: independent widths, single-section drag, cart and check
   await cartCheckoutButton.click();
   await expect(page).toHaveURL(/\/order$/);
 
-  await page.getByLabel('ФИО / Контактное лицо').fill('Тест Тестов');
-  await page.getByLabel('Телефон *', { exact: true }).fill('+77001234567');
-  await page.getByLabel('Email').fill('test@example.com');
+  const identity = checkoutIdentity(prefix, testInfo);
+  await page.getByLabel('ФИО / Контактное лицо').fill(identity.fullName);
+  await page.getByLabel('Телефон *', { exact: true }).fill(identity.phone);
+  await page.getByLabel('Email').fill(identity.email);
   await page.getByLabel('Город').fill('Алматы');
 
   await page.getByRole('button', { name: /Подтвердить заказ/ }).click();

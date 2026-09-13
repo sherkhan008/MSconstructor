@@ -47,13 +47,14 @@ function findFrontLipRects(svg: SVGSVGElement): SVGRectElement[] {
   return Array.from(svg.querySelectorAll('rect')).filter((r) => r.getAttribute('height') === '5') as SVGRectElement[];
 }
 
-/** The shelf top-surface polygons: opaque 4-point polygons filled with the
- * resolved rack color (not the darker side-lip polygons, not dimension
- * tags/labels, not transparent hit-areas). Side lips are also 4-point
- * polygons but filled with the darker shade, not the base `fill`. */
+/** The shelf top-surface polygons: identified by their own `data-shelf-part`
+ * marker (not dimension tags/labels, not transparent hit-areas). Side lips
+ * are also 4-point polygons and now share the same fill as the top surface
+ * (shelf and lip colors must match), so fill alone no longer distinguishes
+ * them — the marker is the reliable selector. */
 function findShelfTopPolygons(svg: SVGSVGElement, baseFillHex: string): SVGPolygonElement[] {
-  return Array.from(svg.querySelectorAll('polygon')).filter(
-    (p) => p.getAttribute('points')!.trim().split(/\s+/).length === 4 && p.getAttribute('fill') === baseFillHex,
+  return Array.from(svg.querySelectorAll('polygon[data-shelf-part="top-surface"]')).filter(
+    (p) => p.getAttribute('fill') === baseFillHex,
   ) as SVGPolygonElement[];
 }
 

@@ -1,6 +1,7 @@
 import type { Catalog } from '@/lib/data/repository';
 import { findAccessory, findComponent } from '@/lib/data/repository';
 import { evaluateCondition, evaluateQuantity, FormulaError, type FormulaScope } from '@/lib/formula';
+import { roundTenge } from '@/lib/money';
 import type { BomLine, ComponentType, ConfigurationRule, ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
 
 /** Component types whose absence means the configuration cannot be built at all. */
@@ -103,10 +104,17 @@ function runRules(
   const warnings: string[] = [];
   let missingCritical = false;
 
-  const applicable = rules
+  const matching = rules
     .filter((rule) => types.includes(rule.componentType))
     .filter((rule) => rule.active)
-    .filter((rule) => rule.models.length === 0 || rule.models.includes(config.modelSlug))
+    .filter((rule) => rule.models.length === 0 || rule.models.includes(config.modelSlug));
+
+  // A rule scoped to this model replaces the generic (all-model) rules for
+  // the same component type, so a model-specific quantity formula (e.g.
+  // rule-fastener-ms-standard) is never charged on top of the generic one.
+  const modelSpecificTypes = new Set(matching.filter((rule) => rule.models.length > 0).map((rule) => rule.componentType));
+  const applicable = matching
+    .filter((rule) => rule.models.length > 0 || !modelSpecificTypes.has(rule.componentType))
     .sort((a, b) => a.priority - b.priority);
 
   for (const rule of applicable) {
@@ -228,6 +236,84 @@ export function buildBom(config: ShelvingConfiguration, catalog: Catalog): BomRe
 }
 
 /** Public projection of a BOM — strips internal purchase cost. */
-export function stripBomCosts(lines: BomLine[]): Omit<BomLine, 'unitCost'>[] {
+export function stripBomCosts(lines: BomLine[]): PublicBomLine[] {
   return lines.map(({ unitCost: _unitCost, ...rest }) => rest);
+}
+
+/** A BOM line as a customer may see it — internal cost removed. */
+export type PublicBomLine = Omit<BomLine, 'unitCost'>;
+
+/**
+ * Structural parts a customer never orders as their own kit position: the
+ * shelf is supplied as one complete shelf assembly (shelf + its beams) on a
+ * bolted frame (uprights + frame ties + the connectors joining adjacent
+ * sections on a shared upright), so beams, frame ties and section connectors
+ * are not independent positions in the customer-facing kit composition.
+ *
+ * This is presentation only. The internal BOM built above keeps every one of
+ * these as a real, separately-priced line — the authoritative price, cost,
+ * margin floor and weight in src/lib/pricing/engine.ts are all computed from
+ * that internal BOM and are untouched by this projection. Each hidden line is
+ * folded into the assembly line it physically belongs to, so the public rows
+ * still sum to the exact same componentsSubtotal and total weight; hiding a
+ * row must never make the kit look cheaper than it is priced.
+ */
+const PUBLIC_ASSEMBLY_OF: Partial<Record<BomLine['type'], BomLine['type']>> = {
+  BEAM_LONGITUDINAL: 'SHELF',
+  BEAM_DEPTH: 'SHELF',
+  TIE: 'UPRIGHT',
+  CONNECTOR: 'UPRIGHT',
+};
+
+/**
+ * Models actually sold as one complete shelf assembly, and therefore the
+ * only ones whose customer-facing kit hides the parts above. The public
+ * pricing endpoint accepts any catalog model slug the client sends (the
+ * configurator page offers ms-standard only, but /api/pricing/calculate
+ * happily prices ms-strong and archive-ms), so this grouping is scoped
+ * explicitly rather than left to apply to whatever model is submitted —
+ * ms-strong sells beams as their own load-bearing positions.
+ */
+const ONE_PIECE_ASSEMBLY_MODELS: ReadonlySet<string> = new Set(['ms-standard']);
+
+/**
+ * Customer-facing projection of a BOM: strips internal cost (stripBomCosts)
+ * and, for the models in ONE_PIECE_ASSEMBLY_MODELS, folds the structural
+ * parts listed in PUBLIC_ASSEMBLY_OF into the assembly they ship as part of.
+ * Use this for every customer-visible BOM; internal/admin output keeps the
+ * full component-level detail.
+ *
+ * Folding only ever moves price and weight onto an existing line: the SKU,
+ * name, component id and quantity of every surviving row stay exactly as the
+ * BOM built them, and two shelf SKUs are never merged into one row. When a
+ * row has several shelf widths (so several SHELF lines), the folded amount
+ * lands on the first matching line — the customer-facing list shows name and
+ * quantity only, and the row total is what has to stay exact.
+ */
+export function toPublicBom(lines: BomLine[], modelSlug: string): PublicBomLine[] {
+  const stripped = stripBomCosts(lines);
+  if (!ONE_PIECE_ASSEMBLY_MODELS.has(modelSlug)) return stripped;
+
+  const visible: PublicBomLine[] = [];
+  const hidden: PublicBomLine[] = [];
+
+  for (const line of stripped) {
+    (PUBLIC_ASSEMBLY_OF[line.type] ? hidden : visible).push(line);
+  }
+
+  for (const line of hidden) {
+    const host = visible.find((candidate) => candidate.type === PUBLIC_ASSEMBLY_OF[line.type]);
+    if (!host) {
+      // The assembly this part belongs to is missing from the BOM entirely
+      // (already a failed, unsellable configuration — buildBom reports it as
+      // missingCritical). Keep the row rather than silently drop its price.
+      visible.push(line);
+      continue;
+    }
+    host.totalPrice += line.totalPrice;
+    host.weightKg += line.weightKg;
+    host.unitPrice = roundTenge(host.totalPrice / host.quantity);
+  }
+
+  return visible;
 }

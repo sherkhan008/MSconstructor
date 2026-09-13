@@ -1,4 +1,14 @@
 import { test, expect } from '@playwright/test';
+import type { PrismaClient } from '@prisma/client';
+import {
+  createOrderFixtures,
+  createPrismaClient,
+  orderFixturePrefix,
+  readOrder,
+  removeOrderFixtures,
+  sessionCookieFor,
+  type OrderFixtures,
+} from './helpers/admin-order-fixtures';
 
 /**
  * Full-flow admin coverage. Admin is PostgreSQL-only (no in-memory dev
@@ -50,25 +60,51 @@ test('an invalid password shows an error and does not log in', async ({ page }) 
   await expect(page).toHaveURL(/\/admin\/login/);
 });
 
-test('opening an order shows customer/configuration/BOM/total, and a status change updates the page and history', async ({ page }) => {
-  await page.goto('/admin/login');
-  await page.getByLabel('Email').fill(adminEmail);
-  await page.getByLabel('Пароль').fill(adminPassword);
-  await page.getByRole('button', { name: 'Войти' }).click();
-  await expect(page).toHaveURL(/\/admin\/orders/);
+/**
+ * The order-detail walkthrough deliberately does NOT open "the newest order
+ * in the table": that row belongs to a real customer, and the desktop and
+ * mobile projects would race each other for it. It creates its own order
+ * instead (see helpers/admin-order-fixtures.ts) and deletes it afterwards.
+ *
+ * It also does not sign in through the form — the three tests above already
+ * cover that, and the login route is rate-limited on purpose; this one mints
+ * a session for its own fixture account through the same signing path the
+ * server verifies.
+ */
+test.describe('order detail', () => {
+  let prisma: PrismaClient;
+  let fixtures: OrderFixtures;
 
-  const firstOrderLink = page.locator('table tbody tr').first().locator('a');
-  const hasOrders = (await firstOrderLink.count()) > 0;
-  test.skip(!hasOrders, 'no orders in the database to open — create one via /order first');
+  test.beforeAll(async ({}, testInfo) => {
+    prisma = createPrismaClient();
+    fixtures = await createOrderFixtures(prisma, orderFixturePrefix(`DETAIL${testInfo.project.name}`));
+  });
 
-  await firstOrderLink.click();
-  await expect(page).toHaveURL(/\/admin\/orders\/.+/);
-  await expect(page.getByText('ФИО / контактное лицо')).toBeVisible();
-  await expect(page.getByText('Итого')).toBeVisible();
+  test.afterAll(async () => {
+    if (!prisma) return;
+    await removeOrderFixtures(prisma, fixtures.prefix);
+    await prisma.$disconnect();
+  });
 
-  const statusSelect = page.locator('select');
-  await statusSelect.selectOption('CONTACTED');
-  await page.getByRole('button', { name: 'Изменить статус' }).click();
+  test.beforeEach(async ({ context, baseURL }) => {
+    await context.clearCookies();
+    await context.addCookies([await sessionCookieFor(fixtures.users.ADMIN, baseURL!)]);
+  });
 
-  await expect(page.getByText('Связались').first()).toBeVisible();
+  test('shows customer, configuration, BOM and totals, and a status change is recorded', async ({ page }) => {
+    await page.goto(`/admin/orders/${fixtures.unassigned.id}`);
+
+    await expect(page.getByRole('heading', { name: `Заказ ${fixtures.unassigned.orderNumber}` })).toBeVisible();
+    await expect(page.getByText('ФИО / контактное лицо')).toBeVisible();
+    await expect(page.getByText(fixtures.unassigned.customerName)).toBeVisible();
+    await expect(page.getByTestId('order-grand-total')).toBeVisible();
+    // The internal BOM — component-level detail a customer never sees.
+    await expect(page.getByText('MS-SHELF-1000-500')).toBeVisible();
+
+    await page.getByLabel('Статус заказа').selectOption('CONTACTED');
+    await page.getByRole('button', { name: 'Изменить статус' }).click();
+
+    await expect(page.getByText('Связались').first()).toBeVisible();
+    expect((await readOrder(prisma, fixtures.unassigned.id)).status).toBe('CONTACTED');
+  });
 });

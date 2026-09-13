@@ -1,23 +1,23 @@
 import type { Catalog } from './repository';
-import { stripAccessorySecrets } from './repository';
+import { stripAccessorySecrets, stripModelSecrets } from './repository';
 import type {
   AssemblyService,
   ColorOption,
   DeliveryMethod,
   DimensionOption,
   LoadCapacityOption,
-  ProductModel,
   PublicAccessory,
+  PublicProductModel,
 } from '@/lib/types/domain';
 
 /**
  * The slice of the catalog that is safe to ship to the browser: no
- * components/rules (internal BOM machinery), no purchase prices, and no
- * promo code list (nothing to guess against). The configurator client reads
- * only this shape.
+ * components/rules (internal BOM machinery), no purchase prices, no model
+ * markup, and no promo code list (nothing to guess against). The
+ * configurator client reads only this shape.
  */
 export interface PublicCatalog {
-  models: ProductModel[];
+  models: PublicProductModel[];
   heights: DimensionOption[];
   widths: DimensionOption[];
   depths: DimensionOption[];
@@ -31,7 +31,7 @@ export interface PublicCatalog {
 
 export function toPublicCatalog(catalog: Catalog): PublicCatalog {
   return {
-    models: catalog.models.filter((m) => m.active),
+    models: catalog.models.filter((m) => m.active).map(stripModelSecrets),
     heights: catalog.heights.filter((h) => h.active),
     widths: catalog.widths.filter((w) => w.active),
     depths: catalog.depths.filter((d) => d.active),

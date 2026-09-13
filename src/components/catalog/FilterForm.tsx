@@ -1,19 +1,23 @@
 'use client';
 
 import { useRef } from 'react';
-import type { ProductModel } from '@/lib/types/domain';
+import type { PublicProductModel } from '@/lib/types/domain';
 
 /**
  * Server-rendered filtering: this form's fields double as the query string
  * read by src/app/catalog/page.tsx. Works with JS disabled via the submit
  * button; auto-submits on change when JS is available.
+ *
+ * This is a Client Component, so `models` must already be the public-safe
+ * shape (no markupPercent/markupFixed) — the type below is what enforces
+ * that at the call site.
  */
 export function FilterForm({
   models,
   useCases,
   defaults,
 }: {
-  models: ProductModel[];
+  models: PublicProductModel[];
   useCases: { id: string; ru: string }[];
   defaults: Record<string, string | undefined>;
 }) {
