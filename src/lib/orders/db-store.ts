@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
+import { parseOrderBuyerSnapshot, parseOrderItemDocumentSnapshot } from '@/lib/documents/snapshots';
 import type { CustomerType, OrderStatus, PaymentPreference } from '@/lib/types/domain';
 import type { OrderItemRecord, OrderRecord } from './types';
 
@@ -35,6 +36,8 @@ export async function saveOrderToDb(order: OrderRecord): Promise<OrderRecord> {
     data: {
       orderNumber: order.orderNumber,
       customerId: customer.id,
+      // Written once here and never updated (see src/lib/documents/snapshots.ts).
+      buyerSnapshot: order.buyerSnapshot as unknown as Prisma.InputJsonValue | undefined,
       status: order.status,
       deliveryAddress: order.deliveryAddress,
       paymentPreference: order.paymentPreference,
@@ -47,6 +50,7 @@ export async function saveOrderToDb(order: OrderRecord): Promise<OrderRecord> {
         create: order.items.map((item) => ({
           configuration: item.configuration as unknown as Prisma.InputJsonValue,
           bomSnapshot: item.bom as unknown as Prisma.InputJsonValue,
+          documentSnapshot: item.documentSnapshot as unknown as Prisma.InputJsonValue | undefined,
           quantity: item.configuration.quantity,
           unitNetPrice: item.breakdown.unitNet,
           totalNetPrice: item.breakdown.net,
@@ -82,6 +86,7 @@ export async function getOrderByNumberFromDb(orderNumber: string): Promise<Order
       binIin: row.customer.binIin ?? undefined,
       type: row.customer.type as CustomerType,
     },
+    buyerSnapshot: parseOrderBuyerSnapshot(row.buyerSnapshot) ?? undefined,
     deliveryAddress: row.deliveryAddress ?? undefined,
     paymentPreference: row.paymentPreference as PaymentPreference,
     comment: row.comment ?? undefined,
@@ -108,6 +113,7 @@ export async function getOrderByNumberFromDb(orderNumber: string): Promise<Order
       modelName: item.configuration && typeof item.configuration === 'object' && 'modelSlug' in item.configuration
         ? String((item.configuration as { modelSlug: string }).modelSlug)
         : '',
+      documentSnapshot: parseOrderItemDocumentSnapshot(item.documentSnapshot) ?? undefined,
     })),
     netTotal: Number(row.netTotal),
     vatTotal: Number(row.vatTotal),

@@ -1,44 +1,34 @@
-import { site } from '@/lib/config/site';
-import { METAL_FOOT_PAD_LABEL, SHELF_CORNER_BRACKETS_LABEL } from '@/lib/configurator/additional-options';
 import { CUSTOMER_TYPE_FULL_LABEL_RU } from '@/lib/orders/customer-labels';
 import { PAYMENT_METHOD_LABEL } from '@/lib/orders/payment-methods';
-import { toPublicBom } from '@/lib/pricing/bom';
-import type { BomLine, CustomerType, PaymentPreference } from '@/lib/types/domain';
-import { ORDER_DOCUMENT_TITLE_RU, orderDocumentNumber, type OrderDocumentKind } from './kinds';
+import type { PaymentPreference } from '@/lib/types/domain';
+import { ORDER_DOCUMENT_TITLE_RU, type OrderDocumentKind } from './kinds';
 import { amountInWordsRu, toTiyn, type Tiyn } from './money';
 import type { OrderDocumentSource, OrderDocumentSourceItem } from './order-source';
 import type { SellerDetails } from './seller';
+import {
+  parseOrderBuyerSnapshot,
+  parseOrderItemDocumentSnapshot,
+  type OrderBuyerSnapshot,
+  type OrderItemDocumentSnapshot,
+} from './snapshots';
 
 /**
- * Order snapshot → document model. A pure function.
+ * Persisted order + issuance → document model. Pure functions, no I/O.
  *
- * Every amount in the result is a persisted value read through toTiyn():
- * OrderItem.unitNetPrice / totalNetPrice and Order.netTotal / vatTotal /
- * discountTotal / grandTotal. Nothing is priced, re-priced, re-rounded or
- * derived from a rate — there is no catalog price, markup, VAT percent or
- * pricing-engine call anywhere on this path. The only arithmetic is a
- * consistency check (lines add up to netTotal, netTotal + VAT = grandTotal),
- * which refuses to print a self-contradictory document rather than "fixing"
- * any number.
+ * Everything customer-visible comes from what was frozen when the order was
+ * placed (Order.buyerSnapshot, OrderItem.documentSnapshot, the configuration
+ * JSON and the Decimal order columns) or when the document was first issued
+ * (number, date, seller). Nothing is read from today's Customer row, catalog,
+ * pricing settings or SELLER_* environment here.
  *
- * `labels` only turns persisted ids into Russian names (model, colour,
- * assembly, delivery) — presentation, the same lookup the admin order page
- * does — and never contributes an amount.
+ * Amounts are never priced, re-priced, re-rounded or derived from a rate.
+ * Every printed line is a persisted order-time amount with
+ * quantity × unit price = amount holding exactly; services (assembly,
+ * delivery) are their own lines and a discount is its own totals row, so the
+ * document visibly adds up. The only other arithmetic is consistency checks
+ * against the persisted columns: a self-contradictory order is refused
+ * (DocumentIntegrityError), never "fixed".
  */
-
-export interface DocumentLabels {
-  modelName(slug: string): string | undefined;
-  colorName(id: string): string | undefined;
-  assemblyName(id: string): string | undefined;
-  deliveryName(id: string): string | undefined;
-}
-
-export const NO_LABELS: DocumentLabels = {
-  modelName: () => undefined,
-  colorName: () => undefined,
-  assemblyName: () => undefined,
-  deliveryName: () => undefined,
-};
 
 export class DocumentIntegrityError extends Error {
   constructor(message: string) {
@@ -46,6 +36,22 @@ export class DocumentIntegrityError extends Error {
     this.name = 'DocumentIntegrityError';
   }
 }
+
+/** The order predates document snapshots: the order-time facts a document
+ * needs were never stored, and today's data must not stand in for them. */
+export class DocumentUnavailableError extends Error {
+  constructor(
+    message: string,
+    readonly details: string[],
+  ) {
+    super(message);
+    this.name = 'DocumentUnavailableError';
+  }
+}
+
+export const LEGACY_ORDER_MESSAGE =
+  'Заказ оформлен до того, как система начала сохранять исторические данные для документов. ' +
+  'Документ по нему не формируется: подставлять текущие данные клиента, каталога или цен вместо данных на момент заказа нельзя.';
 
 export interface DocumentField {
   label: string;
@@ -57,10 +63,13 @@ export interface DocumentKitLine {
   quantity: number;
 }
 
+/** One configured shelving unit of the order — the descriptive part. */
 export interface DocumentItem {
   index: number;
+  /** Number of this item's goods row in `lines`. */
+  lineIndex: number;
   title: string;
-  /** One-paragraph description for a table row (invoice, KP summary). */
+  /** One-paragraph description (the goods row of the table). */
   description: string;
   specs: DocumentField[];
   /** Customer-facing kit composition (name + quantity only). */
@@ -68,11 +77,30 @@ export interface DocumentItem {
   quantity: number;
   unit: string;
   unitPrice: Tiyn;
+  goodsAmount: Tiyn;
+}
+
+/** A priced table row. Invariant: unitPrice × quantity === amount. */
+export interface DocumentLine {
+  index: number;
+  kind: 'goods' | 'assembly' | 'delivery';
+  description: string;
+  quantity: number;
+  unit: string;
+  unitPrice: Tiyn;
   amount: Tiyn;
-  /** True when the persisted line total is not unit price × quantity — the
-   * engine folds the item's assembly, delivery and discount into the line
-   * total, and the snapshot does not store that split. */
-  amountIncludesAdjustments: boolean;
+}
+
+export interface DocumentTotals {
+  /** True: line prices and amounts include VAT. False: they exclude it. */
+  pricesIncludeVat: boolean;
+  vatPercent: number;
+  /** Σ line amounts, on the basis above. */
+  lines: Tiyn;
+  discount: Tiyn;
+  net: Tiyn;
+  vat: Tiyn;
+  grand: Tiyn;
 }
 
 export interface DocumentBuyer {
@@ -87,23 +115,37 @@ export interface DocumentBuyer {
   city?: string;
 }
 
-export interface OrderDocumentModel {
+/** Everything a document shows that belongs to the order itself. */
+export interface OrderDocumentContent {
+  orderNumber: string;
+  orderDateText: string;
+  buyer: DocumentBuyer;
+  items: DocumentItem[];
+  lines: DocumentLine[];
+  totals: DocumentTotals;
+  grandTotalInWords: string;
+  paymentMethod?: string;
+  delivery: DocumentField[];
+}
+
+/** What the first issuance froze (OrderDocument row). */
+export interface DocumentIssuance {
+  number: string;
+  issuedAt: Date;
+  brandName: string;
+  seller: SellerDetails;
+}
+
+export interface OrderDocumentModel extends OrderDocumentContent {
   kind: OrderDocumentKind;
   title: string;
   number: string;
   dateText: string;
-  /** The order's creation instant — also the PDF CreationDate, so repeated
-   * generation is byte-for-byte identical. */
+  /** The persisted issuance instant — also the PDF CreationDate, so repeated
+   * generation of an issued document is byte-for-byte identical. */
   issuedAt: Date;
-  orderNumber: string;
   brandName: string;
   seller: SellerDetails;
-  buyer: DocumentBuyer;
-  items: DocumentItem[];
-  totals: { net: Tiyn; discount: Tiyn; vat: Tiyn; grand: Tiyn };
-  grandTotalInWords: string;
-  paymentMethod?: string;
-  delivery: DocumentField[];
 }
 
 /* -------------------------------------------------------------------------- */
@@ -160,17 +202,11 @@ interface PersistedSection {
 }
 
 interface PersistedConfiguration {
-  modelSlug: string;
   height: number;
   depth: number;
   shelves: number;
   loadCapacity?: number;
-  colorId?: string;
-  assemblyId?: string;
-  deliveryId?: string;
   sections: PersistedSection[];
-  metalFootPad?: boolean;
-  shelfCornerBrackets?: boolean;
 }
 
 const isPositiveInt = (value: unknown): value is number =>
@@ -194,47 +230,13 @@ function readConfiguration(raw: unknown, index: number): PersistedConfiguration 
       rightWall: section.rightWall === true,
     };
   });
-  const str = (value: unknown) => (typeof value === 'string' ? value : undefined);
   return {
-    modelSlug: c.modelSlug,
     height: c.height,
     depth: c.depth,
     shelves: c.shelves,
     loadCapacity: isPositiveInt(c.loadCapacity) ? c.loadCapacity : undefined,
-    colorId: str(c.colorId),
-    assemblyId: str(c.assemblyId),
-    deliveryId: str(c.deliveryId),
     sections,
-    metalFootPad: c.metalFootPad === true,
-    shelfCornerBrackets: c.shelfCornerBrackets === true,
   };
-}
-
-/** The customer-facing kit, through the same projection the configurator
- * uses (toPublicBom): for one-piece-assembly models the structural parts a
- * customer never orders separately are folded away. Only name and quantity
- * survive — the snapshot's component prices are never printed, since they
- * sit below the markup. A malformed snapshot yields no kit rather than a
- * guessed one. */
-function readKit(raw: unknown, modelSlug: string): DocumentKitLine[] {
-  if (!Array.isArray(raw)) return [];
-  const lines: BomLine[] = [];
-  for (const entry of raw) {
-    if (!entry || typeof entry !== 'object') return [];
-    const line = entry as Partial<BomLine>;
-    if (typeof line.name !== 'string' || typeof line.type !== 'string' || !isPositiveInt(line.quantity)) return [];
-    lines.push({
-      componentId: String(line.componentId ?? ''),
-      sku: String(line.sku ?? ''),
-      type: line.type,
-      name: line.name,
-      quantity: line.quantity,
-      unitPrice: Number(line.unitPrice) || 0,
-      totalPrice: Number(line.totalPrice) || 0,
-      weightKg: Number(line.weightKg) || 0,
-    });
-  }
-  return toPublicBom(lines, modelSlug).map((line) => ({ name: cleanText(line.name, 200), quantity: line.quantity }));
 }
 
 function wallsText(section: PersistedSection): string | undefined {
@@ -244,28 +246,75 @@ function wallsText(section: PersistedSection): string | undefined {
   return walls.length > 0 ? walls.join(', ') : undefined;
 }
 
-function buildItem(item: OrderDocumentSourceItem, index: number, labels: DocumentLabels): DocumentItem {
+interface ItemPricing {
+  pricesIncludeVat: boolean;
+  vatPercent: number;
+  unitPrice: Tiyn;
+  goods: Tiyn;
+  assembly: Tiyn;
+  delivery: Tiyn | null;
+  discount: Tiyn;
+  net: Tiyn;
+  vat: Tiyn;
+  total: Tiyn;
+}
+
+/** The order-time breakdown, checked against itself and against the
+ * persisted OrderItem columns. */
+function readItemPricing(item: OrderDocumentSourceItem, snapshot: OrderItemDocumentSnapshot, index: number): ItemPricing {
+  const fail = (what: string) => new DocumentIntegrityError(`Позиция ${index}: ${what}.`);
+  const p = snapshot.pricing;
+  const pricing: ItemPricing = {
+    pricesIncludeVat: p.pricesIncludeVat,
+    vatPercent: p.vatPercent,
+    unitPrice: toTiyn(p.unitPrice),
+    goods: toTiyn(p.goodsAmount),
+    assembly: toTiyn(p.assembly),
+    delivery: p.delivery === null ? null : toTiyn(p.delivery),
+    discount: toTiyn(p.discount),
+    net: toTiyn(p.net),
+    vat: toTiyn(p.vat),
+    total: toTiyn(p.total),
+  };
+  const amounts = [pricing.unitPrice, pricing.goods, pricing.assembly, pricing.delivery ?? 0n, pricing.discount, pricing.net, pricing.vat, pricing.total];
+  if (amounts.some((a) => a < 0n)) throw fail('отрицательная сумма');
+
+  if (p.quantity !== item.quantity) throw fail('количество в снимке не совпадает с сохранённым количеством');
+  if (pricing.unitPrice !== toTiyn(item.unitNetPrice)) throw fail('цена в снимке не совпадает с сохранённой ценой позиции');
+  if (pricing.net !== toTiyn(item.totalNetPrice)) throw fail('сумма без НДС в снимке не совпадает с сохранённой суммой позиции');
+  if (pricing.unitPrice * BigInt(item.quantity) !== pricing.goods) throw fail('цена × количество не равно стоимости товара');
+
+  const base = pricing.goods + pricing.assembly + (pricing.delivery ?? 0n) - pricing.discount;
+  if (base < 0n) throw fail('скидка превышает стоимость позиции');
+  if (pricing.pricesIncludeVat) {
+    if (pricing.total !== base || pricing.net + pricing.vat !== pricing.total) {
+      throw fail('разбивка цены (с НДС) не сходится с итогом позиции');
+    }
+  } else if (pricing.net !== base || pricing.net + pricing.vat !== pricing.total) {
+    throw fail('разбивка цены (без НДС) не сходится с итогом позиции');
+  }
+  return pricing;
+}
+
+function buildItem(
+  item: OrderDocumentSourceItem,
+  snapshot: OrderItemDocumentSnapshot,
+  index: number,
+): { item: DocumentItem; pricing: ItemPricing } {
   const config = readConfiguration(item.configuration, index);
   if (!isPositiveInt(item.quantity)) {
     throw new DocumentIntegrityError(`Позиция ${index}: некорректное количество.`);
   }
+  const pricing = readItemPricing(item, snapshot, index);
 
-  const unitPrice = toTiyn(item.unitNetPrice);
-  const amount = toTiyn(item.totalNetPrice);
-  if (unitPrice < 0n || amount < 0n) {
-    throw new DocumentIntegrityError(`Позиция ${index}: отрицательная сумма.`);
-  }
-
-  const modelName = cleanText(labels.modelName(config.modelSlug) ?? config.modelSlug, 120);
-  const colorName = config.colorId ? optionalText(labels.colorName(config.colorId), 120) : undefined;
-  const assemblyName = config.assemblyId ? optionalText(labels.assemblyName(config.assemblyId), 120) : undefined;
-  const deliveryName = config.deliveryId ? optionalText(labels.deliveryName(config.deliveryId), 120) : undefined;
+  const modelName = cleanText(snapshot.modelName, 120);
+  const colorName = optionalText(snapshot.colorName, 120);
+  const assemblyName = optionalText(snapshot.assemblyName, 120);
+  const deliveryName = optionalText(snapshot.deliveryName, 120);
+  const options = snapshot.options.map((o) => cleanText(o, 120)).filter(Boolean);
 
   const totalWidth = config.sections.reduce((sum, s) => sum + s.width, 0);
   const sectionWidths = config.sections.map((s) => s.width).join(' + ');
-  const options = [config.metalFootPad && METAL_FOOT_PAD_LABEL, config.shelfCornerBrackets && SHELF_CORNER_BRACKETS_LABEL].filter(
-    (v): v is string => Boolean(v),
-  );
   const anyWalls = config.sections.some((s) => wallsText(s));
   const wallsSummary = anyWalls
     ? config.sections
@@ -300,16 +349,19 @@ function buildItem(item: OrderDocumentSourceItem, index: number, labels: Documen
   ].filter((part): part is string => Boolean(part));
 
   return {
-    index,
-    title: `Стеллаж ${modelName}`,
-    description: `Стеллаж ${modelName}: ${descriptionParts.join('; ')}`,
-    specs,
-    kit: readKit(item.bomSnapshot, config.modelSlug),
-    quantity: item.quantity,
-    unit: 'компл.',
-    unitPrice,
-    amount,
-    amountIncludesAdjustments: unitPrice * BigInt(item.quantity) !== amount,
+    item: {
+      index,
+      lineIndex: 0,
+      title: `Стеллаж ${modelName}`,
+      description: `Стеллаж ${modelName}: ${descriptionParts.join('; ')}`,
+      specs,
+      kit: snapshot.kit.map((line) => ({ name: cleanText(line.name, 200), quantity: line.quantity })),
+      quantity: item.quantity,
+      unit: 'компл.',
+      unitPrice: pricing.unitPrice,
+      goodsAmount: pricing.goods,
+    },
+    pricing,
   };
 }
 
@@ -317,29 +369,26 @@ function buildItem(item: OrderDocumentSourceItem, index: number, labels: Documen
 /* Document                                                                    */
 /* -------------------------------------------------------------------------- */
 
-function buildBuyer(customer: OrderDocumentSource['customer']): DocumentBuyer {
-  const isLegalEntity = customer.type === 'LEGAL_ENTITY';
-  const fullName = cleanText(customer.fullName, 200);
-  const companyName = optionalText(customer.companyName, 300);
-  const typeLabel = CUSTOMER_TYPE_FULL_LABEL_RU[customer.type as CustomerType] ?? cleanText(customer.type, 40);
+function buildBuyer(snapshot: OrderBuyerSnapshot): DocumentBuyer {
+  const isLegalEntity = snapshot.type === 'LEGAL_ENTITY';
+  const fullName = cleanText(snapshot.fullName, 200);
+  const companyName = optionalText(snapshot.companyName, 300);
   return {
-    typeLabel,
+    typeLabel: CUSTOMER_TYPE_FULL_LABEL_RU[snapshot.type],
     isLegalEntity,
     name: isLegalEntity && companyName ? companyName : fullName,
     contactPerson: isLegalEntity && companyName ? fullName : undefined,
     idLabel: isLegalEntity ? 'БИН' : 'ИИН',
-    binIin: optionalText(customer.binIin, 20),
-    phone: cleanText(customer.phone, 40),
-    email: optionalText(customer.email, 200),
-    city: optionalText(customer.city, 120),
+    binIin: optionalText(snapshot.binIin, 20),
+    phone: cleanText(snapshot.phone, 40),
+    email: optionalText(snapshot.email, 200),
+    city: optionalText(snapshot.city, 120),
   };
 }
 
-function buildDelivery(source: OrderDocumentSource, labels: DocumentLabels): DocumentField[] {
+/** Order-specific delivery columns, written at checkout. */
+function buildDelivery(source: OrderDocumentSource): DocumentField[] {
   const fields: DocumentField[] = [];
-  const methodId = source.delivery.methodId ?? undefined;
-  const methodName = methodId ? optionalText(labels.deliveryName(methodId), 120) : undefined;
-  if (methodName) fields.push({ label: 'Способ доставки', value: methodName });
   const city = optionalText(source.delivery.city, 120);
   if (city) fields.push({ label: 'Город доставки', value: city });
   const address = optionalText(source.delivery.address, 500);
@@ -351,52 +400,154 @@ function buildDelivery(source: OrderDocumentSource, labels: DocumentLabels): Doc
   return fields;
 }
 
-export function buildOrderDocument(
-  kind: OrderDocumentKind,
-  source: OrderDocumentSource,
-  seller: SellerDetails,
-  labels: DocumentLabels = NO_LABELS,
-): OrderDocumentModel {
+/** Why documents for this order cannot be produced from order-time data, or
+ * an empty list when the snapshots exist. Absent ≠ malformed: a snapshot
+ * that exists but does not parse is an integrity problem, not a legacy order. */
+function legacyGaps(source: OrderDocumentSource): string[] {
+  const gaps: string[] = [];
+  if (source.buyerSnapshot === null || source.buyerSnapshot === undefined) {
+    gaps.push('Не сохранены данные покупателя на момент заказа.');
+  }
+  const missingItems = source.items.filter((item) => item.documentSnapshot === null || item.documentSnapshot === undefined).length;
+  if (missingItems > 0) {
+    gaps.push(
+      `Не сохранены наименования, комплектация и разбивка цены на момент заказа (позиций без снимка: ${missingItems} из ${source.items.length}).`,
+    );
+  }
+  return gaps;
+}
+
+/**
+ * Validates the persisted order and projects everything a document shows
+ * about it. Throws DocumentUnavailableError for a pre-snapshot order,
+ * DocumentIntegrityError / DocumentAmountError for contradictory data.
+ * Called before a document is issued, so an order that cannot produce a
+ * truthful document never receives a document number.
+ */
+export function buildOrderDocumentContent(source: OrderDocumentSource): OrderDocumentContent {
   if (source.items.length === 0) {
     throw new DocumentIntegrityError('В заказе нет позиций.');
   }
+  const gaps = legacyGaps(source);
+  if (gaps.length > 0) throw new DocumentUnavailableError(LEGACY_ORDER_MESSAGE, gaps);
 
-  const items = source.items.map((item, i) => buildItem(item, i + 1, labels));
+  const buyerSnapshot = parseOrderBuyerSnapshot(source.buyerSnapshot);
+  if (!buyerSnapshot) throw new DocumentIntegrityError('Сохранённый снимок данных покупателя повреждён.');
+
+  const built = source.items.map((item, i) => {
+    const snapshot = parseOrderItemDocumentSnapshot(item.documentSnapshot);
+    if (!snapshot) throw new DocumentIntegrityError(`Позиция ${i + 1}: сохранённый снимок позиции повреждён.`);
+    return { ...buildItem(item, snapshot, i + 1), snapshot };
+  });
+
+  const { pricesIncludeVat, vatPercent } = built[0].pricing;
+  if (built.some(({ pricing }) => pricing.pricesIncludeVat !== pricesIncludeVat || pricing.vatPercent !== vatPercent)) {
+    throw new DocumentIntegrityError('Позиции заказа рассчитаны по разным правилам НДС.');
+  }
+
+  const lines: DocumentLine[] = [];
+  const items: DocumentItem[] = [];
+  for (const { item, pricing, snapshot } of built) {
+    const goodsLine: DocumentLine = {
+      index: lines.length + 1,
+      kind: 'goods',
+      description: item.description,
+      quantity: item.quantity,
+      unit: item.unit,
+      unitPrice: pricing.unitPrice,
+      amount: pricing.goods,
+    };
+    lines.push(goodsLine);
+    items.push({ ...item, lineIndex: goodsLine.index });
+
+    const assemblyName = optionalText(snapshot.assemblyName, 120);
+    if (pricing.assembly > 0n) {
+      lines.push({
+        index: lines.length + 1,
+        kind: 'assembly',
+        description: `Услуга сборки${assemblyName ? `: ${assemblyName}` : ''} (к поз. ${goodsLine.index})`,
+        quantity: 1,
+        unit: 'усл.',
+        unitPrice: pricing.assembly,
+        amount: pricing.assembly,
+      });
+    }
+    const deliveryName = optionalText(snapshot.deliveryName, 120);
+    if (pricing.delivery !== null && pricing.delivery > 0n) {
+      lines.push({
+        index: lines.length + 1,
+        kind: 'delivery',
+        description: `Доставка${deliveryName ? `: ${deliveryName}` : ''} (к поз. ${goodsLine.index})`,
+        quantity: 1,
+        unit: 'усл.',
+        unitPrice: pricing.delivery,
+        amount: pricing.delivery,
+      });
+    }
+  }
+  for (const line of lines) {
+    // The table invariant, asserted rather than assumed.
+    if (line.unitPrice * BigInt(line.quantity) !== line.amount) {
+      throw new DocumentIntegrityError(`Строка ${line.index}: цена × количество не равно сумме.`);
+    }
+  }
+
+  const sum = (pick: (p: ItemPricing) => Tiyn) => built.reduce((acc, b) => acc + pick(b.pricing), 0n);
+  const totals: DocumentTotals = {
+    pricesIncludeVat,
+    vatPercent,
+    lines: lines.reduce((acc, line) => acc + line.amount, 0n),
+    discount: sum((p) => p.discount),
+    net: sum((p) => p.net),
+    vat: sum((p) => p.vat),
+    grand: sum((p) => p.total),
+  };
 
   const net = toTiyn(source.netTotal);
   const vat = toTiyn(source.vatTotal);
   const discount = toTiyn(source.discountTotal);
   const grand = toTiyn(source.grandTotal);
-
   if (net < 0n || vat < 0n || discount < 0n || grand < 0n) {
     throw new DocumentIntegrityError('Итоговые суммы заказа содержат отрицательное значение.');
   }
-  const linesTotal = items.reduce((sum, item) => sum + item.amount, 0n);
-  if (linesTotal !== net) {
-    throw new DocumentIntegrityError('Сумма позиций не совпадает с сохранённой суммой заказа без НДС.');
-  }
-  if (net + vat !== grand) {
+  if (totals.net !== net) throw new DocumentIntegrityError('Сумма позиций не совпадает с сохранённой суммой заказа без НДС.');
+  if (totals.vat !== vat) throw new DocumentIntegrityError('НДС позиций не совпадает с сохранённым НДС заказа.');
+  if (totals.discount !== discount) throw new DocumentIntegrityError('Скидки позиций не совпадают с сохранённой скидкой заказа.');
+  if (totals.grand !== grand || net + vat !== grand) {
     throw new DocumentIntegrityError('Сохранённые суммы заказа не согласованы: сумма без НДС и НДС не равны итогу.');
   }
-
-  const orderNumber = cleanText(source.orderNumber, 60);
-  const paymentMethod =
-    PAYMENT_METHOD_LABEL[source.paymentPreference as PaymentPreference] ?? optionalText(source.paymentPreference, 60);
+  if (totals.lines - totals.discount !== (pricesIncludeVat ? grand : net)) {
+    throw new DocumentIntegrityError('Строки документа за вычетом скидки не равны итогу заказа.');
+  }
 
   return {
+    orderNumber: cleanText(source.orderNumber, 60),
+    orderDateText: formatDocumentDate(source.createdAt),
+    buyer: buildBuyer(buyerSnapshot),
+    items,
+    lines,
+    totals,
+    grandTotalInWords: amountInWordsRu(grand),
+    paymentMethod:
+      PAYMENT_METHOD_LABEL[source.paymentPreference as PaymentPreference] ?? optionalText(source.paymentPreference, 60),
+    delivery: buildDelivery(source),
+  };
+}
+
+/** Joins validated order content with its persisted issuance. */
+export function buildOrderDocument(
+  kind: OrderDocumentKind,
+  content: OrderDocumentContent,
+  issuance: DocumentIssuance,
+): OrderDocumentModel {
+  return {
+    ...content,
     kind,
     title: ORDER_DOCUMENT_TITLE_RU[kind],
-    number: orderDocumentNumber(kind, orderNumber),
-    dateText: formatDocumentDate(source.createdAt),
-    issuedAt: source.createdAt,
-    orderNumber,
-    brandName: site.name,
-    seller,
-    buyer: buildBuyer(source.customer),
-    items,
-    totals: { net, discount, vat, grand },
-    grandTotalInWords: amountInWordsRu(grand),
-    paymentMethod,
-    delivery: buildDelivery(source, labels),
+    number: cleanText(issuance.number, 100),
+    dateText: formatDocumentDate(issuance.issuedAt),
+    issuedAt: issuance.issuedAt,
+    brandName: cleanText(issuance.brandName, 200),
+    seller: issuance.seller,
   };
 }

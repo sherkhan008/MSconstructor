@@ -4,7 +4,9 @@ import type { OrderDocumentKind } from './kinds';
 /**
  * Seller (our company) details for order documents.
  *
- * Source of truth: server-only SELLER_* environment variables. There is
+ * Source of truth for a document's FIRST issuance: server-only SELLER_*
+ * environment variables, captured into OrderDocument.sellerSnapshot (see
+ * createSellerSnapshot below); every later rendering reads that snapshot. There is
  * deliberately no fallback to src/lib/config/site.ts — its legal name and
  * BIN are launch placeholders, and a placeholder BIN or IBAN printed on an
  * invoice is worse than no invoice. When a value a document needs is absent
@@ -152,6 +154,50 @@ export function sellerConfigIssues(kind: OrderDocumentKind, config: SellerConfig
     }
   }
   return [...issues, ...config.invalid];
+}
+
+/* -------------------------------------------------------------------------- */
+/* Issuance snapshot                                                           */
+/* -------------------------------------------------------------------------- */
+
+export const SELLER_SNAPSHOT_VERSION = 1;
+
+/**
+ * The seller block of an issued document, frozen at first issuance
+ * (OrderDocument.sellerSnapshot). Once a document exists it is printed from
+ * this snapshot only — a later change to SELLER_* or to the brand name never
+ * alters a document that was already issued.
+ */
+export interface SellerSnapshot {
+  version: typeof SELLER_SNAPSHOT_VERSION;
+  brandName: string;
+  details: SellerDetails;
+}
+
+export function createSellerSnapshot(config: SellerConfig, brandName: string): SellerSnapshot {
+  return { version: SELLER_SNAPSHOT_VERSION, brandName, details: { ...config.details } };
+}
+
+/** Runtime-validated read of a stored seller snapshot: each value must still
+ * be what the matching SELLER_* normaliser accepts, and a snapshot for `kind`
+ * must hold every value that kind requires. Null for anything else. */
+export function parseSellerSnapshot(raw: unknown, kind: OrderDocumentKind): SellerSnapshot | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  if (record.version !== SELLER_SNAPSHOT_VERSION) return null;
+  if (typeof record.brandName !== 'string' || record.brandName.trim() === '' || record.brandName.length > 200) return null;
+  const rawDetails = record.details;
+  if (!rawDetails || typeof rawDetails !== 'object' || Array.isArray(rawDetails)) return null;
+
+  const details: SellerDetails = {};
+  for (const field of SELLER_FIELDS) {
+    const value = (rawDetails as Record<string, unknown>)[field.key];
+    if (value === undefined) continue;
+    if (typeof value !== 'string' || field.normalize(value) !== value) return null;
+    details[field.key] = value;
+  }
+  if (REQUIRED_FIELDS[kind].some((key) => details[key] === undefined)) return null;
+  return { version: SELLER_SNAPSHOT_VERSION, brandName: record.brandName, details };
 }
 
 export function describeSellerIssue(issue: SellerConfigIssue): string {

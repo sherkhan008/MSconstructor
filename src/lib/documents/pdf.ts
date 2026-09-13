@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import PDFDocument from 'pdfkit';
-import type { DocumentField, DocumentItem, OrderDocumentModel } from './build';
+import type { DocumentField, DocumentItem, DocumentLine, OrderDocumentModel } from './build';
 import { formatAmount, formatAmountWithCurrency } from './money';
 
 /**
@@ -15,8 +15,8 @@ import { formatAmount, formatAmountWithCurrency } from './money';
  * Layout is manual and explicit: every block measures itself before it is
  * drawn and moves to a new page when it does not fit, table headers repeat
  * on continuation pages, and page numbers are stamped once the page count is
- * known. The PDF CreationDate is the order's creation date, which makes
- * repeated generation of the same document byte-for-byte identical.
+ * known. The PDF CreationDate is the persisted issuance instant, which makes
+ * repeated generation of an issued document byte-for-byte identical.
  */
 
 const FONT_DIR = join(process.cwd(), 'assets', 'fonts', 'noto-sans');
@@ -211,27 +211,31 @@ function drawTable(w: Writer, columns: Column[], rows: Cell[][], grid: boolean) 
   });
 }
 
-const ADJUSTMENT_NOTE = '* сумма включает услуги и скидки по позиции';
-
-function itemRows(items: DocumentItem[]): Cell[][] {
-  return items.map((item) => [
-    { text: String(item.index) },
-    { text: item.description, note: item.amountIncludesAdjustments ? ADJUSTMENT_NOTE : undefined },
-    { text: String(item.quantity) },
-    { text: item.unit },
-    { text: formatAmount(item.unitPrice) },
-    { text: `${formatAmount(item.amount)}${item.amountIncludesAdjustments ? '*' : ''}` },
+/** One row per persisted line; every row reads quantity × price = amount. */
+function lineRows(lines: DocumentLine[]): Cell[][] {
+  return lines.map((line) => [
+    { text: String(line.index) },
+    { text: line.description },
+    { text: String(line.quantity) },
+    { text: line.unit },
+    { text: formatAmount(line.unitPrice) },
+    { text: formatAmount(line.amount) },
   ]);
 }
 
-const ITEM_COLUMNS: Column[] = [
-  { header: '№', width: 24, align: 'center' },
-  { header: 'Наименование', width: CONTENT_WIDTH - 24 - 42 - 42 - 86 - 90, align: 'left' },
-  { header: 'Кол-во', width: 42, align: 'right' },
-  { header: 'Ед.', width: 42, align: 'center' },
-  { header: 'Цена, ₸', width: 86, align: 'right' },
-  { header: 'Сумма, ₸', width: 90, align: 'right' },
-];
+/** Price and amount headers name their VAT basis, so a VAT-inclusive price
+ * is never read as a VAT-exclusive one. */
+function lineColumns(model: OrderDocumentModel): Column[] {
+  const basis = model.totals.pricesIncludeVat ? 'с НДС' : 'без НДС';
+  return [
+    { header: '№', width: 24, align: 'center' },
+    { header: 'Наименование', width: CONTENT_WIDTH - 24 - 42 - 42 - 86 - 90, align: 'left' },
+    { header: 'Кол-во', width: 42, align: 'right' },
+    { header: 'Ед.', width: 42, align: 'center' },
+    { header: `Цена ${basis}, ₸`, width: 86, align: 'right' },
+    { header: `Сумма ${basis}, ₸`, width: 90, align: 'right' },
+  ];
+}
 
 interface TotalRow {
   label: string;
@@ -239,13 +243,31 @@ interface TotalRow {
   strong?: boolean;
 }
 
+function formatPercent(value: number): string {
+  return String(value).replace('.', ',');
+}
+
+/**
+ * Totals under the line table, each following visibly from the rows above:
+ *   VAT-exclusive: lines − discount = net; net + VAT = total
+ *   VAT-inclusive: lines − discount = total, of which VAT
+ */
 function totalRows(model: OrderDocumentModel, finalLabel: string): TotalRow[] {
-  const rows: TotalRow[] = [{ label: 'Итого без НДС', value: formatAmountWithCurrency(model.totals.net) }];
-  if (model.totals.discount > 0n) {
-    rows.push({ label: 'Скидка (учтена в суммах позиций)', value: formatAmountWithCurrency(model.totals.discount) });
+  const t = model.totals;
+  const vatLabel = `НДС ${formatPercent(t.vatPercent)}%`;
+  const rows: TotalRow[] = [];
+  if (t.discount > 0n) {
+    rows.push({ label: `Итого по строкам ${t.pricesIncludeVat ? 'с НДС' : 'без НДС'}`, value: formatAmountWithCurrency(t.lines) });
+    rows.push({ label: 'Скидка', value: formatAmountWithCurrency(-t.discount) });
   }
-  rows.push({ label: 'НДС', value: formatAmountWithCurrency(model.totals.vat) });
-  rows.push({ label: finalLabel, value: formatAmountWithCurrency(model.totals.grand), strong: true });
+  if (t.pricesIncludeVat) {
+    rows.push({ label: finalLabel, value: formatAmountWithCurrency(t.grand), strong: true });
+    rows.push({ label: `в том числе ${vatLabel}`, value: formatAmountWithCurrency(t.vat) });
+  } else {
+    rows.push({ label: 'Итого без НДС', value: formatAmountWithCurrency(t.net) });
+    rows.push({ label: vatLabel, value: formatAmountWithCurrency(t.vat) });
+    rows.push({ label: finalLabel, value: formatAmountWithCurrency(t.grand), strong: true });
+  }
   return rows;
 }
 
@@ -407,23 +429,15 @@ function drawProposal(w: Writer, model: OrderDocumentModel) {
 
   w.text(model.title, MARGIN.left, w.y, CONTENT_WIDTH, { size: 16, font: 'bold' });
   w.y += 22;
-  const subtitle = `№ ${model.number} от ${model.dateText} · по заказу № ${model.orderNumber}`;
+  const subtitle = `№ ${model.number} от ${model.dateText} · по заказу № ${model.orderNumber} от ${model.orderDateText}`;
   w.text(subtitle, MARGIN.left, w.y, CONTENT_WIDTH, { size: 9.5, color: MUTED });
   w.y += w.measure(subtitle, CONTENT_WIDTH, { size: 9.5 }) + 14;
 
   drawParties(w, { title: 'Поставщик', fields: sellerFields(model) }, { title: 'Покупатель', fields: buyerFields(model) });
 
   sectionTitle(w, 'Спецификация', 60);
-  drawTable(w, ITEM_COLUMNS, itemRows(model.items), false);
+  drawTable(w, lineColumns(model), lineRows(model.lines), false);
   drawTotals(w, totalRows(model, 'Итого с НДС'));
-
-  if (model.items.some((item) => item.amountIncludesAdjustments)) {
-    const note = '* Сумма позиции включает выбранные по заказу услуги (сборка, доставка) и применённые скидки.';
-    w.gap(6);
-    w.ensure(w.measure(note, CONTENT_WIDTH, { size: 8 }));
-    w.text(note, MARGIN.left, w.y, CONTENT_WIDTH, { size: 8, color: MUTED });
-    w.y += w.measure(note, CONTENT_WIDTH, { size: 8 });
-  }
 
   sectionTitle(w, 'Параметры позиций', itemDetailsKeepHeight(w, model.items[0]));
   for (const item of model.items) drawItemDetails(w, item);
@@ -437,7 +451,8 @@ function drawProposal(w: Writer, model: OrderDocumentModel) {
   }
 
   // dateText already ends with "г." — no extra period after it.
-  const closing = `Цены указаны в тенге (₸). Предложение сформировано по данным заказа № ${model.orderNumber} от ${model.dateText}`;
+  const basis = model.totals.pricesIncludeVat ? 'с учётом НДС' : 'без НДС, НДС начисляется сверху';
+  const closing = `Цены указаны в тенге (₸), ${basis}. Предложение сформировано по данным заказа № ${model.orderNumber} от ${model.orderDateText}`;
   w.gap(12);
   w.ensure(w.measure(closing, CONTENT_WIDTH, { size: 8.5 }) + 4);
   w.text(closing, MARGIN.left, w.y, CONTENT_WIDTH, { size: 8.5, color: MUTED });
@@ -449,8 +464,9 @@ const DETAIL_COLUMN_WIDTH = (CONTENT_WIDTH - DETAIL_COLUMN_GAP) / 2;
 const DETAIL_LABEL_WIDTH = 100;
 
 function itemDetailsLayout(w: Writer, item: DocumentItem) {
-  const heading = `${item.index}. ${item.title}`;
-  const priceLine = `${item.quantity} ${item.unit} × ${formatAmountWithCurrency(item.unitPrice)} = ${formatAmountWithCurrency(item.amount)}${item.amountIncludesAdjustments ? '*' : ''}`;
+  // Numbered by its table row, so "к поз. N" on a service row points here.
+  const heading = `${item.lineIndex}. ${item.title}`;
+  const priceLine = `${item.quantity} ${item.unit} × ${formatAmountWithCurrency(item.unitPrice)} = ${formatAmountWithCurrency(item.goodsAmount)}`;
   // Specs in two side-by-side label/value columns.
   const half = Math.ceil(item.specs.length / 2);
   const leftSpecs = item.specs.slice(0, half);
@@ -608,19 +624,12 @@ function drawInvoice(w: Writer, model: OrderDocumentModel) {
   );
   w.y += 8;
 
-  drawTable(w, ITEM_COLUMNS, itemRows(model.items), true);
+  drawTable(w, lineColumns(model), lineRows(model.lines), true);
 
-  const summary = `Всего наименований ${model.items.length}, на сумму ${formatAmountWithCurrency(model.totals.grand)}`;
+  const summary = `Всего наименований ${model.lines.length}, на сумму ${formatAmountWithCurrency(model.totals.grand)}`;
   const words = `Всего к оплате: ${model.grandTotalInWords}`;
-  const notes: string[] = [];
-  if (model.items.some((item) => item.amountIncludesAdjustments)) {
-    notes.push('* Сумма позиции включает выбранные по заказу услуги (сборка, доставка) и применённые скидки.');
-  }
   const blockHeight =
-    w.measure(summary, CONTENT_WIDTH, { size: 9 }) +
-    w.measure(words, CONTENT_WIDTH, { size: 9.5, font: 'bold' }) +
-    notes.reduce((sum, n) => sum + w.measure(n, CONTENT_WIDTH, { size: 8 }), 0) +
-    90;
+    w.measure(summary, CONTENT_WIDTH, { size: 9 }) + w.measure(words, CONTENT_WIDTH, { size: 9.5, font: 'bold' }) + 90;
   // Totals, the amount in words and the signature line are one block: an
   // invoice never ends a page on its totals and continues with "прописью".
   drawTotals(w, totalRows(model, 'Всего к оплате'), blockHeight + 10);
@@ -630,10 +639,6 @@ function drawInvoice(w: Writer, model: OrderDocumentModel) {
   w.y += w.measure(summary, CONTENT_WIDTH, { size: 9 }) + 2;
   w.text(words, MARGIN.left, w.y, CONTENT_WIDTH, { size: 9.5, font: 'bold' });
   w.y += w.measure(words, CONTENT_WIDTH, { size: 9.5, font: 'bold' }) + 4;
-  for (const note of notes) {
-    w.text(note, MARGIN.left, w.y, CONTENT_WIDTH, { size: 8, color: MUTED });
-    w.y += w.measure(note, CONTENT_WIDTH, { size: 8 });
-  }
   w.hLine(w.y + 6, MARGIN.left, PAGE.width - MARGIN.right, INK, 1.4);
   w.y += 40;
   w.text('Исполнитель', MARGIN.left, w.y, 80, { size: 9, font: 'bold' });

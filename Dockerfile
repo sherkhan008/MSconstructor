@@ -7,6 +7,9 @@
 # runtime, not the full node_modules tree.
 # ==============================================================================
 
+# Node 20 line, >= 20.19.0 — the floor package.json "engines" declares (the
+# lint toolchain's @typescript-eslint needs it; pdfjs-dist 4.10.38, used by the
+# PDF tests, needs >= 20). The floating node:20 tag resolves to the latest 20.x.
 FROM node:20-alpine AS base
 WORKDIR /app
 RUN corepack enable

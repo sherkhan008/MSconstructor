@@ -1,19 +1,26 @@
-import { beforeAll, describe, expect, it } from 'vitest';
-import { getCatalog } from '@/lib/data/repository';
-import { buildOrderDocument, DocumentIntegrityError, type DocumentLabels } from '@/lib/documents/build';
+import { describe, expect, it } from 'vitest';
+import {
+  buildOrderDocument,
+  buildOrderDocumentContent,
+  DocumentIntegrityError,
+  DocumentUnavailableError,
+  type DocumentIssuance,
+  type OrderDocumentModel,
+} from '@/lib/documents/build';
 import type { OrderDocumentKind } from '@/lib/documents/kinds';
-import { documentLabelsFromCatalog } from '@/lib/documents/labels';
 import type { OrderDocumentSource } from '@/lib/documents/order-source';
 import { renderOrderDocumentPdf } from '@/lib/documents/pdf';
 import { readSellerConfig, type SellerDetails } from '@/lib/documents/seller';
-import { configuration, decimal, item, orderSource } from './helpers/order-document-fixtures';
+import { configuration, decimal, issuance, item, orderSource } from './helpers/order-document-fixtures';
 import { pdfSyntax, readPdfText } from './helpers/pdf-text';
 
 /**
  * Commercial proposal and invoice PDFs, read back as text.
  *
- * Everything is asserted against the generated PDF itself (via PDF.js), not
- * against the intermediate model: what matters is what the customer sees.
+ * Everything customer-visible is asserted against the generated PDF itself
+ * (via PDF.js), not against the intermediate model: what matters is what the
+ * customer and the accountant see. Arithmetic invariants are additionally
+ * checked on the model, where they can be checked exhaustively.
  */
 
 const SELLER: SellerDetails = readSellerConfig({
@@ -29,7 +36,10 @@ const SELLER: SellerDetails = readSellerConfig({
   SELLER_KNP: '710',
 }).details;
 
-let labels: DocumentLabels;
+const NUMBER: Record<OrderDocumentKind, string> = {
+  'commercial-proposal': 'KP-MS-20260830-4HB57',
+  invoice: 'INV-MS-20260830-4HB57',
+};
 
 /** Serialises a source including its Decimal-like money objects. */
 function snapshotOf(source: OrderDocumentSource): string {
@@ -38,24 +48,36 @@ function snapshotOf(source: OrderDocumentSource): string {
   );
 }
 
-beforeAll(async () => {
-  labels = documentLabelsFromCatalog(await getCatalog());
-});
+function model(kind: OrderDocumentKind, source: OrderDocumentSource, overrides: Partial<DocumentIssuance> = {}): OrderDocumentModel {
+  return buildOrderDocument(kind, buildOrderDocumentContent(source), issuance(NUMBER[kind], { seller: SELLER, ...overrides }));
+}
 
-async function render(kind: OrderDocumentKind, source: OrderDocumentSource, seller: SellerDetails = SELLER) {
-  const bytes = await renderOrderDocumentPdf(buildOrderDocument(kind, source, seller, labels));
+async function render(kind: OrderDocumentKind, source: OrderDocumentSource, overrides: Partial<DocumentIssuance> = {}) {
+  const bytes = await renderOrderDocumentPdf(model(kind, source, overrides));
   return { bytes, text: await readPdfText(bytes) };
 }
 
+/** Every printed row: quantity × unit price = amount; rows − discount = the
+ * total on the table's VAT basis; and the basis identities hold. */
+function expectReconciles(m: OrderDocumentModel) {
+  for (const line of m.lines) {
+    expect(line.unitPrice * BigInt(line.quantity), `line ${line.index}`).toBe(line.amount);
+  }
+  const t = m.totals;
+  expect(m.lines.reduce((sum, line) => sum + line.amount, 0n)).toBe(t.lines);
+  expect(t.lines - t.discount).toBe(t.pricesIncludeVat ? t.grand : t.net);
+  expect(t.net + t.vat).toBe(t.grand);
+}
+
 describe('commercial proposal — individual customer', () => {
-  it('prints seller, document number/date, customer, configuration and persisted amounts', async () => {
+  it('prints seller, issued number/date, the order reference, buyer, configuration and persisted amounts', async () => {
     const { bytes, text } = await render('commercial-proposal', orderSource());
     expect(bytes.subarray(0, 5).toString()).toBe('%PDF-');
     const t = text.flat;
 
     expect(t).toContain('Коммерческое предложение');
-    expect(t).toContain('№ KP-MS-20260830-4HB57 от 30 августа 2026 г.');
-    expect(t).toContain('по заказу № MS-20260830-4HB57');
+    // Document date = first issuance; the order keeps its own date.
+    expect(t).toContain('№ KP-MS-20260830-4HB57 от 13 сентября 2026 г. · по заказу № MS-20260830-4HB57 от 30 августа 2026 г.');
     expect(t).toContain('ТОО «Тестовый Продавец»');
     expect(t).toContain('987654321098');
 
@@ -70,14 +92,17 @@ describe('commercial proposal — individual customer', () => {
     expect(t).toContain('Самостоятельная сборка');
 
     // 191 979 net, VAT 30 717 (persisted), 222 696 total.
-    expect(t).toContain('191 979,00');
+    for (const header of ['Цена без НДС, ₸', 'Сумма без НДС, ₸']) expect(t).toContain(header);
+    expect(t).toContain('1 компл. × 191 979,00 ₸ = 191 979,00 ₸');
     expect(t).toContain('Итого без НДС 191 979,00 ₸');
-    expect(t).toContain('НДС 30 717,00 ₸');
+    expect(t).toContain('НДС 16% 30 717,00 ₸');
     expect(t).toContain('Итого с НДС 222 696,00 ₸');
+    expect(t).toContain('без НДС, НДС начисляется сверху');
     expect(t).not.toContain('Скидка');
+    expect(t).not.toContain('*');
   });
 
-  it('shows the customer-facing kit only: no SKUs, no component prices, no folded production parts', async () => {
+  it('shows the order-time customer-facing kit only: no SKUs, no component prices, no folded production parts', async () => {
     const { text } = await render('commercial-proposal', orderSource());
     const t = text.flat;
     expect(t).toContain('Стойка 2000 мм — 4 шт.');
@@ -90,19 +115,25 @@ describe('commercial proposal — individual customer', () => {
     for (const sku of ['UPR-0015', 'BMD-0093', 'TIE-0131', 'SHF-0310']) {
       expect(t).not.toContain(sku);
     }
-    // Snapshot component selling prices sit below the markup — never printed.
-    for (const componentPrice of ['22 400', '5 600', '20 500', '4 100']) {
-      expect(t).not.toContain(componentPrice);
-    }
     for (const internal of ['Наценка', 'наценка', 'маржа', 'Маржа', 'закуп', 'Закуп', 'себестоим', 'поставщик:']) {
       expect(t).not.toContain(internal);
     }
+  });
+
+  it('prints the labels frozen in the order snapshot, whatever those names are called today', async () => {
+    const renamed = orderSource({
+      items: [item({ snapshot: { modelName: 'MS Стандарт (архивное имя)', colorName: 'Графит 2026', assemblyName: 'Сборка «Лето»' } })],
+    });
+    const { text } = await render('commercial-proposal', renamed);
+    expect(text.flat).toContain('Стеллаж MS Стандарт (архивное имя)');
+    expect(text.flat).toContain('Графит 2026');
+    expect(text.flat).toContain('Сборка «Лето»');
   });
 });
 
 describe('legal entity, BIN/IIN', () => {
   const legal = orderSource({
-    customer: {
+    buyer: {
       type: 'LEGAL_ENTITY',
       fullName: 'Сериков Ержан Болатович',
       companyName: 'ТОО «Ромашка Логистик Қазақстан»',
@@ -122,7 +153,7 @@ describe('legal entity, BIN/IIN', () => {
   it('invoice prints the full beneficiary block, buyer BIN, order link and "Всего к оплате"', async () => {
     const { text } = await render('invoice', legal);
     const t = text.flat;
-    expect(t).toContain('Счёт на оплату № INV-MS-20260830-4HB57 от 30 августа 2026 г.');
+    expect(t).toContain('Счёт на оплату № INV-MS-20260830-4HB57 от 13 сентября 2026 г.');
     expect(t).toContain('Образец платёжного поручения');
     expect(t).toContain('KZ000000000000000000');
     expect(t).toContain('TESTKZKA');
@@ -131,7 +162,7 @@ describe('legal entity, BIN/IIN', () => {
     expect(t).toMatch(/Кбе\s*17/);
     expect(t).toContain('Покупатель: БИН 123456789012, ТОО «Ромашка Логистик Қазақстан», контактное лицо: Сериков Ержан Болатович');
     expect(t).toContain('Основание: Заказ № MS-20260830-4HB57');
-    for (const header of ['№', 'Наименование', 'Кол-во', 'Ед.', 'Цена, ₸', 'Сумма, ₸']) expect(t).toContain(header);
+    for (const header of ['№', 'Наименование', 'Кол-во', 'Ед.', 'Цена без НДС, ₸', 'Сумма без НДС, ₸']) expect(t).toContain(header);
     expect(t).toContain('компл.');
     expect(t).toContain('Всего к оплате 222 696,00 ₸');
     expect(t).toContain('Всего наименований 1, на сумму 222 696,00 ₸');
@@ -139,55 +170,129 @@ describe('legal entity, BIN/IIN', () => {
   });
 
   it('an individual with an IIN is labelled ИИН', async () => {
-    const { text } = await render('invoice', orderSource({ customer: { binIin: '900101300123' } }));
+    const { text } = await render('invoice', orderSource({ buyer: { binIin: '900101300123' } }));
     expect(text.flat).toContain('Покупатель: ИИН 900101300123, Айгуль Тестова');
   });
 });
 
+describe('invoice lines — every row reconciles, services and discounts are explicit', () => {
+  it('VAT-exclusive: goods, assembly and delivery rows, a discount row and VAT on top', async () => {
+    // 3 × 100 000 goods + 15 000 assembly + 5 000 delivery − 9 000 discount = 311 000 net.
+    const source = orderSource({
+      items: [item({ unit: 100000, quantity: 3, assembly: 15000, delivery: 5000, discount: 9000, snapshot: { assemblyName: 'Профессиональная сборка', deliveryName: 'Доставка по городу' } })],
+    });
+    const m = model('invoice', source);
+    expectReconciles(m);
+    expect(m.lines.map((l) => [l.kind, l.quantity, l.unitPrice, l.amount])).toEqual([
+      ['goods', 3, 10000000n, 30000000n],
+      ['assembly', 1, 1500000n, 1500000n],
+      ['delivery', 1, 500000n, 500000n],
+    ]);
+
+    const { text } = await render('invoice', source);
+    const t = text.flat;
+    expect(t).toContain('Цена без НДС, ₸');
+    expect(t).toMatch(/1 Стеллаж MS Стандарт: .*? 3 компл\. 100 000,00 300 000,00/);
+    expect(t).toContain('2 Услуга сборки: Профессиональная сборка (к поз. 1) 1 усл. 15 000,00 15 000,00');
+    expect(t).toContain('3 Доставка: Доставка по городу (к поз. 1) 1 усл. 5 000,00 5 000,00');
+    expect(t).toContain('Итого по строкам без НДС 320 000,00 ₸');
+    expect(t).toContain('Скидка −9 000,00 ₸');
+    expect(t).toContain('Итого без НДС 311 000,00 ₸');
+    expect(t).toContain('НДС 16% 49 760,00 ₸');
+    expect(t).toContain('Всего к оплате 360 760,00 ₸');
+    expect(t).toContain('Всего наименований 3, на сумму 360 760,00 ₸');
+    expect(t).not.toContain('*');
+  });
+
+  it('VAT-inclusive: VAT-inclusive rows add up to the total, VAT shown as included — never mixed with net amounts', async () => {
+    // 2 × 58 000 + 4 000 assembly − 6 000 discount = 114 000 incl. VAT; VAT 16/116 = 15 724.
+    const source = orderSource({
+      items: [item({ unit: 58000, quantity: 2, assembly: 4000, discount: 6000, pricesIncludeVat: true, snapshot: { assemblyName: 'Профессиональная сборка' } })],
+    });
+    const m = model('invoice', source);
+    expectReconciles(m);
+    expect(m.totals).toMatchObject({ pricesIncludeVat: true, lines: 12000000n, discount: 600000n, grand: 11400000n, vat: 1572400n, net: 9827600n });
+
+    for (const kind of ['invoice', 'commercial-proposal'] as const) {
+      const { text } = await render(kind, source);
+      const t = text.flat;
+      expect(t).toContain('Цена с НДС, ₸');
+      expect(t).toContain('Сумма с НДС, ₸');
+      expect(t).not.toContain('без НДС');
+      expect(t).toContain('Итого по строкам с НДС 120 000,00 ₸');
+      expect(t).toContain('Скидка −6 000,00 ₸');
+      expect(t).toContain(`${kind === 'invoice' ? 'Всего к оплате' : 'Итого с НДС'} 114 000,00 ₸`);
+      expect(t).toContain('в том числе НДС 16% 15 724,00 ₸');
+      // The net amount (98 276) is never printed as a row price.
+      expect(t).not.toContain('98 276');
+    }
+  });
+
+  it('reconciles for every combination of services, discount, quantity and VAT basis', () => {
+    for (const pricesIncludeVat of [false, true]) {
+      for (const quantity of [1, 2, 7]) {
+        for (const assembly of [0, 1234.56]) {
+          for (const delivery of [null, 0, 5000]) {
+            for (const discount of [0, 777.77]) {
+              const source = orderSource({
+                items: [
+                  item({ id: 'a', unit: '84321.37', quantity, assembly, delivery, discount, pricesIncludeVat }),
+                  item({ id: 'b', unit: 1500, quantity: 2, pricesIncludeVat }),
+                ],
+              });
+              for (const kind of ['invoice', 'commercial-proposal'] as const) expectReconciles(model(kind, source));
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it('item detail headings carry their table row number, so "к поз. N" points at the right item', async () => {
+    const source = orderSource({
+      items: [
+        item({ id: 'a', assembly: 5000, snapshot: { assemblyName: 'Сборка и монтаж «под ключ»' } }),
+        item({ id: 'b', unit: 150000, quantity: 2, assembly: 7000, snapshot: { assemblyName: 'Сборка и монтаж «под ключ»' } }),
+      ],
+    });
+    const { text } = await render('commercial-proposal', source);
+    const t = text.flat;
+    expect(t).toContain('2 Услуга сборки: Сборка и монтаж «под ключ» (к поз. 1)');
+    expect(t).toContain('4 Услуга сборки: Сборка и монтаж «под ключ» (к поз. 3)');
+    expect(t).toContain('1. Стеллаж MS Стандарт 1 компл. × 191 979,00 ₸ = 191 979,00 ₸');
+    expect(t).toContain('3. Стеллаж MS Стандарт 2 компл. × 150 000,00 ₸ = 300 000,00 ₸');
+    expect(t).not.toContain('««');
+    expect(t).not.toContain('»»');
+  });
+
+  it('an unpriced delivery (confirmed later by a manager) is not invoiced as a row', () => {
+    const m = model('invoice', orderSource({ items: [item({ delivery: null, snapshot: { deliveryName: 'Доставка по Казахстану' } })] }));
+    expect(m.lines.map((l) => l.kind)).toEqual(['goods']);
+  });
+});
+
 describe('persisted totals are printed verbatim', () => {
-  it('uses the stored VAT even when it is not 16% of the net — VAT is never recalculated', async () => {
-    const source = orderSource({ vat: 12345 });
+  it('uses the persisted VAT even when it is not the rate applied to today\'s net — VAT is never recalculated', async () => {
+    const source = orderSource({ items: [item({ vat: 12345 })] });
     for (const kind of ['commercial-proposal', 'invoice'] as const) {
       const { text } = await render(kind, source);
-      expect(text.flat).toContain('НДС 12 345,00 ₸');
+      expect(text.flat).toContain('НДС 16% 12 345,00 ₸');
       expect(text.flat).toContain('204 324,00 ₸');
       expect(text.flat).not.toContain('30 717');
     }
   });
 
   it('prints kopeck-level (tiyn) amounts exactly, without rounding to whole tenge', async () => {
-    const source = orderSource({
-      items: [item({ unitNetPrice: decimal('1000.55'), totalNetPrice: decimal('1000.55') })],
-      netTotal: decimal('1000.55'),
-      vatTotal: decimal('160.09'),
-      grandTotal: decimal('1160.64'),
-    });
+    const source = orderSource({ items: [item({ unit: '1000.55', vat: '160.09' })] });
     const { text } = await render('invoice', source);
     expect(text.flat).toContain('1 000,55');
     expect(text.flat).toContain('Всего к оплате 1 160,64 ₸');
     expect(text.flat).toContain('Одна тысяча сто шестьдесят тенге 64 тиын');
   });
-
-  it('shows a non-zero discount as already included in the line amounts', async () => {
-    // Quantity 3 at 100 000 with a 9 000 discount folded into the line total.
-    const source = orderSource({
-      items: [item({ unit: 100000, quantity: 3, total: 291000 })],
-      discount: 9000,
-    });
-    const { text } = await render('invoice', source);
-    const t = text.flat;
-    expect(t).toContain('Скидка (учтена в суммах позиций) 9 000,00 ₸');
-    expect(t).toContain('100 000,00');
-    expect(t).toContain('291 000,00*');
-    expect(t).toContain('* Сумма позиции включает выбранные по заказу услуги (сборка, доставка) и применённые скидки.');
-    expect(t).toContain('Итого без НДС 291 000,00 ₸');
-    expect(t).toContain('НДС 46 560,00 ₸');
-    expect(t).toContain('Всего к оплате 337 560,00 ₸');
-  });
 });
 
 describe('multiple items and multiple shelving sections', () => {
-  it('lists every item with its sections, walls and options', async () => {
+  it('lists every item with its sections, walls and order-time options', async () => {
     const source = orderSource({
       items: [
         item({
@@ -200,9 +305,10 @@ describe('multiple items and multiple shelving sections', () => {
             ],
             metalFootPad: true,
           }),
+          snapshot: { options: ['Металлический подпятник'] },
           unit: 484962,
         }),
-        item({ id: 'b', configuration: configuration([800], { height: 2500, depth: 600, shelves: 6 }), unit: 150000, quantity: 2 }),
+        item({ id: 'b', configuration: configuration([800], { height: 2500, depth: 600, shelves: 6, quantity: 2 }), unit: 150000, quantity: 2 }),
       ],
     });
     for (const kind of ['commercial-proposal', 'invoice'] as const) {
@@ -216,10 +322,12 @@ describe('multiple items and multiple shelving sections', () => {
       expect(t).toContain('484 962,00');
       expect(t).toContain('300 000,00');
       expect(t).toContain('Итого без НДС 784 962,00 ₸');
+      expectReconciles(model(kind, source));
     }
     const { text } = await render('commercial-proposal', source);
     expect(text.flat).toContain('Ширина секций 1000 + 700 + 1200 мм');
     expect(text.flat).toContain('Секций 3');
+    expect(text.flat).toContain('Дополнительно Металлический подпятник');
     expect(text.flat).toContain('2 компл. × 150 000,00 ₸ = 300 000,00 ₸');
   });
 });
@@ -229,7 +337,7 @@ describe('layout robustness', () => {
     const longCompany = `ТОО «${'Очень длинное название компании Қазақстан '.repeat(7).trim()}»`.slice(0, 300);
     const unbroken = 'А'.repeat(180);
     const source = orderSource({
-      customer: { type: 'LEGAL_ENTITY', companyName: longCompany, fullName: unbroken, binIin: '123456789012' },
+      buyer: { type: 'LEGAL_ENTITY', companyName: longCompany, fullName: unbroken, binIin: '123456789012' },
       delivery: { methodId: 'delivery-city', address: `ул. ${'Длинная '.repeat(60)}`, city: 'Алматы', floor: '12', hasLift: false, date: null },
     });
     for (const kind of ['commercial-proposal', 'invoice'] as const) {
@@ -281,7 +389,7 @@ describe('layout robustness', () => {
   it('renders Cyrillic, Kazakh letters and the tenge sign as searchable text', async () => {
     const { bytes, text } = await render(
       'commercial-proposal',
-      orderSource({ customer: { fullName: 'Әсел Ұлықбекқызы Өмірзақова', city: 'Шымкент' } }),
+      orderSource({ buyer: { fullName: 'Әсел Ұлықбекқызы Өмірзақова', city: 'Шымкент' } }),
     );
     expect(text.flat).toContain('Әсел Ұлықбекқызы Өмірзақова');
     expect(text.flat).toContain('₸');
@@ -296,7 +404,7 @@ describe('layout robustness', () => {
 describe('injection safety', () => {
   it('prints hostile customer text literally and the PDF carries no active content', async () => {
     const hostile = orderSource({
-      customer: {
+      buyer: {
         type: 'LEGAL_ENTITY',
         fullName: '<script>alert("xss")</script>',
         companyName: ') Tj /JavaScript (app.alert(1)) /S /JavaScript /OpenAction',
@@ -304,7 +412,7 @@ describe('injection safety', () => {
         email: 'x@example.com"><img src=x onerror=alert(1)>',
         city: 'Алматы‮такса 0‬',
       },
-      delivery: { methodId: null, address: '{{constructor.constructor("alert(1)")()}} ', city: null, floor: null, hasLift: null, date: null },
+      delivery: { methodId: null, address: '{{constructor.constructor("alert(1)")()}} ', city: null, floor: null, hasLift: null, date: null },
     });
 
     for (const kind of ['commercial-proposal', 'invoice'] as const) {
@@ -322,9 +430,9 @@ describe('injection safety', () => {
   });
 });
 
-describe('idempotency and purity', () => {
-  it('generating the same document twice yields identical bytes and does not touch the snapshot', async () => {
-    const source = orderSource({ items: [item({ id: 'a' }), item({ id: 'b', unit: 5000, quantity: 3 })] });
+describe('idempotency, purity and dates', () => {
+  it('the same order and issuance yield identical bytes, and building never touches the persisted source', async () => {
+    const source = orderSource({ items: [item({ id: 'a', assembly: 3000 }), item({ id: 'b', unit: 5000, quantity: 3, discount: 100 })] });
     const before = snapshotOf(source);
     for (const kind of ['commercial-proposal', 'invoice'] as const) {
       const first = await render(kind, source);
@@ -334,31 +442,91 @@ describe('idempotency and purity', () => {
     expect(snapshotOf(source)).toBe(before);
   });
 
-  it('dates the document by the order in Kazakhstan time, not by the server clock', async () => {
-    const late = orderSource({ createdAt: new Date('2026-08-30T21:30:00.000Z') });
-    const { text } = await render('invoice', late);
-    expect(text.flat).toContain('от 31 августа 2026 г.');
+  it('dates the document by its persisted issuance in Kazakhstan time — not by the order, not by the server clock', async () => {
+    const late = orderSource({ createdAt: new Date('2026-08-30T08:00:00.000Z') });
+    const { text } = await render('invoice', late, { issuedAt: new Date('2026-09-13T21:30:00.000Z') });
+    expect(text.flat).toContain('Счёт на оплату № INV-MS-20260830-4HB57 от 14 сентября 2026 г.');
+    expect(text.flat).not.toContain('от 30 августа 2026 г. ');
+  });
+
+  it('prints the seller and brand from the issuance snapshot it is given', async () => {
+    const { text } = await render('commercial-proposal', orderSource(), {
+      brandName: 'Старый бренд',
+      seller: { ...SELLER, legalName: 'ТОО «Продавец на дату выставления»' },
+    });
+    expect(text.flat).toContain('Старый бренд');
+    expect(text.flat).toContain('ТОО «Продавец на дату выставления»');
+    expect(text.flat).not.toContain('ТОО «Тестовый Продавец»');
   });
 });
 
-describe('integrity guard — a self-contradictory snapshot is refused, never "fixed"', () => {
+describe('legacy orders — placed before document snapshots existed', () => {
+  it('refuses both documents when the buyer snapshot is missing, and says why', () => {
+    const legacy = orderSource({ buyerSnapshot: null });
+    const attempt = () => buildOrderDocumentContent(legacy);
+    expect(attempt).toThrow(DocumentUnavailableError);
+    try {
+      attempt();
+    } catch (error) {
+      expect((error as DocumentUnavailableError).message).toContain('до того, как система начала сохранять исторические данные');
+      expect((error as DocumentUnavailableError).details).toEqual(['Не сохранены данные покупателя на момент заказа.']);
+    }
+  });
+
+  it('refuses when any item lacks its order-time snapshot — no partial reconstruction', () => {
+    const legacy = orderSource({ items: [item({ id: 'a' }), item({ id: 'b', documentSnapshot: null })] });
+    try {
+      buildOrderDocumentContent(legacy);
+      expect.unreachable('a legacy order must not produce a document');
+    } catch (error) {
+      expect(error).toBeInstanceOf(DocumentUnavailableError);
+      expect((error as DocumentUnavailableError).details.join(' ')).toContain('позиций без снимка: 1 из 2');
+    }
+  });
+});
+
+describe('integrity guard — a self-contradictory order is refused, never "fixed"', () => {
+  const refuses = (source: OrderDocumentSource) => expect(() => buildOrderDocumentContent(source)).toThrow(DocumentIntegrityError);
+
   it('refuses when line totals do not add up to netTotal', () => {
     const source = orderSource();
     source.netTotal = decimal(191980);
     source.grandTotal = decimal(191980 + 30717);
-    expect(() => buildOrderDocument('invoice', source, SELLER, labels)).toThrow(DocumentIntegrityError);
+    refuses(source);
   });
 
   it('refuses when netTotal + VAT is not grandTotal', () => {
     const source = orderSource();
     source.grandTotal = decimal(1);
-    expect(() => buildOrderDocument('commercial-proposal', source, SELLER, labels)).toThrow(DocumentIntegrityError);
+    refuses(source);
+  });
+
+  it('refuses when the snapshot disagrees with the persisted item columns', () => {
+    const wrongUnit = item();
+    wrongUnit.unitNetPrice = decimal(191978);
+    refuses(orderSource({ items: [wrongUnit] }));
+
+    const wrongQuantity = item();
+    wrongQuantity.quantity = 2;
+    refuses(orderSource({ items: [wrongQuantity] }));
+  });
+
+  it('refuses a breakdown that does not reconcile with its own totals', () => {
+    const broken = item({ assembly: 1000 });
+    const snapshot = broken.documentSnapshot as { pricing: { goodsAmount: string } };
+    snapshot.pricing.goodsAmount = '191000.00';
+    refuses(orderSource({ items: [broken] }));
+  });
+
+  it('refuses items priced under different VAT rules, or a corrupted snapshot', () => {
+    refuses(orderSource({ items: [item({ id: 'a' }), item({ id: 'b', pricesIncludeVat: true })] }));
+    refuses(orderSource({ items: [item({ id: 'a' }), item({ id: 'b', vatPercent: 12 })] }));
+    refuses(orderSource({ items: [item({ documentSnapshot: { version: 1, modelName: 'x' } })] }));
+    refuses(orderSource({ buyerSnapshot: { version: 1, fullName: 'Без типа' } }));
   });
 
   it('refuses an unreadable configuration or an empty order', () => {
-    expect(() =>
-      buildOrderDocument('invoice', orderSource({ items: [item({ configuration: { modelSlug: 'ms-standard' } })] }), SELLER, labels),
-    ).toThrow(DocumentIntegrityError);
-    expect(() => buildOrderDocument('invoice', { ...orderSource(), items: [] }, SELLER, labels)).toThrow(DocumentIntegrityError);
+    refuses(orderSource({ items: [item({ configuration: { modelSlug: 'ms-standard' } })] }));
+    refuses({ ...orderSource(), items: [] });
   });
 });
