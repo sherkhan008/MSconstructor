@@ -13,6 +13,7 @@ import {
   canChangeOrderStatus,
   canClaimUnassignedOrder,
   canEditInternalNotes,
+  canGenerateOrderDocuments,
 } from '@/lib/auth/authorize';
 import { ORDER_STATUS_LABEL_RU } from '@/lib/orders/status-labels';
 import { PAYMENT_METHOD_LABEL } from '@/lib/orders/payment-methods';
@@ -26,6 +27,9 @@ import { LinkButton } from '@/components/ui/Button';
 import { OrderStatusForm } from '@/components/admin/OrderStatusForm';
 import { OrderManagerForm, type OrderManagerMode } from '@/components/admin/OrderManagerForm';
 import { OrderInternalNotes } from '@/components/admin/OrderInternalNotes';
+import { OrderDocuments, type OrderDocumentEntry } from '@/components/admin/OrderDocuments';
+import { ORDER_DOCUMENT_KINDS, ORDER_DOCUMENT_TITLE_RU, orderDocumentNumber } from '@/lib/documents/kinds';
+import { describeSellerIssue, readSellerConfig, sellerConfigIssues } from '@/lib/documents/seller';
 
 /**
  * One order, as it was saved.
@@ -208,6 +212,21 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
 
   const whatsAppTarget = order.customer.whatsapp || order.customer.phone;
 
+  // Readiness only — the PDFs themselves are built by the document route from
+  // the persisted order. Seller details come from server-side configuration.
+  const sellerConfig = readSellerConfig();
+  const documents: OrderDocumentEntry[] = ORDER_DOCUMENT_KINDS.map((kind) => ({
+    kind,
+    title: ORDER_DOCUMENT_TITLE_RU[kind],
+    number: orderDocumentNumber(kind, order.orderNumber),
+    href: `/api/admin/orders/${encodeURIComponent(order.id)}/documents/${kind}`,
+    blockers: sellerConfigIssues(kind, sellerConfig).map(describeSellerIssue),
+    notes:
+      kind === 'commercial-proposal' && !sellerConfig.details.legalName
+        ? ['Юридические реквизиты продавца не заданы (SELLER_*): в предложении будет указано только название бренда.']
+        : [],
+  }));
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -321,6 +340,11 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
             </div>
           )}
         </dl>
+      </section>
+
+      <section className="border border-line bg-background p-4">
+        <h2 className="tech-label mb-3">Документы</h2>
+        <OrderDocuments documents={documents} canGenerate={canGenerateOrderDocuments(admin.role)} />
       </section>
 
       <section className="border border-line bg-background p-4">
