@@ -1,0 +1,18 @@
+# PostgreSQL backup for MS Shelving — see docs/production-backups.md.
+# Install:
+#   sudo cp deploy/systemd/ms-shelving-backup.{service,timer} /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now ms-shelving-backup.timer
+# Adjust WorkingDirectory if the repository is not checked out at /opt/ms-shelving.
+[Unit]
+Description=MS Shelving PostgreSQL backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/ms-shelving
+ExecStart=/bin/bash /opt/ms-shelving/scripts/ops/backup-postgres.sh
+# Output goes to the journal: journalctl -u ms-shelving-backup.service
+# A failure leaves the unit in "failed" state: systemctl --failed
+Nice=10
+IOSchedulingClass=idle

@@ -1,7 +1,8 @@
 import { site } from '@/lib/config/site';
 import { formatPrice } from '@/lib/money';
 import { METAL_FOOT_PAD_LABEL, SHELF_CORNER_BRACKETS_LABEL } from '@/lib/configurator/additional-options';
-import type { PriceResult, PublicAccessory, ShelvingConfiguration } from '@/lib/types/domain';
+import type { PublicAccessory, ShelvingConfiguration } from '@/lib/types/domain';
+import type { PublicPriceResult } from '@/lib/pricing/public-result';
 
 /**
  * WhatsApp deep links for the MVP. `https://wa.me/<phone>?text=<message>` needs
@@ -72,7 +73,7 @@ function wallSummaryLines(config: ShelvingConfiguration): string[] {
  * values. `accessories` is the public catalog's accessory list (purchase
  * price already stripped), used only to resolve customer-facing names.
  */
-export function whatsAppConfiguratorUrl(price: PriceResult, accessories: PublicAccessory[], shareUrl: string): string {
+export function whatsAppConfiguratorUrl(price: PublicPriceResult, accessories: PublicAccessory[], shareUrl: string): string {
   const c = price.configuration;
   const widths = c.sections.map((s) => s.width).join(' + ');
 

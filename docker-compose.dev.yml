@@ -1,0 +1,43 @@
+# ==============================================================================
+# MS Shelving — LOCAL DEVELOPMENT infrastructure only (PostgreSQL + Redis).
+#
+#   docker compose -f docker-compose.dev.yml up -d
+#
+# Run the app itself with `npm run dev` against these (see .env.example).
+# Development credentials, bound to 127.0.0.1 only. Never use this file on a
+# server — the production stack is docker-compose.yml.
+#
+# The project name and volume names are unchanged from the earlier combined
+# compose file, so an existing local database is reused as-is.
+# ==============================================================================
+name: ms-shelving
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ms_shelving
+      POSTGRES_PASSWORD: ms_shelving
+      POSTGRES_DB: ms_shelving
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - ms_shelving_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ms_shelving -d ms_shelving"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - ms_shelving_redis_data:/data
+    restart: unless-stopped
+
+volumes:
+  ms_shelving_postgres_data:
+  ms_shelving_redis_data:

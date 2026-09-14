@@ -20,7 +20,7 @@ can guarantee that, so the deployment has to declare it.
 | Trusted proxy | The `proxy` service in `docker-compose.yml` (nginx, `deploy/nginx/default.conf`). No CDN is configured in this repository. |
 | Canonical client-IP header | `X-Real-IP` (`TRUSTED_PROXY_CLIENT_IP_HEADER=x-real-ip`) |
 | Overwrite or append | **Overwrite.** `proxy_set_header X-Real-IP $remote_addr;` and `X-Forwarded-For $remote_addr;`. Client-supplied values, including repeated headers, are discarded. `Forwarded`, `X-Forwarded-Port`, `X-Client-IP`, `True-Client-IP` and `CF-Connecting-IP` are stripped. |
-| App port exposure | The `app` service publishes **no** host port (`expose: 3000` only). Port 3000 on the host belongs to nginx. The app must never be reachable except through the proxy. |
+| App port exposure | The `app` service publishes **no** host port (`expose: 3000` only). Only the `proxy` publishes a port (`PUBLIC_HTTP_BIND`, default 80). PostgreSQL and Redis sit on an `internal` Docker network. The app must never be reachable except through the proxy. `TRUSTED_PROXY_CLIENT_IP_HEADER=x-real-ip` is fixed in `docker-compose.yml`, and production startup refuses to run without it (`src/lib/startup/production-config.ts`). |
 | Header value format | Exactly one IPv4 or IPv6 literal. A list, a port or a hostname is rejected. The request is then treated as unresolved. |
 
 ### Requirements for any other deployment

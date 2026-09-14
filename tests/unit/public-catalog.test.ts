@@ -34,11 +34,13 @@ describe('public catalog projection never leaks internal commercial data', () =>
     expect(publicCatalog).not.toHaveProperty('promoCodes');
   });
 
-  it('stripAccessorySecrets removes purchasePrice and nothing else', () => {
+  it('stripAccessorySecrets removes purchasePrice and the pre-markup unitPrice, and nothing else', () => {
     const accessory = catalog.accessories[0];
     const stripped = stripAccessorySecrets(accessory);
     expect(stripped).not.toHaveProperty('purchasePrice');
-    expect(stripped.unitPrice).toBe(accessory.unitPrice);
+    expect(stripped).not.toHaveProperty('unitPrice');
+    const { purchasePrice: _purchasePrice, unitPrice: _unitPrice, ...expected } = accessory;
+    expect(stripped).toEqual(expected);
     expect(stripped.sku).toBe(accessory.sku);
   });
 

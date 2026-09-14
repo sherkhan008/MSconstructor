@@ -48,7 +48,7 @@ interface ParsedUrl {
   db?: number;
 }
 
-function parseRedisUrl(url: string): ParsedUrl {
+export function parseRedisUrl(url: string): ParsedUrl {
   let parsed: URL;
   try {
     parsed = new URL(url);

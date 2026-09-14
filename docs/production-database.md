@@ -7,8 +7,11 @@ at production runtime — see `src/lib/env.ts`'s `assertDatabaseConfigured`.
 ## 1. Create a PostgreSQL database
 
 Any managed Postgres (Neon, Supabase, RDS, etc.) or self-hosted instance
-works. `docker-compose.yml` in this repo also provisions a local Postgres
-container if you want to rehearse the steps below before picking a host.
+works. `docker-compose.yml` in this repo is the self-hosted production stack
+(PostgreSQL on a private network, migrations in a one-shot `migrate` service)
+— see [production-deployment.md](production-deployment.md), which supersedes
+the manual steps below for that stack. `docker-compose.dev.yml` provisions a
+local development Postgres.
 
 ## 2. Set `DATABASE_URL`
 
@@ -134,6 +137,9 @@ database is an intentional, one-time, manually-triggered step.
 - Connection pool sizing appropriate for your host's concurrency model —
   this repo doesn't choose a provider or pooler, only supports the
   `DATABASE_URL`/`DIRECT_URL` split most providers expect.
-- Automated backups/point-in-time recovery — not part of this application.
+- Automated backups: for the self-hosted Compose stack see
+  [production-backups.md](production-backups.md) (daily `pg_dump`, retention,
+  tested restore). A managed provider's backups/point-in-time recovery replace
+  that script if you use one.
 - Who is authorized to edit current catalog prices directly in the database
   until the admin price-editor UI (a later phase) exists.

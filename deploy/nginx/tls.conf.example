@@ -1,0 +1,56 @@
+# ==============================================================================
+# TEMPLATE — nginx terminating TLS directly (no CDN in front).
+# Not active. See docs/production-deployment.md, "TLS, domain and proxies".
+#
+# To enable:
+#   1. Obtain a certificate for the domain on the host (e.g. certbot, webroot
+#      mode into /var/www/certbot), so these exist:
+#        /etc/letsencrypt/live/<domain>/fullchain.pem
+#        /etc/letsencrypt/live/<domain>/privkey.pem
+#   2. Replace deploy/nginx/default.conf with this file's contents, keeping the
+#      resolver, upstream and the `location /` proxy block from default.conf
+#      unchanged (the X-Real-IP overwrite contract must stay identical).
+#   3. In docker-compose.yml (proxy service) publish 443 and mount certificates:
+#        ports:   - "80:8080"   - "443:8443"
+#        volumes: - /etc/letsencrypt:/etc/letsencrypt:ro
+#                 - /var/www/certbot:/var/www/certbot:ro
+#   4. Set APP_URL=https://<domain>. Reload nginx after each renewal:
+#        docker compose --env-file .env.production exec proxy nginx -s reload
+# ==============================================================================
+
+# ... resolver / upstream / server_tokens exactly as in default.conf ...
+
+server {
+    listen 8080;
+    server_name example.kz www.example.kz;
+
+    # ACME HTTP-01 challenges for renewal.
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 8443 ssl;
+    http2 on;
+    server_name example.kz www.example.kz;
+
+    ssl_certificate     /etc/letsencrypt/live/example.kz/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/example.kz/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    # The application already sends Strict-Transport-Security (next.config.ts).
+
+    location / {
+        # ... identical to the `location /` block in default.conf ...
+        # X-Forwarded-Proto $scheme is "https" here.
+    }
+}

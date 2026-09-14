@@ -12,6 +12,7 @@ import type {
   PricingSettings,
   ProductModel,
   PromoCode,
+  PublicAccessory,
   ShelfType,
   ShelvingComponent,
 } from '@/lib/types/domain';
@@ -277,8 +278,10 @@ export function stripComponentSecrets(component: ShelvingComponent) {
   return rest;
 }
 
-export function stripAccessorySecrets(accessory: Accessory) {
-  const { purchasePrice: _purchasePrice, ...rest } = accessory;
+/** Accessory as shipped to the browser (see PublicAccessory): no purchase
+ * price, and no pre-markup unit price from which the markup could be derived. */
+export function stripAccessorySecrets(accessory: Accessory): PublicAccessory {
+  const { purchasePrice: _purchasePrice, unitPrice: _unitPrice, ...rest } = accessory;
   return rest;
 }
 
