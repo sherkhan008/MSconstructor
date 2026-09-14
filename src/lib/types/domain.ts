@@ -181,7 +181,12 @@ export interface Accessory {
   active: boolean;
 }
 
-export type PublicAccessory = Omit<Accessory, 'purchasePrice'>;
+/** Public-facing projection of an accessory. `unitPrice` is a pre-markup
+ * engine input (it is summed into the component subtotal before the model
+ * markup is applied), so publishing it next to the public price would let a
+ * caller back-calculate the markup. The customer sees accessory cost only
+ * inside the server-calculated price. */
+export type PublicAccessory = Omit<Accessory, 'purchasePrice' | 'unitPrice'>;
 
 export interface ColorOption {
   id: string;

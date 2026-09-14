@@ -213,6 +213,11 @@ test('height resize can start from multiple points across the top rack edge — 
     // every iteration starts from the same known baseline height.
     await page.goto('/configurator?model=ms-standard&height=2000&depth=400&shelves=3&sections=1000:false:false:false');
     const heightHandle = page.locator('button[data-axis="height"]');
+    // The persisted store renders first and the share link is applied one
+    // commit later, so an immediate read can still see the previous
+    // iteration's committed height (e.g. 3000). Wait for the URL's height
+    // before capturing the baseline the drag must change.
+    await expect(heightHandle).toHaveAttribute('aria-valuenow', '2000');
     const before = await heightHandle.getAttribute('aria-valuenow');
 
     const zone = page.getByTestId('height-resize-zone');

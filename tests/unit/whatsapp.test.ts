@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { whatsAppConfiguratorUrl, whatsAppContactUrl, whatsAppOrderUrl, whatsAppProductUrl } from '@/lib/whatsapp';
 import { site } from '@/lib/config/site';
-import type { PriceResult, PublicAccessory, ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
+import type { PublicAccessory, ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
+import type { PublicPriceResult } from '@/lib/pricing/public-result';
 
 function section(width: number, overrides: Partial<ShelvingSection> = {}): ShelvingSection {
   return { id: `sec-${width}-${Math.random().toString(36).slice(2, 6)}`, width, rearWall: false, leftWall: false, rightWall: false, ...overrides };
@@ -25,15 +26,16 @@ function baseConfig(overrides: Partial<ShelvingConfiguration> = {}): ShelvingCon
   };
 }
 
-function priceResult(config: ShelvingConfiguration, total = 374_859): PriceResult {
-  return {
-    ok: true,
+function priceResult(config: ShelvingConfiguration, total = 374_859): PublicPriceResult {
+  const result = {
+    ok: true as const,
     configuration: config,
     bom: [],
     breakdown: {
-      componentsSubtotal: total,
-      colorSurcharge: 0,
-      markup: 45_000, // must never leak into the WhatsApp message
+      // Not part of the public shape any more, but a stale cart snapshot
+      // persisted in a browser before that change can still carry it at
+      // runtime — it must never leak into the WhatsApp message.
+      markup: 45_000,
       unitNet: total,
       quantity: 1,
       itemsNet: total,
@@ -53,6 +55,7 @@ function priceResult(config: ShelvingConfiguration, total = 374_859): PriceResul
     deliveryNote: null,
     warnings: [],
   };
+  return result as PublicPriceResult;
 }
 
 const ACCESSORIES: PublicAccessory[] = [
@@ -63,7 +66,6 @@ const ACCESSORIES: PublicAccessory[] = [
     name: { ru: 'Регулируемые опоры', kk: 'Реттелетін тіректер' },
     description: { ru: 'desc', kk: 'desc' },
     image: '/img.svg',
-    unitPrice: 1200,
     weightKg: 0.4,
     models: [],
     inStock: true,
@@ -77,7 +79,6 @@ const ACCESSORIES: PublicAccessory[] = [
     name: { ru: 'Усиление полки', kk: 'Сөрені күшейту' },
     description: { ru: 'desc', kk: 'desc' },
     image: '/img.svg',
-    unitPrice: 1800,
     weightKg: 1.4,
     models: [],
     maxQuantityPerSection: 8,
@@ -92,7 +93,6 @@ const ACCESSORIES: PublicAccessory[] = [
     name: { ru: 'Крестовина жёсткости', kk: 'Қатаңдық айқышы' },
     description: { ru: 'desc', kk: 'desc' },
     image: '/img.svg',
-    unitPrice: 1600,
     weightKg: 1.8,
     models: [],
     inStock: true,

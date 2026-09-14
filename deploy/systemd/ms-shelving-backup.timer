@@ -1,0 +1,12 @@
+# Daily PostgreSQL backup at 02:30 server time (plus up to 10 min jitter).
+# Persistent=true runs a missed backup after the server was powered off.
+[Unit]
+Description=Daily MS Shelving PostgreSQL backup
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+RandomizedDelaySec=600
+Persistent=true
+
+[Install]
+WantedBy=timers.target

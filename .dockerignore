@@ -7,14 +7,22 @@ playwright-report
 test-results
 .git
 .gitignore
+# Every env file, including .env.production: `COPY . .` would otherwise put
+# real secrets into image layers, and `next build` would load them.
 .env
-.env.local
-.env.*.local
+.env.*
 Dockerfile
-docker-compose.yml
+docker-compose*.yml
 .dockerignore
 README.md
 DEPLOYMENT.md
 *.log
 .vscode
 .idea
+.claude
+*.tsbuildinfo
+# Operational state that must never enter an image.
+backups
+*.dump
+*.dump.partial
+.deploy

@@ -15,9 +15,11 @@ import type { PublicCatalog } from '@/lib/data/public-catalog';
 /**
  * One compact bar fixed to the bottom of the viewport at every breakpoint —
  * replaces the old desktop PricePanel sidebar + mobile-only StickyPriceBar.
- * Never renders internal commercial figures (markup / a separate VAT row) —
- * those stay in PriceBreakdown for internal/order-record use, this is a
- * render-time omission only. A price the customer can act on is either a
+ * Renders only the customer-safe breakdown the pricing API returns
+ * (src/lib/pricing/public-result.ts): the kit's customer price per set
+ * (colour and markup already included), assembly, delivery, discount and the
+ * total. Markup and pre-markup subtotals never reach the browser at all, and
+ * there is no separate VAT row. A price the customer can act on is either a
  * fresh server result or explicitly marked stale/loading — never a leftover
  * number from before the last change.
  */
@@ -83,8 +85,7 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
       {detailsOpen && priceResult && (
         <div className="mx-auto max-w-7xl border-b border-line px-4 py-3 sm:px-6 lg:px-8">
           <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-4">
-            <Row label="Комплектующие" value={priceResult.breakdown.componentsSubtotal} />
-            {priceResult.breakdown.colorSurcharge > 0 && <Row label="Цвет" value={priceResult.breakdown.colorSurcharge} />}
+            <Row label="Комплектующие" value={priceResult.breakdown.unitNet} />
             {priceResult.breakdown.quantity > 1 && <Row label={`Полки × ${priceResult.breakdown.quantity} компл.`} value={priceResult.breakdown.itemsNet} />}
             {priceResult.breakdown.assembly > 0 && <Row label="Сборка" value={priceResult.breakdown.assembly} />}
             {priceResult.breakdown.delivery !== null && priceResult.breakdown.delivery > 0 && <Row label="Доставка" value={priceResult.breakdown.delivery} />}

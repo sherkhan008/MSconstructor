@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { getCatalog } from '@/lib/data/repository';
 import { calculatePrice } from '@/lib/pricing';
-import { toPublicBom } from '@/lib/pricing/bom';
+import { toPublicPriceResult } from '@/lib/pricing/public-result';
 import { apiError, apiOk, internalError, type ApiErrorCode } from '@/lib/api/response';
 import { enforceRateLimit } from '@/lib/rate-limit';
 
@@ -12,6 +12,10 @@ export const runtime = 'nodejs';
  * checkout all call this endpoint instead of computing a price in the
  * browser — a client-submitted price or total is never accepted anywhere in
  * the order flow.
+ *
+ * The response is the customer-safe projection (toPublicPriceResult): no
+ * markup, no pre-markup component subtotal or colour surcharge, and no
+ * per-line component prices from which either could be recomputed.
  */
 export async function POST(request: NextRequest) {
   const rate = await enforceRateLimit('pricing', request.headers);
@@ -43,16 +47,8 @@ export async function POST(request: NextRequest) {
       return apiError(apiCode, result.message, statusByCode[result.code], result.details);
     }
 
-    return apiOk({
-      configuration: result.configuration,
-      bom: toPublicBom(result.bom, result.configuration.modelSlug),
-      breakdown: result.breakdown,
-      totalWeightKg: result.totalWeightKg,
-      rowLengthMm: result.rowLengthMm,
-      leadTimeDays: result.leadTimeDays,
-      deliveryNote: result.deliveryNote,
-      warnings: result.warnings,
-    });
+    const { ok: _ok, ...publicResult } = toPublicPriceResult(result);
+    return apiOk(publicResult);
   } catch (error) {
     return internalError(error);
   }

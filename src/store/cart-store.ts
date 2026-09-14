@@ -2,7 +2,8 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { PriceResult, ShelvingConfiguration } from '@/lib/types/domain';
+import type { ShelvingConfiguration } from '@/lib/types/domain';
+import type { PublicPriceResult } from '@/lib/pricing/public-result';
 
 /**
  * Cart state. Persisted to localStorage so a customer's cart survives a
@@ -18,17 +19,17 @@ export interface CartItem {
   modelName: string;
   configuration: ShelvingConfiguration;
   /** Last server-calculated price for this item; null once the config changes. */
-  priceSnapshot: PriceResult | null;
+  priceSnapshot: PublicPriceResult | null;
   addedAt: string;
 }
 
 interface CartState {
   items: CartItem[];
-  addItem: (input: { modelSlug: string; modelName: string; configuration: ShelvingConfiguration; priceSnapshot: PriceResult }) => string;
+  addItem: (input: { modelSlug: string; modelName: string; configuration: ShelvingConfiguration; priceSnapshot: PublicPriceResult }) => string;
   removeItem: (id: string) => void;
   duplicateItem: (id: string) => void;
   setQuantity: (id: string, quantity: number) => void;
-  setPriceSnapshot: (id: string, priceSnapshot: PriceResult | null) => void;
+  setPriceSnapshot: (id: string, priceSnapshot: PublicPriceResult | null) => void;
   /** Replaces one item's persisted configuration and clears its price
    * snapshot (forcing a fresh server re-price) — used only to repair a
    * configuration whose colorId/assemblyId/deliveryId/accessoryId no

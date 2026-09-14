@@ -2,7 +2,8 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { PriceFailure, PriceResult, ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
+import type { PriceFailure, ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
+import type { PublicPriceResult } from '@/lib/pricing/public-result';
 import { getAllowedWidthsForDepth, isValidMsStandardWidthDepth } from '@/lib/pricing/ms-standard-compatibility';
 
 type PersistedConfiguratorState = { config: ShelvingConfiguration; activeSectionId: string };
@@ -52,7 +53,7 @@ export const DEFAULT_CONFIGURATION: ShelvingConfiguration = {
 interface ConfiguratorState {
   config: ShelvingConfiguration;
   activeSectionId: string;
-  priceResult: PriceResult | null;
+  priceResult: PublicPriceResult | null;
   pricingError: PriceFailure | null;
   isPricing: boolean;
   hydrated: boolean;
@@ -73,7 +74,7 @@ interface ConfiguratorState {
 
   loadFromPartial: (partial: Partial<ShelvingConfiguration>) => void;
   reset: () => void;
-  setPriceResult: (result: PriceResult | null) => void;
+  setPriceResult: (result: PublicPriceResult | null) => void;
   setPricingError: (error: PriceFailure | null) => void;
   setIsPricing: (value: boolean) => void;
   setHydrated: (value: boolean) => void;

@@ -1,0 +1,6 @@
+# Files executed or parsed on the Linux production host must keep LF line
+# endings even when the repository is checked out on Windows.
+*.sh          text eol=lf
+deploy/**     text eol=lf
+Dockerfile    text eol=lf
+*.yml         text eol=lf

@@ -30,6 +30,11 @@ const FORBIDDEN_KEYS = [
   'minMarginPercent',
   'markupPercent',
   'markupFixed',
+  // Model markup amount and the pre-markup amounts it can be derived from
+  // (tests/integration/public-commercial-boundary.test.ts has the full matrix).
+  'markup',
+  'componentsSubtotal',
+  'colorSurcharge',
 ];
 
 function collectKeys(value: unknown, found = new Set<string>()): Set<string> {

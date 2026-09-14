@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { BomLine } from '@/lib/types/domain';
+import type { PublicKitLine } from '@/lib/pricing/public-result';
 
 const PREVIEW_ROW_COUNT = 5;
 
@@ -11,7 +11,7 @@ const PREVIEW_ROW_COUNT = 5;
  * server-authoritative and lives only in OrderSummaryBar — this component
  * only renders the BOM lines it's given.
  */
-export function BomTable({ lines }: { lines: Omit<BomLine, 'unitCost'>[]; totalWeightKg: number }) {
+export function BomTable({ lines }: { lines: PublicKitLine[]; totalWeightKg: number }) {
   const [showAll, setShowAll] = useState(false);
 
   if (lines.length === 0) return null;

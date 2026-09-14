@@ -88,10 +88,28 @@ const parsedPublic = publicSchema.safeParse({
   NEXT_PUBLIC_WHATSAPP_NUMBER: process.env.NEXT_PUBLIC_WHATSAPP_NUMBER,
 });
 
+/**
+ * NODE_ENV as the process actually runs, independent of the rest of the
+ * schema: one malformed variable (e.g. an empty `SMTP_PASSWORD=`) must never
+ * turn a production process into a "development" one — that would silently
+ * enable the development client-IP trust mode, non-Secure session cookies
+ * and the in-memory catalog.
+ */
+const runtimeNodeEnv = serverSchema.shape.NODE_ENV.safeParse(process.env.NODE_ENV);
+
 /** Server-only environment. Never import this from a Client Component. */
 export const env = parsedServer.success
   ? parsedServer.data
-  : ({ NODE_ENV: 'development' } as z.infer<typeof serverSchema>);
+  : ({ NODE_ENV: runtimeNodeEnv.success ? runtimeNodeEnv.data : 'development' } as z.infer<typeof serverSchema>);
+
+/**
+ * Names of server variables that failed validation (never their values).
+ * When non-empty, `env` holds only NODE_ENV; production startup refuses to
+ * continue (src/lib/startup/preflight.ts).
+ */
+export const invalidEnvVariables: string[] = parsedServer.success
+  ? []
+  : [...new Set(parsedServer.error.issues.map((issue) => issue.path.join('.')))];
 
 /** Values that are safe to inline into the browser bundle. */
 export const publicEnv = parsedPublic.success ? parsedPublic.data : {};
@@ -174,14 +192,5 @@ export const integrations = {
   yandexMetrica: Boolean(publicEnv.NEXT_PUBLIC_YANDEX_METRICA_ID),
 } as const;
 
-/** Warn once at boot about production values that really should be set. */
-export function assertProductionEnv(): string[] {
-  if (!isProduction) return [];
-  const missing: string[] = [];
-  if (!env.DATABASE_URL) missing.push('DATABASE_URL');
-  if (!env.AUTH_SECRET) missing.push('AUTH_SECRET');
-  if (!env.APP_URL && !publicEnv.NEXT_PUBLIC_APP_URL) missing.push('APP_URL');
-  if (!publicEnv.NEXT_PUBLIC_WHATSAPP_NUMBER) missing.push('NEXT_PUBLIC_WHATSAPP_NUMBER');
-  if (!env.TRUSTED_PROXY_CLIENT_IP_HEADER) missing.push('TRUSTED_PROXY_CLIENT_IP_HEADER');
-  return missing;
-}
+// Production startup configuration checks (fail closed) live in
+// src/lib/startup/production-config.ts, run from src/instrumentation.ts.

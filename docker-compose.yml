@@ -1,77 +1,189 @@
-name: ms-shelving
+# ==============================================================================
+# MS Shelving — PRODUCTION stack (single Linux host).
+#
+#   Internet → [TLS boundary] → proxy (nginx, the only published port)
+#            → app (Next.js, private) → postgres / redis (internal network only)
+#
+# Always run through scripts/ops/*.sh, or pass the env file explicitly:
+#   docker compose --env-file .env.production up -d
+# Every secret below is `:?`-required — a missing value stops Compose before
+# any container starts. There are no default passwords or secrets.
+#
+# Local development infrastructure lives in docker-compose.dev.yml.
+# Runbook: docs/production-deployment.md. Backups: docs/production-backups.md.
+# ==============================================================================
+name: ms-shelving-prod
+
+x-logging: &logging
+  # Bounded container logs; Docker's default json-file driver never rotates.
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+networks:
+  # proxy <-> app. A normal bridge: the app needs outbound HTTPS for
+  # notifications (Telegram, WhatsApp API, CRM webhooks).
+  edge:
+  # app/migrate <-> postgres/redis. `internal`: no route to or from the
+  # outside world, and nothing on it publishes a host port.
+  backend:
+    internal: true
+
+volumes:
+  postgres_data:
 
 services:
-  # The only public entry point. Overwrites X-Real-IP / X-Forwarded-For with
-  # the real TCP peer — see deploy/nginx/default.conf and
-  # docs/production-client-ip-and-rate-limiting.md.
+  # The only Internet-facing service. Overwrites X-Real-IP / X-Forwarded-For
+  # with the real TCP peer — see deploy/nginx/default.conf and
+  # docs/production-client-ip-and-rate-limiting.md. For TLS see
+  # docs/production-deployment.md ("TLS, domain and proxies").
   proxy:
     image: nginx:1.27-alpine
     ports:
-      - "3000:8080"
+      - "${PUBLIC_HTTP_BIND:-80}:8080"
+      # Enable together with deploy/nginx/tls.conf.example:
+      # - "${PUBLIC_HTTPS_BIND:-443}:8443"
     volumes:
       - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    networks: [edge]
     depends_on:
-      - app
+      app:
+        condition: service_healthy
     restart: unless-stopped
+    logging: *logging
 
   app:
     build:
       context: .
-      dockerfile: Dockerfile
+      target: runner
+      args:
+        # Public values inlined into the browser bundle at build time.
+        NEXT_PUBLIC_WHATSAPP_NUMBER: ${NEXT_PUBLIC_WHATSAPP_NUMBER:-}
+        NEXT_PUBLIC_GOOGLE_ANALYTICS_ID: ${NEXT_PUBLIC_GOOGLE_ANALYTICS_ID:-}
+        NEXT_PUBLIC_YANDEX_METRICA_ID: ${NEXT_PUBLIC_YANDEX_METRICA_ID:-}
+    image: ms-shelving-app:${APP_IMAGE_TAG:-latest}
     # Deliberately NOT published to the host: the app trusts X-Real-IP, which
     # is only safe while every request arrives through the proxy service.
     expose:
       - "3000"
     environment:
-      DATABASE_URL: postgresql://ms_shelving:ms_shelving@postgres:5432/ms_shelving?schema=public
-      DIRECT_URL: postgresql://ms_shelving:ms_shelving@postgres:5432/ms_shelving?schema=public
-      APP_URL: http://localhost:3000
-      NEXT_PUBLIC_APP_URL: http://localhost:3000
-      AUTH_URL: http://localhost:3000
-      AUTH_SECRET: ${AUTH_SECRET:-change-me-in-production}
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@ms-stellazh.kz}
-      ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:-ChangeMe123!}
-      REDIS_URL: redis://redis:6379
-      TRUSTED_PROXY_CLIENT_IP_HEADER: x-real-ip
-      NODE_ENV: production
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-ms_shelving}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-ms_shelving}?schema=public
+      - DIRECT_URL=postgresql://${POSTGRES_USER:-ms_shelving}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-ms_shelving}?schema=public
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/0
+      - AUTH_SECRET=${AUTH_SECRET:?AUTH_SECRET is required}
+      - APP_URL=${APP_URL:?APP_URL is required}
+      - AUTH_URL=${APP_URL:?APP_URL is required}
+      # Fixed by the proxy contract with deploy/nginx/default.conf.
+      - TRUSTED_PROXY_CLIENT_IP_HEADER=x-real-ip
+      # Optional — passed through only when set in the env file (an unset
+      # variable is not created in the container; an empty one would fail
+      # validation). ADMIN_INITIAL_PASSWORD is intentionally absent.
+      - SELLER_LEGAL_NAME
+      - SELLER_BIN
+      - SELLER_ADDRESS
+      - SELLER_PHONE
+      - SELLER_EMAIL
+      - SELLER_BANK_NAME
+      - SELLER_IBAN
+      - SELLER_BIC
+      - SELLER_KBE
+      - SELLER_KNP
+      - EMAIL_FROM
+      - MANAGER_EMAIL
+      - SMTP_HOST
+      - SMTP_PORT
+      - SMTP_USER
+      - SMTP_PASSWORD
+      - TELEGRAM_BOT_TOKEN
+      - TELEGRAM_CHAT_ID
+      - WHATSAPP_API_URL
+      - WHATSAPP_API_TOKEN
+      - WHATSAPP_PHONE_NUMBER_ID
+      - AMOCRM_WEBHOOK_URL
+      - BITRIX24_WEBHOOK_URL
+    networks: [edge, backend]
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      # Migrations run to completion before the app starts; a failed
+      # migration (non-zero exit) prevents the app from starting.
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 15s
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
+    logging: *logging
+
+  # One-shot: `prisma migrate deploy`, then exits. The ONLY component that
+  # changes the schema — the app never migrates, so app replicas cannot race.
+  # Prisma additionally holds a PostgreSQL advisory lock while migrating.
+  migrate:
+    build:
+      context: .
+      target: migrator
+    image: ms-shelving-migrate:${APP_IMAGE_TAG:-latest}
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-ms_shelving}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-ms_shelving}?schema=public
+      - DIRECT_URL=postgresql://${POSTGRES_USER:-ms_shelving}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-ms_shelving}?schema=public
+    networks: [backend]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+    logging: *logging
 
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: ms_shelving
-      POSTGRES_PASSWORD: ms_shelving
-      POSTGRES_DB: ms_shelving
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-ms_shelving}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-ms_shelving}
+    # No `ports:` — reachable only from the backend network. Backups run
+    # pg_dump inside this container (scripts/ops/backup-postgres.sh).
     volumes:
-      - ms_shelving_postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
+    networks: [backend]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ms_shelving -d ms_shelving"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    stop_grace_period: 60s
+    restart: unless-stopped
+    logging: *logging
+
+  # Rate-limit counters only (60 s windows) — not business data, so no
+  # persistence and no backup: a restart just opens fresh windows.
+  # See docs/production-deployment.md ("Redis").
+  redis:
+    image: redis:7-alpine
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    command:
+      - sh
+      - -c
+      - >-
+        exec redis-server --save "" --appendonly no
+        --maxmemory 128mb --maxmemory-policy volatile-ttl
+        --requirepass "$$REDIS_PASSWORD"
+    # No `ports:` and no volume.
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    # Loopback only: an unauthenticated Redis reachable from outside could
-    # have its rate-limit counters deleted.
-    ports:
-      - "127.0.0.1:6379:6379"
-    volumes:
-      - ms_shelving_redis_data:/data
-    restart: unless-stopped
-
-volumes:
-  ms_shelving_postgres_data:
-  ms_shelving_redis_data:
+    logging: *logging
