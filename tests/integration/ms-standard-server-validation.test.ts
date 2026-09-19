@@ -60,6 +60,15 @@ describe('server-authoritative MS Standard compatibility', () => {
       { name: '1200 × 2500 × 600, 8 shelves', height: 2500, depth: 600, shelves: 8, sections: [section(1200)] },
       { name: '1500 × 1800 × 600, 6 shelves', height: 1800, depth: 600, shelves: 6, sections: [section(1500)] },
       { name: '1500 × 3000 × 600, 8 shelves', height: 3000, depth: 600, shelves: 8, sections: [section(1500)] },
+      // Height 1000 (ceiling 4) against the unchanged width/depth matrix.
+      // These also prove the height is PRICEABLE, not merely compatible:
+      // calculatePrice fails with MISSING_COMPONENT if no UPRIGHT exists.
+      { name: '700 × 1000 × 300, 2 shelves', height: 1000, depth: 300, shelves: 2, sections: [section(700)] },
+      { name: '700 × 1000 × 800, 4 shelves', height: 1000, depth: 800, shelves: 4, sections: [section(700)] },
+      { name: '1000 × 1000 × 700, 4 shelves', height: 1000, depth: 700, shelves: 4, sections: [section(1000)] },
+      { name: '1200 × 1000 × 600, 4 shelves', height: 1000, depth: 600, shelves: 4, sections: [section(1200)] },
+      { name: '1500 × 1000 × 600, 4 shelves', height: 1000, depth: 600, shelves: 4, sections: [section(1500)] },
+      { name: '1000+1200 × 1000 × 300, 3 shelves', height: 1000, depth: 300, shelves: 3, sections: [section(1000), section(1200)] },
     ];
 
     it.each(validCases)('$name prices successfully', ({ height, depth, shelves, sections }) => {
@@ -93,6 +102,10 @@ describe('server-authoritative MS Standard compatibility', () => {
       { name: '1500 height + 8 shelves', height: 1500, shelves: 8 },
       { name: '1800 height + 7 shelves', height: 1800, shelves: 7 },
       { name: '1800 height + 8 shelves', height: 1800, shelves: 8 },
+      { name: '1000 height + 5 shelves', height: 1000, shelves: 5 },
+      { name: '1000 height + 6 shelves', height: 1000, shelves: 6 },
+      { name: '1000 height + 7 shelves', height: 1000, shelves: 7 },
+      { name: '1000 height + 8 shelves', height: 1000, shelves: 8 },
     ];
 
     it.each(invalidCases)('$name is rejected', ({ height, shelves }) => {
@@ -104,11 +117,45 @@ describe('server-authoritative MS Standard compatibility', () => {
   });
 
   describe('obsolete heights are rejected outright (task §19)', () => {
-    it.each([500, 1000, 1200, 2300, 2400])('height=%dmm is rejected', (height) => {
+    it.each([500, 1200, 2300, 2400])('height=%dmm is rejected', (height) => {
       const result = calculatePrice(baseConfig({ height, depth: 400, shelves: 4, sections: [section(1000)] }), catalog);
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.code).toBe('INCOMPATIBLE_CONFIGURATION');
+    });
+  });
+
+  describe('height 1000 introduces no width/depth rule of its own (task §3)', () => {
+    const stillInvalid = [
+      { name: '700 width + 700 depth', sections: [section(700)], depth: 700 },
+      { name: '1200 width + 800 depth', sections: [section(1200)], depth: 800 },
+      { name: '1500 width + 700 depth', sections: [section(1500)], depth: 700 },
+    ];
+
+    it.each(stillInvalid)('$name is still rejected at height 1000 - for the width/depth reason, not the height', ({ sections, depth }) => {
+      const result = calculatePrice(baseConfig({ height: 1000, depth, shelves: 4, sections }), catalog);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.code).toBe('INCOMPATIBLE_CONFIGURATION');
+    });
+
+    it('the multi-section depth intersection behaves identically at height 1000 and 2000', () => {
+      // 700 + 1000 at depth 800 is in the intersection: valid at both heights.
+      for (const height of [1000, 2000]) {
+        const result = calculatePrice(
+          baseConfig({ height, depth: 800, shelves: 3, sections: [section(700), section(1000)] }),
+          catalog,
+        );
+        expect(result.ok, `depth 800 should stay valid at height ${height}`).toBe(true);
+      }
+      // 1000 + 1200 at depth 800 is outside it: rejected at both heights.
+      for (const height of [1000, 2000]) {
+        const result = calculatePrice(
+          baseConfig({ height, depth: 800, shelves: 3, sections: [section(1000), section(1200)] }),
+          catalog,
+        );
+        expect(result.ok, `depth 800 should stay invalid at height ${height}`).toBe(false);
+      }
     });
   });
 
@@ -202,6 +249,18 @@ describe('invalid order submissions create zero Order rows (task §21)', () => {
     const response = await postOrderRequest(orderBodyWithConfig({ height: 1500, shelves: 8 }));
     expect(response.status).toBe(422);
     expect(countMemoryOrders()).toBe(0);
+  });
+
+  it('1000mm height with 5 shelves is rejected and creates NO order', async () => {
+    const response = await postOrderRequest(orderBodyWithConfig({ height: 1000, shelves: 5 }));
+    expect(response.status).toBe(422);
+    expect(countMemoryOrders()).toBe(0);
+  });
+
+  it('1000mm height with 4 shelves is accepted and creates exactly one order', async () => {
+    const response = await postOrderRequest(orderBodyWithConfig({ height: 1000, shelves: 4 }));
+    expect(response.status).toBe(201);
+    expect(countMemoryOrders()).toBe(1);
   });
 
   it('a multi-section 1000+1200 row at depth 800 is rejected and creates NO order', async () => {

@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { getCatalog, resetCatalogCache, type Catalog } from '@/lib/data/repository';
 import { CATALOG_PRODUCTS } from '@/lib/data/seed-data';
 import { calculatePrice } from '@/lib/pricing';
+import { getMaxShelvesForHeight } from '@/lib/pricing/ms-standard-compatibility';
 import type { ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
 
 let sectionCounter = 0;
@@ -248,7 +249,7 @@ describe('pricing engine', () => {
   // heights must resolve real UPRIGHT/SHELF/BEAM_DEPTH/SIDE_WALL
   // components, not just pass compatibility validation, or the customer
   // hits a "missing component" price failure for a value the UI offers.
-  const MS_STANDARD_HEIGHTS = [1500, 1800, 2000, 2200, 2500, 3000];
+  const MS_STANDARD_HEIGHTS = [1000, 1500, 1800, 2000, 2200, 2500, 3000];
   const MS_STANDARD_DEPTHS = [300, 400, 500, 600, 700, 800];
 
   it('exposes exactly the specified MS Standard height list', () => {
@@ -262,7 +263,12 @@ describe('pricing engine', () => {
   });
 
   it.each(MS_STANDARD_HEIGHTS)('prices a default MS Standard configuration at height=%dmm', (height) => {
-    const result = calculatePrice(baseConfig({ height }), catalog);
+    // baseConfig's default 5 shelves exceeds the ceiling of the shorter
+    // heights (1000mm allows 4), and this case is about component
+    // availability, not the shelf rule — so take the shelf count from the
+    // authoritative matrix rather than hardcoding one that happens to fit.
+    const shelves = Math.min(5, getMaxShelvesForHeight(height) ?? 5);
+    const result = calculatePrice(baseConfig({ height, shelves }), catalog);
     expect(result.ok, `height=${height} should price successfully`).toBe(true);
     if (!result.ok) return;
     expect(result.breakdown.total).toBeGreaterThan(0);

@@ -97,6 +97,12 @@ test.describe('multi-section depth intersection (task §35)', () => {
 });
 
 test.describe('height/shelf cross-limits (task §34)', () => {
+  test('height 1000: shelf stepper stops at 4, cannot reach 5', async ({ page }) => {
+    await gotoConfig(page, { height: 1000, shelves: 4 });
+    await expect(page.getByRole('button', { name: '\u0423\u0432\u0435\u043b\u0438\u0447\u0438\u0442\u044c', exact: true })).toBeDisabled();
+    await expect(page.getByTestId('shelf-count')).toHaveText('4');
+  });
+
   test('height 1500: shelf stepper stops at 6, cannot reach 7 or 8', async ({ page }) => {
     await gotoConfig(page, { height: 1500, shelves: 6 });
     const increase = page.getByRole('button', { name: 'Увеличить', exact: true });
@@ -127,9 +133,91 @@ test.describe('height/shelf cross-limits (task §34)', () => {
     expect(values).toEqual(['2000', '2200', '2500', '3000']);
   });
 
-  test('at shelves<=6, the height select offers all six heights', async ({ page }) => {
-    await gotoConfig(page, { height: 2000, shelves: 6 });
-    expect(await optionValues(heightSelect(page))).toEqual(['1500', '1800', '2000', '2200', '2500', '3000']);
+  test('at shelves=5 or 6, the height select offers every height except 1000', async ({ page }) => {
+    for (const shelves of [5, 6]) {
+      await gotoConfig(page, { height: 2000, shelves });
+      const values = await optionValues(heightSelect(page));
+      expect(values).not.toContain('1000');
+      expect(values).toEqual(['1500', '1800', '2000', '2200', '2500', '3000']);
+    }
+  });
+
+  test('at shelves<=4, the height select offers all seven heights, 1000 first and in numeric order', async ({ page }) => {
+    await gotoConfig(page, { height: 2000, shelves: 4 });
+    expect(await optionValues(heightSelect(page))).toEqual(['1000', '1500', '1800', '2000', '2200', '2500', '3000']);
+  });
+});
+
+test.describe('height 1000 is a real, selectable MS Standard height', () => {
+  test('a share link at height 1000 stays at 1000 and is never normalized up to 1500', async ({ page }) => {
+    await gotoConfig(page, { height: 1000, shelves: 3 });
+    await expect(heightSelect(page)).toHaveValue('1000');
+    await expect(page.getByTestId('shelf-count')).toHaveText('3');
+  });
+
+  test('a share link at height 1000 with 8 shelves clamps the shelves to 4, keeping the height', async ({ page }) => {
+    await gotoConfig(page, { height: 1000, shelves: 8 });
+    await expect(heightSelect(page)).toHaveValue('1000');
+    await expect(page.getByTestId('shelf-count')).toHaveText('4');
+  });
+
+  test('persisted state at height 1000 survives a reload unchanged', async ({ page }) => {
+    // Arrive via a share link, then reload with no query at all: what comes
+    // back is the persisted (localStorage) configuration, which must not
+    // normalize 1000 away the way it did while 1000 was invalid.
+    await gotoConfig(page, { height: 1000, shelves: 4, depth: 700 });
+    await expect(heightSelect(page)).toHaveValue('1000');
+
+    await page.goto('/configurator');
+    await expect(widthSelect(page)).toBeVisible();
+    await expect(heightSelect(page)).toHaveValue('1000');
+    await expect(depthSelect(page)).toHaveValue('700');
+    await expect(page.getByTestId('shelf-count')).toHaveText('4');
+  });
+
+  test('height 1000 imposes no depth restriction: 1000-wide section still offers all six depths', async ({ page }) => {
+    await gotoConfig(page, { height: 1000, shelves: 4, depth: 400 });
+    expect(await optionValues(depthSelect(page))).toEqual(['300', '400', '500', '600', '700', '800']);
+  });
+
+  test('height 1000 imposes no width restriction: depth 400 still offers all four widths', async ({ page }) => {
+    await gotoConfig(page, { height: 1000, shelves: 4, depth: 400 });
+    expect(await optionValues(widthSelect(page))).toEqual(['700', '1000', '1200', '1500']);
+  });
+
+  // The height drag handle takes its allowed values from the very same
+  // getAllowedHeightsForShelfCount the select uses (see ConfiguratorClient's
+  // allowedDimensions), so its announced range is the observable proof that
+  // drag and select cannot drift apart.
+  test('the height drag handle exposes 1000 as its lowest target when shelves <= 4', async ({ page }) => {
+    await gotoConfig(page, { height: 2000, shelves: 4 });
+    await expect(page.locator('button[data-axis="height"]')).toHaveAttribute('aria-valuemin', '1000');
+  });
+
+  test('the height drag handle does NOT expose 1000 when shelves > 4', async ({ page }) => {
+    for (const [shelves, expectedMin] of [[5, '1500'], [6, '1500'], [8, '2000']] as const) {
+      await gotoConfig(page, { height: 2000, shelves });
+      await expect(page.locator('button[data-axis="height"]')).toHaveAttribute('aria-valuemin', expectedMin);
+    }
+  });
+
+  test('keyboard-stepping the height handle down from 1500 lands on 1000 and commits it', async ({ page }) => {
+    await gotoConfig(page, { height: 1500, shelves: 4 });
+    const heightHandle = page.locator('button[data-axis="height"]');
+    await heightHandle.focus();
+    await heightHandle.press('ArrowDown');
+    // One commit, one settled value — no lost update, no bounce back to 1500.
+    await expect(heightHandle).toHaveAttribute('aria-valuenow', '1000');
+    await expect(heightSelect(page)).toHaveValue('1000');
+    await page.waitForTimeout(500);
+    await expect(heightHandle).toHaveAttribute('aria-valuenow', '1000');
+  });
+
+  test('a real server price is shown at height 1000 (it prices end to end)', async ({ page }) => {
+    await gotoConfig(page, { height: 1000, shelves: 4 });
+    // Same locator the other configurator specs use for "the server returned
+    // a real total" \u2014 the page renders no price at all when pricing fails.
+    await expect(page.locator('text=/[\\d\\s]+\\s?\u20b8/').first()).toBeVisible({ timeout: 15_000 });
   });
 });
 
@@ -137,7 +225,8 @@ test.describe('obsolete heights never appear (task §36)', () => {
   test('the height select contains none of the old heights', async ({ page }) => {
     await gotoConfig(page);
     const values = await optionValues(heightSelect(page));
-    for (const obsolete of ['500', '1000', '1200', '2300', '2400']) {
+    // 1000 is deliberately not in this list any more - it is a real height.
+    for (const obsolete of ['500', '1200', '2300', '2400']) {
       expect(values).not.toContain(obsolete);
     }
   });
@@ -151,11 +240,11 @@ test.describe('obsolete heights never appear (task §36)', () => {
     await expect(shelvesValue).toHaveText('8');
   });
 
-  test('a share link with an obsolete height (1200) normalizes to 1500 and clamps shelves to 6', async ({ page }) => {
+  test('a share link with an obsolete height (1200) normalizes to 1000 (now the nearest) and clamps shelves to 4', async ({ page }) => {
     await gotoConfig(page, { height: 1200, shelves: 8 });
-    await expect(heightSelect(page)).toHaveValue('1500');
+    await expect(heightSelect(page)).toHaveValue('1000');
     const shelvesValue = page.getByTestId('shelf-count');
-    await expect(shelvesValue).toHaveText('6');
+    await expect(shelvesValue).toHaveText('4');
   });
 });
 

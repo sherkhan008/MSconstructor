@@ -208,12 +208,13 @@ export const MODELS: ProductModel[] = [
     // themselves a claim that every width×depth or height×shelves
     // combination they imply is actually valid — the compatibility module
     // is what enforces that everywhere (UI selects, drag allowedValues,
-    // normalization, server validation). Old heights 500/1000/1200/2300/
-    // 2400 are obsolete for MS Standard as of this matrix and were removed
-    // here; they remain valid HeightOption rows for other models (e.g.
-    // ms-strong still uses 2400) — see HEIGHTS above, never delete a global
-    // dimension row just because one model stops using its value.
-    heights: [1500, 1800, 2000, 2200, 2500, 3000],
+    // normalization, server validation). 1000mm is a real MS Standard
+    // height again (shelf ceiling 4 — see HEIGHT_MAX_SHELVES); heights
+    // 500/1200/2300/2400 remain obsolete for MS Standard and stay absent
+    // here, while keeping their valid HeightOption rows for other models
+    // (e.g. ms-strong still uses 2400) — see HEIGHTS above, never delete a
+    // global dimension row just because one model stops using its value.
+    heights: [1000, 1500, 1800, 2000, 2200, 2500, 3000],
     widths: [700, 1000, 1200, 1500],
     depths: [300, 400, 500, 600, 700, 800],
     // Customer configurator restriction — PERFORATED/GALVANIZED components
