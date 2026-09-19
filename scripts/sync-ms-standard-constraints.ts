@@ -6,6 +6,7 @@ import {
   MS_STANDARD_ABSOLUTE_MAX_SHELVES,
   MS_STANDARD_WIDTHS,
 } from '../src/lib/pricing/ms-standard-compatibility';
+import { HEIGHTS } from '../src/lib/data/seed-data';
 
 /**
  * Non-destructive synchronization of the `ms-standard` ProductModel row's
@@ -28,9 +29,18 @@ import {
  *   - touch Component.sellingPrice / purchasePrice, Accessory prices,
  *     markupPercent / markupFixed, VAT settings, or discounts — this is a
  *     configuration-availability fix, not a pricing update;
- *   - delete any global HeightOption/WidthOption/DepthOption row — those
- *     stay exactly as they are (other models, e.g. ms-strong, still
- *     reference some of the heights MS Standard itself no longer offers).
+ *   - delete or deactivate any global HeightOption/WidthOption/DepthOption
+ *     row — those stay exactly as they are (other models, e.g. ms-strong,
+ *     still reference some of the heights MS Standard itself no longer
+ *     offers). The one global-dimension write it does make is additive and
+ *     narrow: a height the matrix REQUIRES but the database is missing (or
+ *     has deactivated) is created/reactivated, because validateCompatibility
+ *     rejects any configuration whose global HeightOption row is absent or
+ *     inactive — a matrix height with no active row would be offered by the
+ *     UI and then refused by the server;
+ *   - create any Component, or write any price. Whether each matrix height
+ *     actually has a priceable UPRIGHT behind it is AUDITED and reported,
+ *     never fixed by inventing a component or a price.
  *
  * Safe to run multiple times: a row already matching the target values is
  * reported as "already correct" and left untouched — running this against
@@ -94,6 +104,76 @@ async function syncModelMetadata() {
   console.info('[model] Applied.');
 }
 
+/**
+ * Every height the matrix offers must have an ACTIVE global HeightOption row,
+ * or validateCompatibility (src/lib/pricing/compatibility.ts) rejects the
+ * configuration even though the matrix considers it valid. prisma/seed.ts
+ * only ever creates rows (`update: {}`), so a database seeded before a height
+ * joined the matrix never gains it from a re-seed — this is what reaches it.
+ *
+ * Strictly additive: it creates a missing row and reactivates a deactivated
+ * one, and never touches a row for a value outside the matrix (those belong
+ * to other models). priceAdjustment comes from the seed catalog's own
+ * definition for that dimension — a dimension surcharge, not a component
+ * price, and 0 for every current height.
+ */
+async function ensureMatrixHeightOptions() {
+  for (const value of TARGET_HEIGHTS) {
+    const existing = await prisma.heightOption.findUnique({ where: { value } });
+    if (existing?.active) {
+      console.info(`[height] ${value} мм: active HeightOption row present — no change needed.`);
+      continue;
+    }
+    if (existing) {
+      await prisma.heightOption.update({ where: { value }, data: { active: true } });
+      console.info(`[height] ${value} мм: existing HeightOption row was inactive — reactivated (required by the matrix).`);
+      continue;
+    }
+    const seeded = HEIGHTS.find((h) => h.value === value);
+    await prisma.heightOption.create({
+      data: {
+        value,
+        label: seeded?.label ?? `${value} мм`,
+        priceAdjustment: seeded?.priceAdjustment ?? 0,
+        leadTimeDays: seeded?.leadTimeDays ?? 2,
+        sortOrder: seeded?.sortOrder ?? 0,
+        active: true,
+      },
+    });
+    console.info(`[height] ${value} мм: HeightOption row was missing — created (required by the matrix).`);
+  }
+}
+
+/**
+ * Report-only readiness audit. A height can be perfectly valid per the matrix
+ * and still be unsellable if no UPRIGHT component exists for it — buildBom
+ * treats UPRIGHT as critical (src/lib/pricing/bom.ts), so the configuration
+ * would look selectable and then fail to price. Deliberately does NOT create
+ * the component: that would mean inventing a supplier price, which is a
+ * separate, human-reviewed import.
+ */
+async function auditUprightAvailability(): Promise<number[]> {
+  const missing: number[] = [];
+  for (const value of TARGET_HEIGHTS) {
+    const upright = await prisma.component.findFirst({
+      where: {
+        type: 'UPRIGHT',
+        height: value,
+        active: true,
+        inStock: true,
+        OR: [{ models: { isEmpty: true } }, { models: { has: 'ms-standard' } }],
+      },
+    });
+    if (upright) {
+      console.info(`[upright] ${value} мм: component "${upright.sku}" available.`);
+    } else {
+      missing.push(value);
+      console.error(`[upright] ${value} мм: NO active in-stock UPRIGHT component for ms-standard.`);
+    }
+  }
+  return missing;
+}
+
 async function unpublishObsoleteProducts() {
   for (const slug of OBSOLETE_PUBLISHED_PRODUCT_SLUGS) {
     const product = await prisma.product.findUnique({ where: { slug } });
@@ -114,10 +194,24 @@ async function main() {
   console.info('=== MS Standard configuration-availability sync ===\n');
   await syncModelMetadata();
   console.info('');
+  await ensureMatrixHeightOptions();
+  console.info('');
   await unpublishObsoleteProducts();
-  console.info('\nDone. Orders, order snapshots, prices (selling/purchase/markup/VAT), and global');
-  console.info('HeightOption/WidthOption/DepthOption rows were not touched.');
+  console.info('');
+  const missingUprights = await auditUprightAvailability();
+
+  console.info('\nDone. Orders, order snapshots and prices (selling/purchase/markup/VAT) were not');
+  console.info('touched, and no dimension row was deleted or deactivated.');
   console.info('Safe to run again — an already-synced database reports nothing left to change.');
+
+  if (missingUprights.length > 0) {
+    console.error(
+      `\nBLOCKER: heights ${missingUprights.join(', ')} мм are valid per the matrix but have no UPRIGHT component,`,
+    );
+    console.error('so they would be selectable in the configurator and then fail to price. Import the');
+    console.error('supplier price / component for those heights before offering them. Nothing was invented here.');
+    process.exitCode = 1;
+  }
 }
 
 main()

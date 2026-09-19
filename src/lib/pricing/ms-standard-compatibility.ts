@@ -23,7 +23,7 @@ import type { ShelvingSection } from '@/lib/types/domain';
  * task this module was built for is explicit that no such rule exists.
  */
 
-export const MS_STANDARD_HEIGHTS = [1500, 1800, 2000, 2200, 2500, 3000] as const;
+export const MS_STANDARD_HEIGHTS = [1000, 1500, 1800, 2000, 2200, 2500, 3000] as const;
 export const MS_STANDARD_WIDTHS = [700, 1000, 1200, 1500] as const;
 /** Union of every depth valid for at least one width — the flat
  * ProductModel.depths list. Which of these are valid for a *specific*
@@ -49,11 +49,15 @@ const WIDTH_DEPTH_MATRIX: Record<(typeof MS_STANDARD_WIDTHS)[number], readonly n
   1500: [300, 400, 500, 600],
 };
 
-/** Heights at or below this get the lower (6) shelf ceiling; every other
- * valid height gets the higher (8) ceiling. Not a formula — an explicit
- * two-tier table, since nothing in the matrix suggests a smooth function
- * of height, only "short racks" vs. "everything else". */
+/** The shelf ceiling for each valid height, stated explicitly per height.
+ * Deliberately NOT a formula: the ceilings are not a smooth (or even
+ * monotonic-in-steps) function of height — 1000mm allows 4, 1500/1800 allow
+ * 6, and everything from 2000mm up allows 8 — so a threshold expression
+ * such as `height <= 1800 ? 6 : 8` would silently give 1000mm the wrong
+ * ceiling. Every height in MS_STANDARD_HEIGHTS must have an entry here;
+ * the Record type makes a missing one a compile error. */
 const HEIGHT_MAX_SHELVES: Record<(typeof MS_STANDARD_HEIGHTS)[number], number> = {
+  1000: 4,
   1500: 6,
   1800: 6,
   2000: 8,
