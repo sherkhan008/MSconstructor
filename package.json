@@ -22,7 +22,9 @@
     "db:reset": "prisma migrate reset --force",
     "db:repair-canonical-ids": "tsx scripts/repair-canonical-catalog-ids.ts",
     "db:sync-ms-standard-constraints": "tsx scripts/sync-ms-standard-constraints.ts",
-    "db:sync-ms-standard-fasteners": "tsx scripts/sync-ms-standard-fasteners.ts"
+    "db:sync-ms-standard-fasteners": "tsx scripts/sync-ms-standard-fasteners.ts",
+    "db:sync-catalog-products": "tsx scripts/sync-catalog-products.ts",
+    "db:import-supplier-prices": "tsx scripts/import-supplier-prices.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

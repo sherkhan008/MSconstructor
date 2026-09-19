@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
-import { getCatalog, stripModelSecrets } from '@/lib/data/repository';
+import { findColor, getCatalog, stripModelSecrets } from '@/lib/data/repository';
+import { filterPubliclyVisibleModels, filterPubliclyVisibleProducts } from '@/lib/config/launch-visibility';
 import { calculatePrice } from '@/lib/pricing';
 import { catalogProductToConfiguration } from '@/lib/catalog-product-configuration';
 import { buildMetadata, breadcrumbJsonLd, jsonLdScriptProps } from '@/lib/seo';
 import { Container } from '@/components/ui/Container';
+import { CatalogRackPreview } from '@/components/catalog/CatalogRackPreview';
 import { ProductCard } from '@/components/catalog/ProductCard';
 import { FilterForm } from '@/components/catalog/FilterForm';
 
@@ -29,7 +31,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
 
   const catalog = await getCatalog();
 
-  let products = catalog.products.filter((p) => p.published);
+  let products = filterPubliclyVisibleProducts(catalog.products).filter((p) => p.published);
   if (modelFilter) products = products.filter((p) => p.modelSlug === modelFilter);
   if (useCaseFilter) products = products.filter((p) => p.useCases.includes(useCaseFilter));
   if (availabilityFilter === 'in_stock') products = products.filter((p) => p.inStock);
@@ -85,7 +87,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
           // raw internal ProductModel (markupPercent/markupFixed) must never
           // reach it. stripModelSecrets() is the same boundary
           // toPublicCatalog() uses — see src/lib/data/repository.ts.
-          models={catalog.models.map(stripModelSecrets)}
+          models={filterPubliclyVisibleModels(catalog.models).map(stripModelSecrets)}
           useCases={catalog.useCases}
           defaults={{ model: modelFilter, useCase: useCaseFilter, availability: availabilityFilter, sort }}
         />
@@ -101,7 +103,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
               product={product}
               configuration={configuration}
               modelName={modelName}
-              priceTotal={priceTotal}
+              priceTotal={priceTotal} visual={<CatalogRackPreview config={configuration} color={findColor(catalog, product.color)} className="h-48 w-full border-b border-line" />}
             />
           ))}
         </div>

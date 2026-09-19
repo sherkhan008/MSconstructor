@@ -1,3 +1,5 @@
+import { notFound } from 'next/navigation';
+import { filterPubliclyVisibleModels, isModelSlugPubliclyVisible } from '@/lib/config/launch-visibility';
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { getCatalog } from '@/lib/data/repository';
@@ -16,15 +18,15 @@ export const metadata: Metadata = buildMetadata({
 // during `next build`. See getCatalog() in src/lib/data/repository.ts.
 export const dynamic = 'force-dynamic';
 
-/** The customer configurator currently offers MS Standard only — the other
- * models stay fully intact server-side (pricing, BOM, catalog browsing) and
- * are only excluded from this one page's model list. */
-const CONFIGURATOR_MODEL_SLUG = 'ms-standard';
-
-export default async function ConfiguratorPage() {
+export default async function ConfiguratorPage({ searchParams }: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const requestedModels = Array.isArray(params.model) ? params.model : params.model ? [params.model] : [];
+  if (requestedModels.some(slug => !isModelSlugPubliclyVisible(slug))) notFound();
   const catalog = await getCatalog();
   const publicCatalog = toPublicCatalog(catalog);
-  publicCatalog.models = publicCatalog.models.filter((m) => m.slug === CONFIGURATOR_MODEL_SLUG);
+  publicCatalog.models = filterPubliclyVisibleModels(publicCatalog.models);
 
   return (
     <Suspense fallback={<ConfiguratorFallback />}>

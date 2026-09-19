@@ -96,7 +96,10 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
         </div>
       )}
 
-      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-2.5 sm:px-6 lg:px-8">
+      <div
+        className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-2.5 sm:px-6 lg:px-8"
+        data-fab-avoid
+      >
         <button
           type="button"
           onClick={() => setDetailsOpen((o) => !o)}

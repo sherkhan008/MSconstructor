@@ -26,3 +26,6 @@ backups
 *.dump
 *.dump.partial
 .deploy
+
+# Private supplier pricing supplied out-of-band; never inside an image.
+private-data

@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { getCatalog } from '@/lib/data/repository';
+import { isModelSlugPubliclyVisible } from '@/lib/config/launch-visibility';
 import { appUrl } from '@/lib/env';
 
 // Reads the runtime catalog, so it renders per request — never prerendered
@@ -27,7 +28,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
 
   const modelRoutes: MetadataRoute.Sitemap = catalog.models
-    .filter((m) => m.active)
+    .filter((m) => m.active && isModelSlugPubliclyVisible(m.slug))
     .map((model) => ({
       url: `${appUrl}/catalog/${model.slug}`,
       lastModified: now,

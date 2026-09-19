@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { getCatalog } from '@/lib/data/repository';
+import { findColor, getCatalog } from '@/lib/data/repository';
+import { isModelSlugPubliclyVisible } from '@/lib/config/launch-visibility';
 import { calculatePrice } from '@/lib/pricing';
 import { catalogProductToConfiguration } from '@/lib/catalog-product-configuration';
 import { buildMetadata, breadcrumbJsonLd, faqJsonLd, jsonLdScriptProps, productJsonLd } from '@/lib/seo';
@@ -11,6 +12,7 @@ import { appUrl } from '@/lib/env';
 import { Container } from '@/components/ui/Container';
 import { LinkButton } from '@/components/ui/Button';
 import { ProductImage } from '@/components/ui/ProductImage';
+import { CatalogRackPreview } from '@/components/catalog/CatalogRackPreview';
 import { ProductCard } from '@/components/catalog/ProductCard';
 
 // Rendered per request from the runtime catalog — no generateStaticParams, so
@@ -22,7 +24,9 @@ export async function generateMetadata({ params }: { params: Promise<{ model: st
   const { model: slug } = await params;
   const catalog = await getCatalog();
   const model = catalog.models.find((m) => m.slug === slug);
-  if (!model) return buildMetadata({ title: 'Модель не найдена', description: '', path: `/catalog/${slug}`, noIndex: true });
+  if (!model || !isModelSlugPubliclyVisible(model.slug)) {
+    return buildMetadata({ title: 'Модель не найдена', description: '', path: `/catalog/${slug}`, noIndex: true });
+  }
 
   return buildMetadata({ title: model.seo.title, description: model.seo.description, path: `/catalog/${model.slug}`, image: model.image });
 }
@@ -46,7 +50,7 @@ export default async function ModelPage({ params }: { params: Promise<{ model: s
   const { model: slug } = await params;
   const catalog = await getCatalog();
   const model = catalog.models.find((m) => m.slug === slug);
-  if (!model) notFound();
+  if (!model || !isModelSlugPubliclyVisible(model.slug)) notFound();
 
   const products = catalog.products.filter((p) => p.modelSlug === model.slug && p.published);
   const cards = products.map((product) => {
@@ -55,7 +59,7 @@ export default async function ModelPage({ params }: { params: Promise<{ model: s
     return { product, configuration, priceTotal: result.ok ? result.breakdown.total : null };
   });
 
-  const relatedModels = catalog.models.filter((m) => m.slug !== model.slug);
+  const relatedModels = catalog.models.filter((m) => m.slug !== model.slug && isModelSlugPubliclyVisible(m.slug));
   const cheapestPrice = cards.reduce<number | null>((min, c) => {
     if (c.priceTotal === null) return min;
     return min === null ? c.priceTotal : Math.min(min, c.priceTotal);
@@ -93,10 +97,8 @@ export default async function ModelPage({ params }: { params: Promise<{ model: s
       <script {...jsonLdScriptProps(faqJsonLd(FAQ))} type="application/ld+json" />
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {model.gallery.map((src) => (
-            <ProductImage key={src} src={src} alt={model.name.ru} className="aspect-[4/3] w-full border border-line object-cover" />
-          ))}
+        <div>
+          {cards[0] && <CatalogRackPreview config={cards[0].configuration} color={findColor(catalog, cards[0].product.color)} className="aspect-[4/3] w-full border border-line" />}
         </div>
 
         <div>
@@ -109,7 +111,7 @@ export default async function ModelPage({ params }: { params: Promise<{ model: s
             </p>
           )}
 
-          <div className="mt-6 flex flex-wrap gap-3">
+          <div className="mt-6 flex flex-wrap gap-3" data-fab-avoid>
             <LinkButton href={`/configurator?model=${model.slug}`} size="lg">
               Настроить в конфигураторе
             </LinkButton>
@@ -140,7 +142,7 @@ export default async function ModelPage({ params }: { params: Promise<{ model: s
           <h2 className="font-display text-2xl">Готовые конфигурации {model.name.ru}</h2>
           <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {cards.map(({ product, configuration, priceTotal }) => (
-              <ProductCard key={product.id} product={product} configuration={configuration} modelName={model.name.ru} priceTotal={priceTotal} />
+              <ProductCard key={product.id} product={product} configuration={configuration} modelName={model.name.ru} priceTotal={priceTotal} visual={<CatalogRackPreview config={configuration} color={findColor(catalog, product.color)} className="h-48 w-full border-b border-line" />} />
             ))}
           </div>
         </section>

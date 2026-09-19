@@ -77,6 +77,7 @@ afterEach(() => {
   vi.useRealTimers();
   vi.resetModules();
   vi.doUnmock('@/lib/data/db-repository');
+  vi.doUnmock('@/lib/config/launch-visibility');
 });
 
 describe('/catalog/[model] rendering strategy', () => {
@@ -113,6 +114,10 @@ describe('/catalog/[model] against the runtime catalog', () => {
 
   it('a model added to the database after the page was loaded renders once the catalog cache refreshes — no rebuild', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
+    // This test is about cache-refresh timing, not the temporary launch
+    // allowlist (src/lib/config/launch-visibility.ts) — bypass it so an
+    // arbitrary new slug isn't blocked as "not launched yet".
+    vi.doMock('@/lib/config/launch-visibility', () => ({ isModelSlugPubliclyVisible: () => true }));
     const { pageModule } = await loadPage();
     const { CATALOG_CACHE_TTL_MS } = await import('@/lib/data/repository');
 

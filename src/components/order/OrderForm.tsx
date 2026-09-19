@@ -193,9 +193,11 @@ export function OrderForm({ deliveryMethods = [] }: { deliveryMethods?: Delivery
           </div>
         )}
 
-        <Button type="submit" size="lg" disabled={isSubmitting}>
-          {isSubmitting ? 'Оформляем заказ…' : 'Подтвердить заказ'}
-        </Button>
+        <div data-fab-avoid>
+          <Button type="submit" size="lg" disabled={isSubmitting}>
+            {isSubmitting ? 'Оформляем заказ…' : 'Подтвердить заказ'}
+          </Button>
+        </div>
       </form>
 
       <aside className="flex flex-col gap-3 border border-line bg-surface p-5 lg:sticky lg:top-20">

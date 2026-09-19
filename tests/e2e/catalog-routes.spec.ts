@@ -26,6 +26,18 @@ test('an unknown catalog model returns HTTP 404 and is not indexable', async ({ 
   expect(await response.text()).toMatch(/<meta name="robots" content="noindex/);
 });
 
+// Temporary public-launch allowlist (src/lib/config/launch-visibility.ts):
+// only ms-standard is public for now. ms-strong/archive-ms still exist
+// internally but a direct route to them must behave like an unknown model,
+// not an unfinished placeholder page.
+for (const hiddenSlug of ['ms-strong', 'archive-ms']) {
+  test(`/catalog/${hiddenSlug} is hidden for launch and returns HTTP 404`, async ({ request }) => {
+    const response = await request.get(`/catalog/${hiddenSlug}`);
+    expect(response.status()).toBe(404);
+    expect(await response.text()).toMatch(/<meta name="robots" content="noindex/);
+  });
+}
+
 // Dynamic routes stream resolved metadata to JS-capable clients; crawlers that
 // only read HTML (Next's htmlLimitedBots list, which includes Yandex and Bing)
 // must get it inside <head>.
@@ -50,5 +62,8 @@ test('/catalog is server-rendered', async ({ request }) => {
 test('the sitemap is generated at request time and lists catalog model pages', async ({ request }) => {
   const response = await request.get('/sitemap.xml');
   expect(response.status()).toBe(200);
-  expect(await response.text()).toMatch(/<loc>[^<]*\/catalog\/ms-standard<\/loc>/);
+  const body = await response.text();
+  expect(body).toMatch(/<loc>[^<]*\/catalog\/ms-standard<\/loc>/);
+  expect(body).not.toContain('/catalog/ms-strong');
+  expect(body).not.toContain('/catalog/archive-ms');
 });

@@ -1,11 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { getCatalog } from '@/lib/data/repository';
+import { findColor, getCatalog } from '@/lib/data/repository';
 import { calculatePrice } from '@/lib/pricing';
+import { ShelvingPreview } from '@/components/configurator/ShelvingPreview';
 import { catalogProductToConfiguration } from '@/lib/catalog-product-configuration';
 import { formatPrice } from '@/lib/money';
 import { buildMetadata, jsonLdScriptProps, organizationJsonLd } from '@/lib/seo';
 import { site } from '@/lib/config/site';
+import { filterPubliclyVisibleModels, filterPubliclyVisibleProducts } from '@/lib/config/launch-visibility';
 import { whatsAppContactUrl } from '@/lib/whatsapp';
 import { Container } from '@/components/ui/Container';
 import { Badge } from '@/components/ui/Badge';
@@ -21,7 +23,7 @@ export const metadata: Metadata = buildMetadata({
 });
 
 const ADVANTAGES = [
-  { title: 'До 300 кг на полку', description: 'Усиленные модели MS Стронг для тяжёлых складских нагрузок' },
+  { title: 'До 150 кг на полку', description: 'MS Стандарт для склада, архива и офиса' },
   { title: 'Модульная конструкция', description: 'Наращивайте секции и полки по мере роста склада' },
   { title: 'Регулируемый шаг полок', description: 'Настройте высоту под конкретные грузы без сверления' },
   { title: 'Быстрая сборка', description: 'Болтовое соединение — без сварки, силами одной бригады' },
@@ -32,16 +34,30 @@ const ADVANTAGES = [
 ];
 
 const HOW_IT_WORKS = [
-  { step: 1, title: 'Выберите модель', description: 'MS Стандарт, MS Стронг или архивный стеллаж' },
+  { step: 1, title: 'Выберите модель', description: 'MS Стандарт для ваших задач' },
   { step: 2, title: 'Задайте размеры', description: 'Высота, ширина, глубина и число полок' },
   { step: 3, title: 'Добавьте аксессуары', description: 'Стенки, разделители, контейнеры и сборку' },
   { step: 4, title: 'Получите цену', description: 'Расчёт происходит мгновенно на сервере' },
   { step: 5, title: 'Оформите заказ', description: 'Онлайн, по телефону или в WhatsApp' },
 ];
 
+/** The homepage shows the three most popular ready configurations — which
+ * three is catalog data (`featured` + `popularity`), never a list of slugs
+ * written into this page. */
+const POPULAR_CONFIGURATION_COUNT = 3;
+
 // Reads the runtime catalog, so it renders per request — never prerendered
 // during `next build`. See getCatalog() in src/lib/data/repository.ts.
 export const dynamic = 'force-dynamic';
+
+/** "1000–3000 мм" from a model's supported values. The range is a span, not
+ * a claim that every combination inside it is valid — the compatibility rules
+ * (src/lib/pricing/ms-standard-compatibility.ts) stay the only authority on
+ * which width×depth×height×shelves combinations the customer can actually
+ * order, which is why the panel sends them to the configurator to pick. */
+function dimensionRange(values: number[]): string {
+  return `${Math.min(...values)}–${Math.max(...values)} мм`;
+}
 
 const USE_CASE_ICONS: Record<string, string> = {
   warehouse: '🏭',
@@ -57,7 +73,11 @@ const USE_CASE_ICONS: Record<string, string> = {
 
 export default async function HomePage() {
   const catalog = await getCatalog();
-  const featuredProducts = catalog.products.filter((p) => p.featured).slice(0, 6);
+  const publicModels = filterPubliclyVisibleModels(catalog.models);
+  const featuredProducts = filterPubliclyVisibleProducts(catalog.products)
+    .filter((p) => p.featured)
+    .sort((a, b) => b.popularity - a.popularity)
+    .slice(0, POPULAR_CONFIGURATION_COUNT);
 
   const cards = featuredProducts.map((product) => {
     const configuration = catalogProductToConfiguration(product);
@@ -66,8 +86,24 @@ export default async function HomePage() {
     return {
       product,
       configuration,
+      color: findColor(catalog, product.color),
       modelName: model?.name.ru ?? product.modelSlug,
       priceTotal: result.ok ? result.breakdown.total : null,
+    };
+  });
+
+  // Each public model gets one feature panel, rendered from its own catalog
+  // row: the dimension ranges below are the model's supported values, and the
+  // visual is its most popular real configuration drawn by the configurator's
+  // own renderer — no separate compatibility table, no static product shot.
+  const showcases = publicModels.map((model) => {
+    const product = featuredProducts.find((p) => p.modelSlug === model.slug);
+    return {
+      model,
+      // A fresh configuration instance per showcase, never the object a
+      // ProductCard below is already holding.
+      configuration: product ? catalogProductToConfiguration(product) : null,
+      color: product ? findColor(catalog, product.color) : undefined,
     };
   });
 
@@ -92,7 +128,7 @@ export default async function HomePage() {
               Модульные металлические стеллажи для склада, архива, гаража и офиса. Задайте размеры, нагрузку и
               комплектацию — итоговая стоимость рассчитывается сразу.
             </p>
-            <div className="mt-6 flex flex-wrap gap-3">
+            <div className="mt-6 flex flex-wrap gap-3" data-fab-avoid>
               <LinkButton href="/configurator" size="lg">
                 Открыть конфигуратор
               </LinkButton>
@@ -101,15 +137,17 @@ export default async function HomePage() {
               </LinkButton>
             </div>
             {startingPrice !== null && (
-              <p className="tech-label mt-6">Стеллажи от {formatPrice(startingPrice)} · нагрузка до 300 кг на полку</p>
+              <p className="tech-label mt-6">Стеллажи от {formatPrice(startingPrice)} · нагрузка до 150 кг на полку</p>
             )}
           </div>
-          <ProductImage
-            src="/images/models/ms-standard.svg"
-            alt="Стеллаж MS Стандарт на складе"
-            className="aspect-[4/3] w-full border border-line object-cover"
-            priority
-          />
+          {showcases[0]?.configuration && (
+            <ShelvingPreview
+              config={showcases[0].configuration}
+              color={showcases[0].color}
+              presentation
+              className="aspect-[4/3] w-full"
+            />
+          )}
         </Container>
       </section>
 
@@ -132,20 +170,52 @@ export default async function HomePage() {
       <section className="bg-surface-muted">
         <Container className="py-14">
           <h2 className="font-display text-3xl">Категории стеллажей</h2>
-          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {catalog.models.map((model) => (
-              <Link
-                key={model.slug}
-                href={`/catalog/${model.slug}`}
-                className="group flex flex-col overflow-hidden border border-line bg-surface transition-colors hover:border-foreground"
-              >
-                <ProductImage src={model.image} alt={model.name.ru} className="h-44 w-full object-cover" />
-                <div className="p-4">
-                  <h3 className="font-display text-xl">{model.name.ru}</h3>
-                  <p className="mt-1 text-sm text-steel">{model.shortDescription.ru}</p>
-                  <span className="tech-label mt-3 inline-block text-blueprint group-hover:underline">Смотреть модели →</span>
+          <div className="mt-6 flex flex-col gap-6">
+            {showcases.map(({ model, configuration, color }) => (
+              <article key={model.slug} className="border border-line bg-surface">
+                <div className="grid grid-cols-1 lg:grid-cols-2">
+                  <div className="flex flex-col gap-6 p-6 sm:p-8 lg:p-10">
+                    <div>
+                      <h3 className="font-display text-3xl sm:text-4xl">{model.name.ru}</h3>
+                      <p className="mt-3 max-w-xl text-steel">{model.description.ru}</p>
+                    </div>
+
+                    <dl className="grid grid-cols-2 gap-x-8 gap-y-5 border-t border-line pt-6 sm:grid-cols-4 lg:grid-cols-2">
+                      {[
+                        { label: 'Высота', value: dimensionRange(model.heights) },
+                        { label: 'Ширина', value: dimensionRange(model.widths) },
+                        { label: 'Глубина', value: dimensionRange(model.depths) },
+                        { label: 'Нагрузка', value: `до ${model.maxLoadKg} кг/полку` },
+                      ].map((spec) => (
+                        <div key={spec.label}>
+                          <dt className="tech-label">{spec.label}</dt>
+                          <dd className="mono mt-1 text-base">{spec.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                    <p className="text-xs text-steel">
+                      Доступные сочетания размеров проверяются в конфигураторе.
+                    </p>
+
+                    <div className="mt-auto flex flex-col gap-3 sm:flex-row" data-fab-avoid>
+                      <LinkButton href={`/configurator?model=${model.slug}`} size="lg">
+                        Настроить стеллаж
+                      </LinkButton>
+                      <LinkButton href={`/catalog/${model.slug}`} variant="outline" size="lg">
+                        Смотреть модели
+                      </LinkButton>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-line lg:border-l lg:border-t-0">
+                    {configuration ? (
+                      <ShelvingPreview config={configuration} color={color} className="aspect-[4/3] w-full" />
+                    ) : (
+                      <ProductImage src={model.image} alt={model.name.ru} className="aspect-[4/3] w-full object-cover" />
+                    )}
+                  </div>
                 </div>
-              </Link>
+              </article>
             ))}
           </div>
         </Container>
@@ -177,13 +247,24 @@ export default async function HomePage() {
             </Link>
           </div>
           <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {cards.map(({ product, configuration, modelName, priceTotal }) => (
+            {cards.map(({ product, configuration, color, modelName, priceTotal }) => (
               <ProductCard
                 key={product.id}
                 product={product}
                 configuration={configuration}
                 modelName={modelName}
                 priceTotal={priceTotal}
+                // Drawn from this card's own configuration, so the rack a
+                // customer sees is the one they price, configure and buy.
+                visual={
+                  <div className="h-48 w-full overflow-hidden border-b border-line bg-surface">
+                    <ShelvingPreview
+                      config={configuration}
+                      color={color}
+                      className="h-full w-full origin-top-left scale-[1.35] !border-0"
+                    />
+                  </div>
+                }
               />
             ))}
           </div>
@@ -200,23 +281,6 @@ export default async function HomePage() {
                 <span className="text-2xl" aria-hidden="true">{USE_CASE_ICONS[useCase.id] ?? '📦'}</span>
                 <span className="text-sm font-medium">{useCase.ru}</span>
               </div>
-            ))}
-          </div>
-        </Container>
-      </section>
-
-      {/* Installation */}
-      <section className="bg-surface-muted">
-        <Container className="py-14">
-          <h2 className="font-display text-3xl">Доставка и сборка</h2>
-          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {[
-              { src: '/images/gallery/warehouse-1.svg', alt: 'Доставка стеллажей' },
-              { src: '/images/gallery/warehouse-2.svg', alt: 'Разгрузка и распаковка' },
-              { src: '/images/models/ms-strong.svg', alt: 'Сборка стеллажа' },
-              { src: '/images/gallery/archive-1.svg', alt: 'Готовая установка' },
-            ].map((image) => (
-              <ProductImage key={image.src} src={image.src} alt={image.alt} className="aspect-square w-full border border-line object-cover" />
             ))}
           </div>
         </Container>
