@@ -1213,21 +1213,57 @@ export const PROMO_CODES: PromoCode[] = [
 /* -------------------------------------------------------------------------- */
 
 export const CATALOG_PRODUCTS: CatalogProduct[] = [
+  // The three most frequently ordered MS Standard sizes — same height (2000),
+  // width (1000) and shelf count (5), differing only in depth. `popularity`
+  // is what orders them on the storefront (db-repository sorts products by
+  // it, and the homepage/catalog "recommended" sort reads it), so these three
+  // stay adjacent and ordered 300 → 400 → 600 without any hardcoded list of
+  // slugs in the UI.
+  {
+    id: 'product-standard-2000-1000-300',
+    slug: 'ms-standard-2000x1000x300',
+    modelSlug: 'ms-standard',
+    name: { ru: 'MS Стандарт 2000×1000×300, 4 полки', kk: 'MS Стандарт 2000×1000×300, 4 сөре' },
+    description: {
+      ru: 'Популярная конфигурация для архива и офиса: высота 2000 мм, ширина 1000 мм, глубина 300 мм, 4 полки, нагрузка 150 кг.',
+      kk: 'Мұрағат пен кеңсеге арналған танымал конфигурация: биіктігі 2000 мм, ені 1000 мм, тереңдігі 300 мм, 4 сөре, 150 кг жүктеме.',
+    },
+    image: '/images/models/ms-standard.svg',
+    gallery: ['/images/models/ms-standard.svg'],
+    height: 2000,
+    width: 1000,
+    depth: 300,
+    shelves: 4,
+    loadCapacity: 150,
+    sections: 1,
+    shelfType: 'STANDARD',
+    color: 'color-grey',
+    useCases: ['archive', 'office'],
+    inStock: true,
+    popularity: 99,
+    featured: true,
+    published: true,
+    createdAt: '2026-01-15T00:00:00.000Z',
+    seo: {
+      title: 'MS Стандарт 2000×1000×300 — архивный стеллаж 4 полки | купить',
+      description: 'Готовая конфигурация MS Стандарт 2000×1000×300 мм, 4 полки, нагрузка 150 кг. Цена, доставка и сборка по Казахстану.',
+    },
+  },
   {
     id: 'product-standard-2000-1000-400',
     slug: 'ms-standard-2000x1000x400',
     modelSlug: 'ms-standard',
-    name: { ru: 'MS Стандарт 2000×1000×400, 5 полок', kk: 'MS Стандарт 2000×1000×400, 5 сөре' },
+    name: { ru: 'MS Стандарт 2000×1000×400, 4 полки', kk: 'MS Стандарт 2000×1000×400, 4 сөре' },
     description: {
-      ru: 'Популярная складская конфигурация: высота 2000 мм, ширина 1000 мм, глубина 400 мм, 5 полок, нагрузка 150 кг.',
-      kk: 'Танымал қойма конфигурациясы: биіктігі 2000 мм, ені 1000 мм, тереңдігі 400 мм, 5 сөре, 150 кг жүктеме.',
+      ru: 'Популярная складская конфигурация: высота 2000 мм, ширина 1000 мм, глубина 400 мм, 4 полки, нагрузка 150 кг.',
+      kk: 'Танымал қойма конфигурациясы: биіктігі 2000 мм, ені 1000 мм, тереңдігі 400 мм, 4 сөре, 150 кг жүктеме.',
     },
     image: '/images/models/ms-standard.svg',
     gallery: ['/images/models/ms-standard.svg'],
     height: 2000,
     width: 1000,
     depth: 400,
-    shelves: 5,
+    shelves: 4,
     loadCapacity: 150,
     sections: 1,
     shelfType: 'STANDARD',
@@ -1239,8 +1275,38 @@ export const CATALOG_PRODUCTS: CatalogProduct[] = [
     published: true,
     createdAt: '2026-01-15T00:00:00.000Z',
     seo: {
-      title: 'MS Стандарт 2000×1000×400 — складской стеллаж 5 полок | купить',
-      description: 'Готовая конфигурация MS Стандарт 2000×1000×400 мм, 5 полок, нагрузка 150 кг. Цена, доставка и сборка по Казахстану.',
+      title: 'MS Стандарт 2000×1000×400 — складской стеллаж 4 полки | купить',
+      description: 'Готовая конфигурация MS Стандарт 2000×1000×400 мм, 4 полки, нагрузка 150 кг. Цена, доставка и сборка по Казахстану.',
+    },
+  },
+  {
+    id: 'product-standard-2000-1000-600',
+    slug: 'ms-standard-2000x1000x600',
+    modelSlug: 'ms-standard',
+    name: { ru: 'MS Стандарт 2000×1000×600, 4 полки', kk: 'MS Стандарт 2000×1000×600, 4 сөре' },
+    description: {
+      ru: 'Популярная конфигурация для объёмных грузов: высота 2000 мм, ширина 1000 мм, глубина 600 мм, 4 полки, нагрузка 150 кг.',
+      kk: 'Көлемді жүктерге арналған танымал конфигурация: биіктігі 2000 мм, ені 1000 мм, тереңдігі 600 мм, 4 сөре, 150 кг жүктеме.',
+    },
+    image: '/images/models/ms-standard.svg',
+    gallery: ['/images/models/ms-standard.svg'],
+    height: 2000,
+    width: 1000,
+    depth: 600,
+    shelves: 4,
+    loadCapacity: 150,
+    sections: 1,
+    shelfType: 'STANDARD',
+    color: 'color-grey',
+    useCases: ['warehouse', 'storage'],
+    inStock: true,
+    popularity: 97,
+    featured: true,
+    published: true,
+    createdAt: '2026-01-15T00:00:00.000Z',
+    seo: {
+      title: 'MS Стандарт 2000×1000×600 — складской стеллаж 4 полки | купить',
+      description: 'Готовая конфигурация MS Стандарт 2000×1000×600 мм, 4 полки, нагрузка 150 кг. Цена, доставка и сборка по Казахстану.',
     },
   },
   {

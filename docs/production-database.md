@@ -65,6 +65,29 @@ npx prisma db seed
 (equivalent to `npm run prisma:seed`). This is **not** wired into the deploy
 pipeline and must never run automatically — see the warning below.
 
+A fresh database gets every catalog listing in `CATALOG_PRODUCTS`
+(`src/lib/data/seed-data.ts`) from this one command — including the homepage's
+popular configurations. Nothing else is needed for a first deployment.
+
+### Updating catalog listings on a database that is already seeded
+
+Every upsert in `prisma/seed.ts` uses `update: {}`, which is what stops a
+re-seed from overwriting an imported supplier price. The same property means
+a re-seed **adds** a newly published listing but never applies an edit to a
+listing that already exists (a changed shelf count, size or name). For that:
+
+```
+npm run db:sync-catalog-products
+```
+
+It creates missing `Product` rows and updates existing ones to match
+`CATALOG_PRODUCTS`, printing each row and field it changes. It is safe to run
+repeatedly and on a live database: a `Product` row carries no price, purchase
+cost, markup or supplier field at all — prices are computed per request from
+`Component` rows, which this script never reads or writes — and it never
+touches orders or their snapshots, so historical totals and configurations
+are unaffected. It deletes nothing.
+
 ## 8. Start/deploy the application
 
 Whatever your host's normal start command is (`npm run start`, a container

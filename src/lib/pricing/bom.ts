@@ -163,6 +163,61 @@ function runRules(
   return { lines, warnings, missingCritical };
 }
 
+/**
+ * Models whose whole commercial price comes from an approved supplier price
+ * list that quotes ONLY the upright and the ordinary shelf.
+ *
+ * MS Standard is bought from the supplier as exactly two commercial
+ * positions — «Стойка ST MS-750» and «Полка ST MP-750» — and the price of
+ * each already covers everything that ships with it: the beams that make the
+ * shelf a shelf, the frame ties, the bolt/nut sets, the feet and the
+ * connectors that join two sections on a shared upright. None of those is a
+ * separately purchasable line in the approved list, so charging them again
+ * from their own catalog rows would invoice the customer (and cost the
+ * business) twice for one supplied part.
+ *
+ * Scoped by model slug on purpose: MS Strong and Archive MS are not priced
+ * from that list and keep every component's own selling price and cost
+ * exactly as before.
+ */
+const SUPPLIER_PRICED_KIT_MODELS: ReadonlySet<string> = new Set(['ms-standard']);
+
+/**
+ * The structural helper parts of a SUPPLIER_PRICED_KIT_MODELS rack whose
+ * commercial value is already inside the upright/shelf price above.
+ *
+ * Only the two money fields and the unit cost are cleared. The line itself,
+ * its component id, SKU, name, quantity and weight all stay exactly as the
+ * configuration rules built them, because production, packing lists, order
+ * history and the weight/delivery calculation all still need to know that a
+ * rack contains 20 beams and 48 bolts — it is only the *price ownership*
+ * that moves to the upright and the shelf.
+ */
+const INCLUDED_IN_SUPPLIER_KIT_PRICE: ReadonlySet<BomLine['type']> = new Set([
+  'BEAM_LONGITUDINAL',
+  'BEAM_DEPTH',
+  'TIE',
+  'FASTENER',
+  'FOOT',
+  'CONNECTOR',
+]);
+
+/**
+ * Applies the ownership rule above to the structural part of a BOM. Returns
+ * the lines unchanged for every model that is not priced from a two-position
+ * supplier list, and never touches accessories, wall panels or any other
+ * genuinely customer-selected paid option (those are appended after this
+ * runs — see buildBom).
+ */
+function applySupplierKitPriceOwnership(lines: BomLine[], modelSlug: string): BomLine[] {
+  if (!SUPPLIER_PRICED_KIT_MODELS.has(modelSlug)) return lines;
+  return lines.map((line) =>
+    INCLUDED_IN_SUPPLIER_KIT_PRICE.has(line.type)
+      ? { ...line, unitPrice: 0, totalPrice: 0, unitCost: 0 }
+      : line,
+  );
+}
+
 /** Merges BOM lines that reference the same physical component into one row. */
 function aggregateLines(lines: BomLine[]): BomLine[] {
   const byComponent = new Map<string, BomLine>();
@@ -183,7 +238,10 @@ function aggregateLines(lines: BomLine[]): BomLine[] {
  * Builds the bill of materials from the database-driven configuration rules.
  * Row-level components (uprights, ties, feet, connectors, depth beams, cross
  * braces) are priced once for the whole row so the shared-uprights saving is
- * preserved exactly as before. Section-level components (shelves,
+ * preserved exactly as before. For a model priced from a two-position
+ * supplier list the structural helper parts then hand their price ownership
+ * to the upright/shelf — see applySupplierKitPriceOwnership; quantities and
+ * weights are never affected. Section-level components (shelves,
  * longitudinal beams, wall panels) are priced once per section against that
  * section's own width and wall selection, then aggregated by SKU so the
  * customer-facing BOM shows one row per physical part even when several
@@ -211,7 +269,7 @@ export function buildBom(config: ShelvingConfiguration, catalog: Catalog): BomRe
     missingCritical = missingCritical || sectionResult.missingCritical;
   }
 
-  const lines = aggregateLines(rawLines);
+  const lines = applySupplierKitPriceOwnership(aggregateLines(rawLines), config.modelSlug);
 
   for (const selection of config.accessories) {
     const accessory = findAccessory(catalog, selection.accessoryId);
@@ -251,12 +309,15 @@ export type PublicBomLine = Omit<BomLine, 'unitCost'>;
  * are not independent positions in the customer-facing kit composition.
  *
  * This is presentation only. The internal BOM built above keeps every one of
- * these as a real, separately-priced line — the authoritative price, cost,
- * margin floor and weight in src/lib/pricing/engine.ts are all computed from
- * that internal BOM and are untouched by this projection. Each hidden line is
- * folded into the assembly line it physically belongs to, so the public rows
- * still sum to the exact same componentsSubtotal and total weight; hiding a
- * row must never make the kit look cheaper than it is priced.
+ * these as a real line with its own quantity and weight — the authoritative
+ * price, cost, margin floor and weight in src/lib/pricing/engine.ts are all
+ * computed from that internal BOM and are untouched by this projection. Each
+ * hidden line is folded into the assembly line it physically belongs to, so
+ * the public rows still sum to the exact same componentsSubtotal and total
+ * weight; hiding a row must never make the kit look cheaper than it is
+ * priced. (For a supplier-priced kit model the folded amount is zero by
+ * construction — see applySupplierKitPriceOwnership — which keeps that sum
+ * exact for the same reason.)
  */
 const PUBLIC_ASSEMBLY_OF: Partial<Record<BomLine['type'], BomLine['type']>> = {
   BEAM_LONGITUDINAL: 'SHELF',

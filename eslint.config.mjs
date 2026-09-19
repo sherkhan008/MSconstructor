@@ -18,6 +18,8 @@ const config = [
       'test-results/**',
       'next-env.d.ts',
       'src/generated/**',
+      // Private supplier data supplied out-of-band; never part of the project.
+      'private-data/**',
     ],
   },
   ...compat.extends('next/core-web-vitals', 'next/typescript'),

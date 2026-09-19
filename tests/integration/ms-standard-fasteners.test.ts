@@ -102,16 +102,27 @@ describe('MS Standard fasteners', () => {
   });
 
   describe('server pricing', () => {
-    it('charges the fastener kit once per pair — the generic rule is not added on top', () => {
-      const fastener = catalog.components.find((c) => c.id === 'fastener-generic')!;
+    it('counts the fastener kit once per pair — the generic rule is not added on top', () => {
       const result = priced(config({ shelves: 6 }));
       const [line] = fastenerLines(result.bom);
 
       expect(fastenerLines(result.bom)).toHaveLength(1);
       expect(line.quantity).toBe(40);
-      expect(line.unitPrice).toBe(fastener.sellingPrice);
-      expect(line.totalPrice).toBe(40 * fastener.sellingPrice);
-      expect(line.unitCost).toBe(fastener.purchasePrice);
+    });
+
+    it('carries no separate fastener charge for MS Standard — the bolts are in the supplier kit price', () => {
+      const fastener = catalog.components.find((c) => c.id === 'fastener-generic')!;
+      const [line] = fastenerLines(priced(config({ shelves: 6 })).bom);
+
+      // The catalog row keeps its own price (other models still charge it)…
+      expect(fastener.sellingPrice).toBeGreaterThan(0);
+      expect(fastener.purchasePrice).toBeGreaterThan(0);
+      // …but for MS Standard the bolt/nut sets are already inside the
+      // approved upright/shelf price, so the BOM line adds nothing on top.
+      expect(line.unitPrice).toBe(0);
+      expect(line.totalPrice).toBe(0);
+      expect(line.unitCost).toBe(0);
+      expect(line.weightKg).toBeGreaterThan(0);
     });
 
     it('keeps componentsSubtotal equal to the sum of the internal BOM and of the public rows', () => {

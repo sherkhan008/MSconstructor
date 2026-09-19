@@ -10,6 +10,7 @@ import { formatPrice } from '@/lib/money';
 import { configurationToShareQuery } from '@/lib/configurator/url';
 import { reconcileConfiguration } from '@/lib/configurator/reconcile';
 import { trackEvent } from '@/lib/analytics';
+import { shelvesLabel } from '@/lib/plural';
 import { useCartStore, type CartItem } from '@/store/cart-store';
 import type { ColorOption } from '@/lib/types/domain';
 import type { PublicCatalog } from '@/lib/data/public-catalog';
@@ -131,7 +132,7 @@ export function CartClient({ catalog }: { catalog: PublicCatalog }) {
         ))}
       </div>
 
-      <aside className="flex flex-col gap-4 border border-line bg-surface p-5 lg:sticky lg:top-20">
+      <aside className="flex flex-col gap-4 border border-line bg-surface p-5 lg:sticky lg:top-20" data-fab-avoid>
         <div>
           <div className="tech-label">Итого по корзине</div>
           <PriceTag value={total} size="xl" />
@@ -188,7 +189,7 @@ function CartRow({
             {item.configuration.height}×{item.configuration.sections.map((s) => s.width).join('+')}×
             {item.configuration.depth} мм
           </span>
-          <span>{item.configuration.shelves} полок</span>
+          <span>{shelvesLabel(item.configuration.shelves)}</span>
           <span>{item.configuration.sections.length} секц.</span>
           <span>{item.configuration.loadCapacity} кг/полка</span>
         </div>

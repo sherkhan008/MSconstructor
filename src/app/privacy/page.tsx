@@ -12,7 +12,7 @@ export const metadata: Metadata = buildMetadata({
 export default function PrivacyPage() {
   return (
     <Container className="max-w-3xl py-10">
-      <h1 className="font-display text-4xl">Политика конфиденциальности</h1>
+      <h1 className="font-display text-3xl sm:text-4xl">Политика конфиденциальности</h1>
       <p className="tech-label mt-2">Редакция от 1 января 2026 г.</p>
 
       <div className="mt-8 space-y-6 text-sm leading-relaxed text-foreground">

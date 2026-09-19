@@ -1,0 +1,6 @@
+# EXAMPLE ONLY — every figure below is invented and is NOT a supplier price.
+# The real list is private: private-data/pricing/ms-standard.csv (gitignored).
+# See docs/supplier-price-import.md.
+model,kind,height,width,depth,purchasePrice,sellingPrice
+ms-standard,UPRIGHT,1000,,,1000,1150
+ms-standard,SHELF_STANDARD,,700,300,2000,2300

@@ -110,6 +110,8 @@ export interface AllowedDimensions {
 }
 
 interface Props {
+  /** Tighter framing for storefront illustrations; interactive geometry is unchanged. */
+  presentation?: boolean;
   config: ShelvingConfiguration;
   color?: ColorOption;
   className?: string;
@@ -138,6 +140,7 @@ export function ShelvingPreview({
   config,
   color,
   className = '',
+  presentation = false,
   interactive = false,
   allowedDimensions,
   activeSectionId,
@@ -346,7 +349,7 @@ export function ShelvingPreview({
 
   return (
     <div ref={containerRef} className={`relative w-full overflow-hidden border border-line bg-surface ${className}`}>
-      <svg viewBox={`0 0 ${VIEWBOX_W} ${VIEWBOX_H}`} className="h-full w-full" role="img" aria-label="Схема стеллажа спереди">
+      <svg viewBox={presentation && !interactive ? `0 ${Math.min(0, top + depthVec.dy - 30)} ${rowEnd + depthVec.dx + 50} ${FLOOR_Y + 110 - Math.min(0, top + depthVec.dy - 30)}` : `0 0 ${VIEWBOX_W} ${VIEWBOX_H}`} className="h-full w-full" role="img" aria-label="Схема стеллажа спереди">
         {/* 1. Rear posts — the physical steel frame, always visible regardless
              of any wall selection (a rear post is not the same thing as the
              optional rearWall panel). Perforated the same way as the front

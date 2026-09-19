@@ -49,3 +49,7 @@ backups/
 *.dump
 *.dump.partial
 .deploy/
+
+# private supplier pricing — real purchase prices, supplied out-of-band.
+# Never committed, never baked into an image (see .dockerignore).
+private-data/

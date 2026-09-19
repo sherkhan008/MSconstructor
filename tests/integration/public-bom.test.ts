@@ -5,9 +5,17 @@ import type { BomLine, ShelvingConfiguration, ShelvingSection } from '@/lib/type
 
 /**
  * Customer-visible kit composition: MS Standard ships as one complete shelf
- * assembly, so beams, frame ties and section connectors must not appear as their own kit
- * positions for a customer — while staying real, separately-priced rows in
- * the internal BOM the authoritative price is computed from.
+ * assembly, so beams, frame ties and section connectors must not appear as
+ * their own kit positions for a customer — while staying real rows, with
+ * their own quantity and weight, in the internal BOM the authoritative price
+ * and the delivery weight are computed from.
+ *
+ * MS Standard is priced from a supplier list that quotes only the upright and
+ * the ordinary shelf, so those structural helper parts carry no selling price
+ * and no purchase cost of their own for this model (see
+ * applySupplierKitPriceOwnership in src/lib/pricing/bom.ts): their commercial
+ * value is already inside the upright/shelf price, and charging their own
+ * catalog price on top would invoice the same supplied part twice.
  */
 
 let sectionCounter = 0;
@@ -37,8 +45,10 @@ function config(overrides: Partial<ShelvingConfiguration> = {}): ShelvingConfigu
 /**
  * Authoritative totals captured from the pricing engine with the MS Standard
  * fastener rule (24 bolt + nut pairs for 2 shelves, +4 per shelf — see
- * tests/integration/ms-standard-fasteners.test.ts). Hiding customer-visible
- * rows must not move any of these numbers by a single tenge.
+ * tests/integration/ms-standard-fasteners.test.ts) and MS Standard's
+ * supplier-kit price ownership. Hiding customer-visible rows must not move
+ * any of these numbers by a single tenge. Every figure here comes from the
+ * development sample catalog — never from a real supplier price list.
  */
 const PRICE_BASELINES = [
   {
@@ -46,10 +56,10 @@ const PRICE_BASELINES = [
     config: config({ sections: [section(700)], height: 1500, depth: 600, shelves: 6 }),
     shelfComponentId: 'shelf-STANDARD-700-600',
     shelfName: 'Полка Стандартная 700×600',
-    componentsSubtotal: 292940,
-    net: 357387,
-    vat: 57182,
-    total: 414569,
+    componentsSubtotal: 256200,
+    net: 312564,
+    vat: 50010,
+    total: 362574,
     totalWeightKg: 86,
   },
   {
@@ -57,10 +67,10 @@ const PRICE_BASELINES = [
     config: config({ sections: [section(1000)], height: 2500, depth: 800, shelves: 8 }),
     shelfComponentId: 'shelf-STANDARD-1000-800',
     shelfName: 'Полка Стандартная 1000×800',
-    componentsSubtotal: 694360,
-    net: 847119,
-    vat: 135539,
-    total: 982658,
+    componentsSubtotal: 636000,
+    net: 775920,
+    vat: 124147,
+    total: 900067,
     totalWeightKg: 165,
   },
   {
@@ -68,10 +78,10 @@ const PRICE_BASELINES = [
     config: config({ sections: [section(1500)], height: 3000, depth: 600, shelves: 8 }),
     shelfComponentId: 'shelf-STANDARD-1500-600',
     shelfName: 'Полка Стандартная 1500×600',
-    componentsSubtotal: 784520,
-    net: 957114,
-    vat: 153138,
-    total: 1110252,
+    componentsSubtotal: 717600,
+    net: 875472,
+    vat: 140076,
+    total: 1015548,
     totalWeightKg: 191,
   },
 ] as const;
@@ -135,15 +145,32 @@ describe('public (customer-visible) BOM', () => {
       }
     });
 
-    it('keeps beams and frame ties in the internal BOM, with their cost', () => {
+    it('keeps beams and frame ties in the internal BOM, with their quantity and weight', () => {
       const bom = internalBom(baseline.config);
       for (const type of ['BEAM_LONGITUDINAL', 'BEAM_DEPTH', 'TIE'] as const) {
         const line = bom.find((l) => l.type === type);
         expect(line, `internal BOM must keep a ${type} line`).toBeDefined();
         expect(line!.quantity).toBeGreaterThan(0);
-        expect(line!.totalPrice).toBeGreaterThan(0);
-        expect(line!.unitCost).toBeGreaterThan(0);
+        expect(line!.weightKg).toBeGreaterThan(0);
+        // Priced inside the supplier's upright/shelf price for MS Standard:
+        // the part is still built, packed and weighed, never charged twice.
+        expect(line!.unitPrice).toBe(0);
+        expect(line!.totalPrice).toBe(0);
+        expect(line!.unitCost).toBe(0);
       }
+    });
+
+    it('prices the rack as exactly the approved uprights + shelves, nothing else', () => {
+      const result = calculatePrice(baseline.config, catalog);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const approved = result.bom
+        .filter((l) => l.type === 'UPRIGHT' || l.type === 'SHELF')
+        .reduce((sum, l) => sum + l.unitPrice * l.quantity, 0);
+      expect(result.breakdown.componentsSubtotal).toBe(approved);
+      // ...and the helper parts really are still in the BOM, so the identity
+      // above is price ownership, not a BOM that quietly lost its parts.
+      expect(result.bom.filter((l) => l.type !== 'UPRIGHT' && l.type !== 'SHELF').length).toBeGreaterThan(0);
     });
 
     it('prices exactly as before the kit composition was simplified', () => {
@@ -183,12 +210,13 @@ describe('public (customer-visible) BOM', () => {
 
   describe('section connector in a mixed-width row (700 + 1000 × 2000 × 600 / 5 полок)', () => {
     const CONNECTOR_NAME = 'Комплект соединения секций';
-    // Authoritative totals captured before the connector was hidden publicly.
+    // Authoritative totals for this row, from the development sample
+    // catalog — never a real supplier figure.
     const baseline = {
-      componentsSubtotal: 585100,
-      net: 713822,
-      vat: 114212,
-      total: 828034,
+      componentsSubtotal: 518100,
+      net: 632082,
+      vat: 101133,
+      total: 733215,
       totalWeightKg: 165,
     };
     const mixed = () => config({ sections: [section(700), section(1000)], depth: 600, shelves: 5 });
@@ -199,13 +227,15 @@ describe('public (customer-visible) BOM', () => {
       expect(publicBom.some((l) => l.name === CONNECTOR_NAME)).toBe(false);
     });
 
-    it('keeps the connector in the internal BOM with its price and cost', () => {
+    it('keeps the connector in the internal BOM with its quantity and weight', () => {
       const connector = internalBom(mixed()).find((l) => l.type === 'CONNECTOR');
       expect(connector?.name).toBe(CONNECTOR_NAME);
       expect(connector!.quantity).toBe(1);
-      expect(connector!.totalPrice).toBeGreaterThan(0);
-      expect(connector!.unitCost).toBeGreaterThan(0);
       expect(connector!.weightKg).toBeGreaterThan(0);
+      // Part of the supplier-priced frame for MS Standard — see the module
+      // header: it ships and it weighs, it is not charged separately.
+      expect(connector!.totalPrice).toBe(0);
+      expect(connector!.unitCost).toBe(0);
     });
 
     it('folds the connector price and weight into the upright (frame) row', () => {
