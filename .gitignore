@@ -53,3 +53,6 @@ backups/
 # private supplier pricing — real purchase prices, supplied out-of-band.
 # Never committed, never baked into an image (see .dockerignore).
 private-data/
+
+.claude/*.local.md
+.claude/settings.local.json
