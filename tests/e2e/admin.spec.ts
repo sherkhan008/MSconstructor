@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './helpers/test';
 import type { PrismaClient } from '@prisma/client';
 import {
   createOrderFixtures,
@@ -9,6 +9,7 @@ import {
   sessionCookieFor,
   type OrderFixtures,
 } from './helpers/admin-order-fixtures';
+import { clickWhenHydrated, waitForHydration } from './helpers/hydration';
 
 /**
  * Full-flow admin coverage. Admin is PostgreSQL-only (no in-memory dev
@@ -32,9 +33,14 @@ test('an unauthenticated visitor is redirected to /admin/login', async ({ page }
 
 test('logging in with valid credentials reaches /admin/orders, and logging out locks it again', async ({ page }) => {
   await page.goto('/admin/login');
+  // LoginForm's inputs are controlled and its submit is JavaScript-only, and
+  // both are already present and enabled in the server HTML — see
+  // helpers/hydration.ts for why filling or clicking before React attaches is
+  // silently lost rather than reported.
+  await waitForHydration(page.getByLabel('Email'));
   await page.getByLabel('Email').fill(adminEmail);
   await page.getByLabel('Пароль').fill(adminPassword);
-  await page.getByRole('button', { name: 'Войти' }).click();
+  await clickWhenHydrated(page.getByRole('button', { name: 'Войти' }));
 
   await expect(page).toHaveURL(/\/admin\/orders/);
   await expect(page.getByRole('heading', { name: 'Заказы' })).toBeVisible();
@@ -43,7 +49,8 @@ test('logging in with valid credentials reaches /admin/orders, and logging out l
   await page.goto('/admin/login');
   await expect(page).toHaveURL(/\/admin\/orders/);
 
-  await page.getByRole('button', { name: 'Выйти' }).click();
+  // LogoutButton is SSR-rendered enabled with a JavaScript-only onClick.
+  await clickWhenHydrated(page.getByRole('button', { name: 'Выйти' }));
   await expect(page).toHaveURL(/\/admin\/login/);
 
   await page.goto('/admin/orders');
@@ -52,9 +59,10 @@ test('logging in with valid credentials reaches /admin/orders, and logging out l
 
 test('an invalid password shows an error and does not log in', async ({ page }) => {
   await page.goto('/admin/login');
+  await waitForHydration(page.getByLabel('Email'));
   await page.getByLabel('Email').fill(adminEmail);
   await page.getByLabel('Пароль').fill('definitely-wrong-password');
-  await page.getByRole('button', { name: 'Войти' }).click();
+  await clickWhenHydrated(page.getByRole('button', { name: 'Войти' }));
 
   await expect(page.getByText('Неверный email или пароль')).toBeVisible();
   await expect(page).toHaveURL(/\/admin\/login/);
@@ -77,7 +85,10 @@ test.describe('order detail', () => {
 
   test.beforeAll(async ({}, testInfo) => {
     prisma = createPrismaClient();
-    fixtures = await createOrderFixtures(prisma, orderFixturePrefix(`DETAIL${testInfo.project.name}`));
+    fixtures = await createOrderFixtures(
+      prisma,
+      orderFixturePrefix(`DETAIL${testInfo.project.name}`, testInfo.repeatEachIndex),
+    );
   });
 
   test.afterAll(async () => {
@@ -106,7 +117,11 @@ test.describe('order detail', () => {
     await expect(page.getByTestId('order-status-value')).toHaveText('Новый');
     await expect(page.getByTestId('order-status-to-PAID')).toHaveCount(0);
 
-    await page.getByTestId('order-status-to-CONFIRMED').click();
+    // OrderStatusForm renders its step buttons `disabled={pending !== null}`,
+    // i.e. enabled in the server HTML with a JavaScript-only onClick, so a
+    // click that lands before hydration is dropped without a trace and the
+    // status assertion below would fail with no explanation.
+    await clickWhenHydrated(page.getByTestId('order-status-to-CONFIRMED'));
 
     await expect(page.getByTestId('order-status-value')).toHaveText('Подтверждён');
     expect((await readOrder(prisma, fixtures.unassigned.id)).status).toBe('CONFIRMED');

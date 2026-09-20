@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './helpers/test';
 import { parseConfigurationFromSearchParams } from '../../src/lib/configurator/url';
 
 const popular = 'section:has(h2:text("Популярные конфигурации"))';

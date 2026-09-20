@@ -1,4 +1,5 @@
-import { test, expect, type BrowserContext, type Page } from '@playwright/test';
+import { test, expect } from './helpers/test';
+import type { BrowserContext, Page } from '@playwright/test';
 import type { PrismaClient } from '@prisma/client';
 import {
   changeSellingPriceBehindTheUi,
@@ -40,7 +41,7 @@ let fixtures: PriceFixtures;
 
 test.beforeAll(async ({}, testInfo) => {
   prisma = createPrismaClient();
-  fixtures = await createPriceFixtures(prisma, fixturePrefix(testInfo.project.name));
+  fixtures = await createPriceFixtures(prisma, fixturePrefix(testInfo.project.name, testInfo.repeatEachIndex));
 });
 
 test.afterAll(async () => {

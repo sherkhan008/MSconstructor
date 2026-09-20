@@ -1,4 +1,5 @@
-import { test, expect, request as playwrightRequest, type BrowserContext, type Page } from '@playwright/test';
+import { test, expect } from './helpers/test';
+import { request as playwrightRequest, type BrowserContext, type Page } from '@playwright/test';
 import type { PrismaClient } from '@prisma/client';
 import {
   createOrder,
@@ -9,7 +10,13 @@ import {
   type FixtureRole,
   type OrderFixtures,
 } from './helpers/admin-order-fixtures';
-import { checkoutFixturePrefix, removeCheckoutFixtures } from './helpers/checkout-order-fixtures';
+import {
+  checkoutFixturePrefix,
+  checkoutIdentity,
+  removeCheckoutFixtures,
+  simulatedClientIp,
+} from './helpers/checkout-order-fixtures';
+import { clickWhenHydrated } from './helpers/hydration';
 
 /**
  * "Документы" on /admin/orders/[id] — commercial proposal and invoice PDFs.
@@ -36,14 +43,16 @@ let legacyOrder: { id: string; orderNumber: string };
 let raceOrder: { id: string; orderNumber: string };
 let checkoutPrefix: string;
 
-function documentsPrefix(projectName: string): string {
-  return `E2EDOC${projectName.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()}`;
+/** One prefix per (project, repetition) — see checkoutFixturePrefix for why
+ * `repeatEachIndex` goes in front and is followed by a literal `X`. */
+function documentsPrefix(projectName: string, repeatEachIndex: number): string {
+  return `E2EDOC${repeatEachIndex}X${projectName.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()}`;
 }
 
 test.beforeAll(async ({}, testInfo) => {
   prisma = createPrismaClient();
-  const prefix = documentsPrefix(testInfo.project.name);
-  checkoutPrefix = checkoutFixturePrefix('DOCCHK', testInfo.project.name);
+  const prefix = documentsPrefix(testInfo.project.name, testInfo.repeatEachIndex);
+  checkoutPrefix = checkoutFixturePrefix('DOCCHK', testInfo.project.name, testInfo.repeatEachIndex);
   await removeCheckoutFixtures(prisma, checkoutPrefix);
   fixtures = await createOrderFixtures(prisma, prefix);
   const common = { prefix, status: 'NEW' as const, customerType: 'INDIVIDUAL' as const, createdAt: new Date(), grandTotal: 116_000 };
@@ -149,7 +158,9 @@ test('clicking "Сформировать" issues the proposal once; Order.update
 
   await page.goto(`/admin/orders/${fixtures.legacy.id}`);
   const proposal = page.getByTestId('order-documents').locator('[data-document-kind="commercial-proposal"]');
-  await proposal.getByTestId('issue-document').click();
+  // OrderDocuments renders this button `disabled={issuing}` — enabled in the
+  // server HTML with a JavaScript-only onClick (see helpers/hydration.ts).
+  await clickWhenHydrated(proposal.getByTestId('issue-document'));
 
   // The row switches to Open/Download once router.refresh() picks up the
   // freshly-issued OrderDocument from the server component.
@@ -253,7 +264,7 @@ test('the invoice is either ready to issue or blocked with the exact missing sel
     const getResponse = await page.request.get(documentPath(fixtures.unassigned.id, 'invoice'));
     expect(getResponse.status()).toBe(409);
   } else {
-    await invoice.getByTestId('issue-document').click();
+    await clickWhenHydrated(invoice.getByTestId('issue-document'));
     await expect(invoice.getByRole('link', { name: 'Открыть PDF: Счёт на оплату' })).toBeVisible();
     const href = await invoice.getByRole('link', { name: 'Открыть PDF: Счёт на оплату' }).getAttribute('href');
     const response = await page.request.get(href!);
@@ -313,14 +324,21 @@ test('concurrent first POST /issue calls settle on one logical issuance', async 
 });
 
 test('a later order from the same customer with new details does not change an earlier order\'s document', async ({ page, context, baseURL }, testInfo) => {
-  let ipSeed = 0;
+  // Both orders deliberately share ONE (phone, type) — that is the whole
+  // point of the test — so the phone must be unique to this (project,
+  // repetition) instead of derived from the project name alone: under
+  // `--repeat-each` a project-only phone makes every repetition upsert the
+  // same Customer row and overwrite each other's buyer details. The
+  // checkoutPrefix already carries the repetition, and the client IP comes
+  // from the same seed so the repetitions never share a rate-limit bucket.
+  const identity = checkoutIdentity(checkoutPrefix, testInfo);
+  const clientIp = simulatedClientIp(checkoutPrefix, testInfo);
   const place = async (p: Page, details: { fullName: string; companyName: string; email: string }) => {
-    ipSeed += 1;
     const response = await p.request.post('/api/orders', {
-      headers: { 'x-forwarded-for': `10.77.${testInfo.project.name.length}.${ipSeed}` },
+      headers: { 'x-forwarded-for': clientIp },
       data: {
         ...details,
-        phone: `+7909${String(4000000 + testInfo.project.name.length).padStart(7, '0')}`,
+        phone: identity.phone,
         city: 'Алматы',
         customerType: 'LEGAL_ENTITY',
         binIin: '123456789012',

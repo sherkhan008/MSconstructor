@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from './helpers/test';
+import type { Page } from '@playwright/test';
 
 /**
  * End-to-end coverage for the drag-to-resize feature on /configurator:

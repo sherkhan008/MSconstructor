@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from './helpers/test';
+import type { Page } from '@playwright/test';
 
 /**
  * End-to-end coverage for the authoritative MS Standard configuration
@@ -215,6 +216,14 @@ test.describe('height 1000 is a real, selectable MS Standard height', () => {
 
   test('a real server price is shown at height 1000 (it prices end to end)', async ({ page }) => {
     await gotoConfig(page, { height: 1000, shelves: 4 });
+    // The configuration this price has to belong to must be committed first.
+    await expect(heightSelect(page)).toHaveValue('1000');
+    // The order button is enabled only when the store holds a real server
+    // priceResult AND no request is in flight (OrderSummaryBar's
+    // actionsDisabled = !priceResult || isPricing) — the app's own signal for
+    // "authoritative pricing finished and succeeded", so the total below is
+    // never read mid-recalculation or against a failed request.
+    await expect(page.getByRole('button', { name: 'Оформить заказ' })).toBeEnabled({ timeout: 15_000 });
     // Same locator the other configurator specs use for "the server returned
     // a real total" \u2014 the page renders no price at all when pricing fails.
     await expect(page.locator('text=/[\\d\\s]+\\s?\u20b8/').first()).toBeVisible({ timeout: 15_000 });

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './helpers/test';
 import type { PrismaClient } from '@prisma/client';
 import { createPrismaClient } from './helpers/admin-order-fixtures';
 import {
@@ -30,7 +30,7 @@ let prisma: PrismaClient | undefined;
 let prefix: string;
 
 test.beforeAll(({}, testInfo) => {
-  prefix = checkoutFixturePrefix('CHECKOUT', testInfo.project.name);
+  prefix = checkoutFixturePrefix('CHECKOUT', testInfo.project.name, testInfo.repeatEachIndex);
   if (hasDatabase) prisma = createPrismaClient();
 });
 

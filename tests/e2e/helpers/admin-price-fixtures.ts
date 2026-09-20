@@ -47,9 +47,21 @@ export function createPrismaClient(): PrismaClient {
   return new PrismaClient();
 }
 
-/** Safe as an ILIKE search term and as a SKU fragment. */
-export function fixturePrefix(projectName: string): string {
-  return `E2EPRICE${projectName.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()}`;
+/**
+ * Safe as an ILIKE search term and as a SKU fragment.
+ *
+ * `repeatEachIndex` (testInfo.repeatEachIndex) keeps `--repeat-each=N` honest:
+ * the repetitions run in PARALLEL, so without it every copy would create the
+ * same `${prefix}-UPR-1` SKUs and the same fixture accounts, and each copy's
+ * `createPriceFixtures` (which starts by removing the prefix's rows) would
+ * delete the rows the others were mid-test on.
+ *
+ * The index goes in FRONT of the project and is followed by a literal `X`,
+ * because `removePriceFixtures` matches by `startsWith`: a trailing index
+ * would make the plain prefix a prefix of every indexed one.
+ */
+export function fixturePrefix(projectName: string, repeatEachIndex = 0): string {
+  return `E2EPRICE${repeatEachIndex}X${projectName.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()}`;
 }
 
 export async function createPriceFixtures(

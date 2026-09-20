@@ -63,21 +63,38 @@ export function createPrismaClient(): PrismaClient {
   return new PrismaClient();
 }
 
-/** Safe inside an order number, a SKU-like search term and an email local part. */
-export function orderFixturePrefix(projectName: string): string {
-  return `E2EORD${projectName.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()}`;
+/**
+ * Safe inside an order number, a SKU-like search term and an email local part.
+ *
+ * `repeatEachIndex` (testInfo.repeatEachIndex) is what makes
+ * `--repeat-each=N` honest: Playwright runs the repetitions in PARALLEL, so
+ * without it all N copies of a spec would create, mutate and then delete the
+ * same fixture rows — each copy's `createOrderFixtures` deleting the orders
+ * the others were in the middle of using.
+ *
+ * The index goes in FRONT of the scope, never behind it. `removeOrderFixtures`
+ * matches by `startsWith`, so a trailing index would make the plain prefix a
+ * prefix of every indexed one and delete their rows along with its own.
+ */
+export function orderFixturePrefix(scope: string, repeatEachIndex = 0): string {
+  return `E2EORD${repeatEachIndex}X${scope.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()}`;
 }
 
-/** A stable 4-digit suffix per project, so two projects never collide on the
- * Customer(phone, type) unique key. */
+/** A stable 5-digit seed per prefix, so no two fixture sets collide on the
+ * Customer(phone, type) unique key. Five digits rather than four because
+ * `--repeat-each=N` multiplies the number of live prefixes by N, and the
+ * failure mode of a seed collision is a unique-constraint violation in
+ * `beforeAll` — the seven digits that follow "+7900" are the whole budget
+ * (kzPhoneRegex wants "+7" and exactly ten digits), and the order index needs
+ * only two of them. */
 function phoneSeed(prefix: string): number {
   let hash = 0;
-  for (const char of prefix) hash = (hash * 31 + char.charCodeAt(0)) % 9000;
-  return 1000 + hash;
+  for (const char of prefix) hash = (hash * 31 + char.charCodeAt(0)) % 90000;
+  return 10000 + hash;
 }
 
 function fixturePhone(prefix: string, index: number): string {
-  return `+7900${String(phoneSeed(prefix)).padStart(4, '0')}${String(index).padStart(3, '0')}`;
+  return `+7900${String(phoneSeed(prefix)).padStart(5, '0')}${String(index).padStart(2, '0')}`;
 }
 
 function configurationJson(width: number): Prisma.InputJsonValue {
@@ -300,7 +317,7 @@ export async function createOrderFixtures(
   });
 
   const companyName = `${prefix} ТОО Ромашка`;
-  const binIin = `${String(phoneSeed(prefix)).padStart(4, '0')}01020304`.slice(0, 12);
+  const binIin = `${String(phoneSeed(prefix)).padStart(5, '0')}01020304`.slice(0, 12);
   const legacyOrder = await createOrder(prisma, {
     prefix,
     index: 3,

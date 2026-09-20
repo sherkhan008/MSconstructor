@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from './helpers/test';
+import type { Page } from '@playwright/test';
 import type { PrismaClient } from '@prisma/client';
 import { createPrismaClient } from './helpers/admin-order-fixtures';
 import {
@@ -27,7 +28,7 @@ let prisma: PrismaClient | undefined;
 let prefix: string;
 
 test.beforeAll(({}, testInfo) => {
-  prefix = checkoutFixturePrefix('SECTIONS', testInfo.project.name);
+  prefix = checkoutFixturePrefix('SECTIONS', testInfo.project.name, testInfo.repeatEachIndex);
   if (hasDatabase) prisma = createPrismaClient();
 });
 

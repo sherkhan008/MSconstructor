@@ -48,6 +48,15 @@ const serverSchema = z.object({
 
   REDIS_URL: optionalString,
 
+  // Online payment. OFF unless PAYMENTS_ENABLED is the exact string "true" —
+  // anything else (unset, empty, "1", "yes", "True") leaves it off, so a typo
+  // fails closed. PAYMENTS_PROVIDER names which adapter to use
+  // (src/lib/payments/registry.ts); a provider's own credentials belong in
+  // that adapter's variables and never in source. See
+  // src/lib/payments/config.ts.
+  PAYMENTS_ENABLED: optionalString,
+  PAYMENTS_PROVIDER: optionalString,
+
   // Header a trusted reverse proxy OVERWRITES with the connecting client's
   // IP (e.g. "x-real-ip"). Only set this when the app port is reachable
   // exclusively through that proxy — see src/lib/security/client-ip.ts and
@@ -188,6 +197,9 @@ export const integrations = {
   bitrix24: Boolean(env.BITRIX24_WEBHOOK_URL),
   storage: Boolean(env.STORAGE_ENDPOINT && env.STORAGE_BUCKET),
   redis: Boolean(env.REDIS_URL),
+  // The flag only. Whether a usable provider is actually behind it is a
+  // separate question, answered by src/lib/payments/config.ts.
+  payments: env.PAYMENTS_ENABLED === 'true',
   googleAnalytics: Boolean(publicEnv.NEXT_PUBLIC_GOOGLE_ANALYTICS_ID),
   yandexMetrica: Boolean(publicEnv.NEXT_PUBLIC_YANDEX_METRICA_ID),
 } as const;

@@ -59,7 +59,10 @@ as required secret / required / optional.
 | `POSTGRES_USER`, `POSTGRES_DB` | optional | default `ms_shelving` |
 | `PUBLIC_HTTP_BIND` | optional | default `80`; `127.0.0.1:8080` behind a host-level TLS terminator |
 | `SELLER_*` | optional (required before invoices) | confidential banking details |
-| `TELEGRAM_*`, `SMTP_*`, `WHATSAPP_API_*`, `AMOCRM_*`, `BITRIX24_*` | optional (tokens are secrets) | |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | optional (token is a secret) | order events `order.created`, `order.status_changed`, `order.paid` with redacted payloads (no customer data). Unset = skipped + warn log; orders/payments are never affected. Sent/failed attempts are stored in `NotificationDelivery`; `retryFailedDeliveries()` re-sends failures (no scheduler yet) |
+| `SMTP_*`, `MANAGER_EMAIL`, `EMAIL_FROM` | optional (password is a secret) | email channel has no transport yet: reported as unavailable, never as sent |
+| `WHATSAPP_API_*`, `AMOCRM_*`, `BITRIX24_*` | optional (tokens are secrets) | |
+| `PAYMENTS_ENABLED`, `PAYMENTS_PROVIDER` | optional; **leave off** | online payment is not live — §13 |
 | `NEXT_PUBLIC_GOOGLE_ANALYTICS_ID`, `NEXT_PUBLIC_YANDEX_METRICA_ID` | optional (build time) | |
 | `BACKUP_DIR`, `BACKUP_RETENTION_DAYS`, `BACKUP_MIN_KEEP` | optional | backup script only |
 | `ADMIN_EMAIL`, `ADMIN_INITIAL_PASSWORD` | one-time seed only | command line only, never in the file |
@@ -83,8 +86,11 @@ Development-only: `E2E_BASE_URL`, `NEXT_PUBLIC_APP_URL`, empty
    invalid; `REDIS_URL` is malformed; or **any** variable fails validation
    (for example an empty `SMTP_PASSWORD=`). Previously one invalid variable
    silently switched the process to development mode.
+   It also exits when `PAYMENTS_ENABLED=true` but `PAYMENTS_PROVIDER` does not
+   name a provider adapter this build contains (§13).
    Warnings (logged, not fatal): no Redis, non-https `APP_URL`,
-   `ADMIN_INITIAL_PASSWORD` present at runtime, WhatsApp number not built in.
+   `ADMIN_INITIAL_PASSWORD` present at runtime, WhatsApp number not built in,
+   `PAYMENTS_ENABLED` set to something other than `true`/`false`.
    Log lines name the variable, never the value. This applies to any
    production-mode start, including a local `npm run start` without
    `NODE_ENV=development` (Playwright sets it; see `playwright.config.ts`).
@@ -327,3 +333,53 @@ sources. Details: [production-client-ip-and-rate-limiting.md](production-client-
 - Off-host copies of backups (see [production-backups.md](production-backups.md)) — local backups do not survive loss of the server.
 - Real `SELLER_*`, WhatsApp number, notification credentials; real catalog prices.
 - External uptime monitoring of `https://<domain>/api/health` and of backup age.
+- Whether online payment is wanted at launch at all (§13) — it is off today.
+
+## 13. Online payment
+
+**Status: not live, and cannot be switched on by configuration.** Checkout
+uses the three offline methods (bank transfer, invoice, cash), each confirmed
+by a manager. What exists is the foundation underneath a future provider:
+
+- A `Payment` table — one row per payment *attempt*, so an order can be
+  attempted more than once without losing the history of the earlier tries.
+  Its amount is always copied from the order's own stored total.
+- `PaymentStatus`: `PENDING` → `PAID` | `FAILED` | `CANCELLED` | `EXPIRED`.
+- A two-method provider interface (`src/lib/payments/provider.ts`) and an
+  **empty** adapter registry (`src/lib/payments/registry.ts`).
+- `POST /api/payments`, which answers **404** while payment is unavailable.
+
+### Why it cannot be switched on
+
+`PAYMENTS_ENABLED=true` resolves a provider through the registry. The registry
+is empty, so the production preflight treats that as a fatal misconfiguration
+and the server exits rather than start a shop that advertises an online
+payment it cannot take. Nothing fakes a success anywhere in the path: a
+disabled or unconfigured provider returns a typed failure, never a payment.
+
+### Turning it on later
+
+1. Obtain the official merchant details from the provider. Until those exist
+   nothing here should be guessed — no endpoint, credential name, callback
+   format or service identifier for any provider appears in this repository.
+2. Write `src/lib/payments/providers/<name>.ts` implementing `PaymentProvider`.
+   Read its credentials from its own server-only environment variables inside
+   the factory. Add those variable names to `.env.production.example`; never
+   the values.
+3. Register the adapter in `src/lib/payments/registry.ts`.
+4. Set `PAYMENTS_ENABLED=true` and `PAYMENTS_PROVIDER=<name>`.
+
+Nothing else in the flow changes: the amount still comes from the order, the
+idempotency guard still lives in the database (`Payment.pendingKey`), and
+`PAID` still requires the `PAYMENT_PROVIDER` channel of the order status
+policy (`src/lib/orders/status-transitions.ts`).
+
+### The security boundary, in one paragraph
+
+A browser can ask for a payment to be *started* for an order number, and that
+is all. It cannot name an amount (the request schema is `.strict()` and the
+service takes no amount parameter), cannot choose a provider, and cannot mark
+anything paid. `PAID` is produced only by `confirmPaymentWithProvider()`,
+which asks the provider server-to-server and which no public route calls; the
+order then moves to `PAID` through the same transition policy, compare-and-swap
+and audit trail the admin panel uses.

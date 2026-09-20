@@ -1,5 +1,6 @@
 import { createClientIpPolicy } from '@/lib/security/client-ip';
 import { parseRedisUrl } from '@/lib/redis/resp-client';
+import { resolvePaymentsAvailability } from '@/lib/payments/config';
 
 /**
  * Production runtime configuration check, run once when the server starts
@@ -25,6 +26,8 @@ export interface ProductionConfigInput {
   REDIS_URL?: string;
   ADMIN_INITIAL_PASSWORD?: string;
   NEXT_PUBLIC_WHATSAPP_NUMBER?: string;
+  PAYMENTS_ENABLED?: string;
+  PAYMENTS_PROVIDER?: string;
 }
 
 export interface ProductionConfigReport {
@@ -117,6 +120,29 @@ export function checkProductionConfig(input: ProductionConfigInput): ProductionC
       parseRedisUrl(redisUrl);
     } catch {
       errors.push('REDIS_URL is not a valid redis:// or rediss:// URL.');
+    }
+  }
+
+  // --- Online payment (off by default) -------------------------------------
+  // The flag is read here exactly as the runtime reads it, so a deployment
+  // cannot believe payment is on while the app has it off. Booting with a
+  // provider that this build has no adapter for is an ERROR rather than a
+  // silent fallback: a shop that thinks it can take money online but cannot
+  // is worse than one that knows it cannot.
+  const paymentsEnabledRaw = input.PAYMENTS_ENABLED?.trim();
+  if (paymentsEnabledRaw !== undefined && paymentsEnabledRaw !== 'true' && paymentsEnabledRaw !== 'false') {
+    warnings.push('PAYMENTS_ENABLED is neither "true" nor "false"; online payment stays disabled.');
+  }
+  if (paymentsEnabledRaw === 'true') {
+    const availability = resolvePaymentsAvailability({
+      PAYMENTS_ENABLED: paymentsEnabledRaw,
+      PAYMENTS_PROVIDER: input.PAYMENTS_PROVIDER,
+    });
+    if (!availability.available) {
+      errors.push(
+        'PAYMENTS_ENABLED is true but PAYMENTS_PROVIDER does not name a payment provider adapter this build has. ' +
+          'Register the adapter in src/lib/payments/registry.ts, or set PAYMENTS_ENABLED=false.',
+      );
     }
   }
 
