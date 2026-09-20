@@ -302,7 +302,11 @@ export async function buildDbCatalog(): Promise<Catalog> {
     prisma.widthOption.findMany({ orderBy: { sortOrder: 'asc' } }),
     prisma.depthOption.findMany({ orderBy: { sortOrder: 'asc' } }),
     prisma.loadCapacityOption.findMany({ orderBy: { sortOrder: 'asc' } }),
-    prisma.component.findMany({ where: { active: true } }),
+    // Deliberately unfiltered: findComponent() needs to SEE a deactivated
+    // model-scoped row so it can shadow the generic row of the same
+    // identity (src/lib/data/repository.ts). It applies `active` and
+    // `inStock` itself, after the scoped/generic pool has been decided.
+    prisma.component.findMany(),
     prisma.configurationRule.findMany({ where: { active: true } }),
     prisma.accessory.findMany({ where: { active: true }, orderBy: { sortOrder: 'asc' } }),
     prisma.colorOption.findMany({ orderBy: { sortOrder: 'asc' } }),
