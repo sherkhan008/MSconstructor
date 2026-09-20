@@ -159,7 +159,12 @@ describe('updateOrderStatus — DB requirement', () => {
   it('refuses to run when no database is configured', async () => {
     const { updateOrderStatus } = await setupAdminOrders({ databaseUrl: '' });
     await expect(
-      updateOrderStatus({ orderId: 'order-1', newStatus: 'CONTACTED', actor: { id: 'a1', name: 'A' } }),
+      updateOrderStatus({
+        orderId: 'order-1',
+        newStatus: 'CONFIRMED',
+        channel: 'ADMIN',
+        actor: { id: 'a1', name: 'A' },
+      }),
     ).rejects.toThrow(/PostgreSQL/);
   });
 });

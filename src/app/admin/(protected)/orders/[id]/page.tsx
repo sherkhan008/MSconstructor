@@ -16,6 +16,7 @@ import {
   canGenerateOrderDocuments,
 } from '@/lib/auth/authorize';
 import { ORDER_STATUS_LABEL_RU } from '@/lib/orders/status-labels';
+import { nextOrderStatuses } from '@/lib/orders/status-transitions';
 import { PAYMENT_METHOD_LABEL } from '@/lib/orders/payment-methods';
 import { CUSTOMER_TYPE_FULL_LABEL_RU } from '@/lib/orders/customer-labels';
 import { METAL_FOOT_PAD_LABEL, SHELF_CORNER_BRACKETS_LABEL } from '@/lib/configurator/additional-options';
@@ -190,6 +191,11 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
   if (!admin) notFound();
 
   const canChangeStatus = canChangeOrderStatus(admin.role);
+  // The steps this order can actually take next, straight from the transition
+  // policy. Presentation only — the same policy decides again server-side when
+  // the change is written, so a stale page can offer a button but never force
+  // an illegal step through.
+  const allowedNextStatuses = canChangeStatus ? nextOrderStatuses(order.status, 'ADMIN') : [];
   const canAssign = canAssignOrder(admin.role);
   const canEditNotes = canEditInternalNotes(admin.role);
 
@@ -230,7 +236,7 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
           tone={
             order.status === 'CANCELLED'
               ? 'danger'
-              : order.status === 'PAID' || order.status === 'COMPLETED'
+              : order.status === 'PAID' || order.status === 'DELIVERED'
                 ? 'success'
                 : 'neutral'
           }
@@ -342,9 +348,14 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
       </section>
 
       <section className="border border-line bg-background p-4">
-        <h2 className="tech-label mb-3">Изменить статус</h2>
+        <h2 className="tech-label mb-3">Статус заказа</h2>
         {canChangeStatus ? (
-          <OrderStatusForm orderId={order.id} currentStatus={order.status} />
+          <OrderStatusForm
+            orderId={order.id}
+            currentStatus={order.status}
+            allowedNext={allowedNextStatuses}
+            expectedUpdatedAt={order.updatedAt}
+          />
         ) : (
           <p className="text-sm text-steel">Недостаточно прав для изменения статуса заказа.</p>
         )}

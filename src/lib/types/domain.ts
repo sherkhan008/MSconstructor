@@ -47,16 +47,16 @@ export type CustomerType = 'INDIVIDUAL' | 'LEGAL_ENTITY';
 export type PaymentPreference = 'BANK_TRANSFER' | 'BANK_INVOICE' | 'CASH' | 'KASPI_PAY' | 'KASPI_QR';
 export type PriceLevel = 'RETAIL' | 'WHOLESALE' | 'DEALER' | 'CORPORATE' | 'GOVERNMENT';
 
+/** The order lifecycle. The allowed steps between these states are not a
+ * property of the type — they live in src/lib/orders/status-transitions.ts. */
 export type OrderStatus =
   | 'NEW'
-  | 'CONTACTED'
-  | 'APPROVED'
+  | 'CONFIRMED'
   | 'AWAITING_PAYMENT'
   | 'PAID'
-  | 'PRODUCTION'
-  | 'READY_FOR_DELIVERY'
+  | 'IN_PROGRESS'
+  | 'READY'
   | 'DELIVERED'
-  | 'COMPLETED'
   | 'CANCELLED';
 
 export type AdminRole = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'CONTENT_MANAGER';

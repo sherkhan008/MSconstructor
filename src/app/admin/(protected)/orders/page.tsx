@@ -41,7 +41,7 @@ function formatDateTime(iso: string): string {
 
 function statusTone(status: OrderStatus): 'danger' | 'success' | 'neutral' {
   if (status === 'CANCELLED') return 'danger';
-  if (status === 'PAID' || status === 'COMPLETED') return 'success';
+  if (status === 'PAID' || status === 'DELIVERED') return 'success';
   return 'neutral';
 }
 
