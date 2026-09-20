@@ -35,8 +35,22 @@ import type { PrismaClient } from '@prisma/client';
  * for itself, so the two fixture sets can never collide.
  */
 
-export function checkoutFixturePrefix(scope: string, projectName: string): string {
-  return `E2E${scope}${projectName.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()}`;
+/**
+ * One prefix per (scope, project, repetition).
+ *
+ * `repeatEachIndex` (testInfo.repeatEachIndex) is what makes `--repeat-each=N`
+ * honest here, exactly as it is in admin-order-fixtures.ts: Playwright runs
+ * the repetitions in PARALLEL, so without it all N copies of a file would
+ * submit the same customer identities and then sweep each other's rows away
+ * in `afterAll` — `removeCheckoutFixtures` matches by `fullName startsWith`,
+ * and every copy's names would start with the same string.
+ *
+ * The index goes in FRONT of the scope and is followed by a literal `X`, so
+ * no prefix is ever a prefix of another one: `E2E1X…` and `E2E10X…` diverge
+ * at the character after the digit, which `E2E1…`/`E2E10…` would not.
+ */
+export function checkoutFixturePrefix(scope: string, projectName: string, repeatEachIndex = 0): string {
+  return `E2E${repeatEachIndex}X${scope}${projectName.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()}`;
 }
 
 function stableHash(input: string, mod: number): number {
@@ -56,9 +70,16 @@ export interface CheckoutIdentity {
  *
  * The phone must satisfy kzPhoneRegex (src/lib/pricing/schema.ts): "+7"
  * followed by exactly 10 digits, no more, no less — the reserved area code
- * "909" plus a 7-digit seed hits that length exactly. */
+ * "909" plus a 7-digit seed hits that length exactly.
+ *
+ * The seed uses the whole 7 digits rather than 4. Two identities that collide
+ * on (phone, type) are not two rows — POST /api/orders upserts the SHARED
+ * Customer row and overwrites its fullName, so one test's cleanup sweep would
+ * then match, and delete, the other's order. `--repeat-each=N` multiplies the
+ * number of live identities by N, which is exactly where a 9000-value space
+ * stops being wide enough. */
 export function checkoutIdentity(prefix: string, testInfo: TestInfo): CheckoutIdentity {
-  const seed = stableHash(`${prefix}::${testInfo.title}`, 9000);
+  const seed = stableHash(`${prefix}::${testInfo.title}`, 9_000_000);
   return {
     fullName: `${prefix} Тест ${seed}`,
     phone: `+7909${String(seed).padStart(7, '0')}`,
@@ -68,7 +89,7 @@ export function checkoutIdentity(prefix: string, testInfo: TestInfo): CheckoutId
 
 /** One deterministic simulated client IP per (prefix, test title), so no two
  * tests anywhere in the suite ever share a rate-limit bucket. */
-function simulatedClientIp(prefix: string, testInfo: TestInfo): string {
+export function simulatedClientIp(prefix: string, testInfo: TestInfo): string {
   const seed = stableHash(`${prefix}::ip::${testInfo.title}`, 255 * 255 * 254);
   const b = 1 + (Math.floor(seed / (255 * 255)) % 254);
   const c = Math.floor(seed / 255) % 255;

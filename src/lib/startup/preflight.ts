@@ -22,6 +22,8 @@ export function runProductionPreflight(): void {
     REDIS_URL: env.REDIS_URL,
     ADMIN_INITIAL_PASSWORD: env.ADMIN_INITIAL_PASSWORD,
     NEXT_PUBLIC_WHATSAPP_NUMBER: publicEnv.NEXT_PUBLIC_WHATSAPP_NUMBER,
+    PAYMENTS_ENABLED: env.PAYMENTS_ENABLED,
+    PAYMENTS_PROVIDER: env.PAYMENTS_PROVIDER,
   });
 
   for (const warning of warnings) console.warn(`[startup] WARNING: ${warning}`);

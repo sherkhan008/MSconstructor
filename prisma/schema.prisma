@@ -536,19 +536,63 @@ model OrderStatusHistory {
  * Payments, quotes
  * ========================================================================== */
 
+/// The lifecycle of ONE payment attempt. Deliberately minimal: an attempt is
+/// either still open (PENDING) or settled in one of four ways. There is no
+/// REFUNDED state — a refund is a separate commercial event that happens
+/// outside this system (the same reasoning as OrderStatus, which cancels
+/// rather than reopens).
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+  EXPIRED
+}
+
+/// One payment attempt against one order.
+///
+/// An order may accumulate SEVERAL attempts — a failed, cancelled or expired
+/// attempt is kept forever, never rewritten — but at most one may be open at
+/// a time per provider (see `pendingKey`). Every amount here is derived on the
+/// server from the order's own immutable total; no browser-supplied figure is
+/// ever written to this table.
 model Payment {
   id            String   @id @default(cuid())
   orderId       String
   order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  type          String
-  status        String   @default("PENDING")
+  /// Which payment provider this attempt belongs to (the registry key in
+  /// src/lib/payments/registry.ts). Renamed from the old `type` column, whose
+  /// name did not say what it held; no row's value was changed.
+  provider      String
+  /// Server-side idempotency guard: "<orderId>:<provider>" while the attempt
+  /// is PENDING, NULL the moment it settles. PostgreSQL allows any number of
+  /// NULLs in a unique index, so this permits unlimited settled attempts while
+  /// making a second OPEN attempt for the same order+provider impossible —
+  /// including under a concurrent double-submit, which loses at the database
+  /// rather than at a read-then-write race in application code.
+  pendingKey    String?  @unique
+  status        PaymentStatus @default(PENDING)
+  /// The amount the customer is expected to pay, copied from the order total
+  /// at creation time. Never recalculated, never accepted from a client.
   amount        Decimal  @db.Decimal(14, 2)
+  /// ISO-4217. KZT for every attempt; the column exists so a later currency
+  /// is a data change rather than a schema change.
+  currency      String   @default("KZT")
+  /// The provider's own identifier for this attempt. NULL until a provider
+  /// issues one (and permanently NULL for an attempt that never reached one).
   externalId    String?
   invoiceNumber String?
+  /// Short, secret-free explanation of why a settled attempt is not PAID.
+  /// Sanitised before it is written (src/lib/payments/types.ts) — provider
+  /// credentials, tokens and raw payloads must never reach this column.
+  failureReason String?
+  /// When the payment was confirmed PAID by a trusted path. NULL otherwise.
+  paidAt        DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   @@index([orderId])
+  @@index([status])
 }
 
 model Quote {
@@ -627,4 +671,29 @@ model SeoMetadata {
   descriptionRu String
   descriptionKk String?
   ogImage     String?
+}
+
+/// One attempt to deliver one internal order event over one channel.
+///
+/// Purely an outbox/troubleshooting record: it has NO foreign key to Order on
+/// purpose, so it can never block, cascade into or roll back an order or
+/// payment. `payload` is the already-redacted event (order number, statuses,
+/// total — no customer name, phone, email or address) so a retry can re-send it
+/// without re-reading the order. `lastError` is a short code, never a provider
+/// message, URL or token.
+model NotificationDelivery {
+  id          String   @id @default(cuid())
+  event       String
+  channel     String
+  /// SENT | FAILED
+  status      String
+  orderNumber String
+  payload     Json
+  attempts    Int      @default(1)
+  lastError   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status, channel])
+  @@index([orderNumber])
 }

@@ -1,4 +1,5 @@
-import { test, expect, type BrowserContext, type Page } from '@playwright/test';
+import { test, expect } from './helpers/test';
+import type { BrowserContext, Page } from '@playwright/test';
 import type { PrismaClient } from '@prisma/client';
 import {
   assignManagerBehindTheUi,
@@ -12,6 +13,7 @@ import {
   type FixtureRole,
   type OrderFixtures,
 } from './helpers/admin-order-fixtures';
+import { clickWhenHydrated } from './helpers/hydration';
 
 /**
  * /admin/orders — the order queue and one order's detail screen.
@@ -44,7 +46,12 @@ let fixtures: OrderFixtures;
 
 test.beforeAll(async ({}, testInfo) => {
   prisma = createPrismaClient();
-  fixtures = await createOrderFixtures(prisma, orderFixturePrefix(testInfo.project.name));
+  // The repeat index is part of the prefix: `--repeat-each=N` runs the
+  // repetitions in parallel, and each copy's fixtures must be its own.
+  fixtures = await createOrderFixtures(
+    prisma,
+    orderFixturePrefix(testInfo.project.name, testInfo.repeatEachIndex),
+  );
 });
 
 test.afterAll(async () => {
@@ -283,8 +290,37 @@ test.describe('manager assignment', () => {
     await signIn(context, 'MANAGER', baseURL!);
     await page.goto(`/admin/orders/${fixtures.unassigned.id}`);
 
-    await expect(page.getByRole('button', { name: 'Взять заказ' })).toBeVisible();
-    await page.getByRole('button', { name: 'Взять заказ' }).click();
+    // Not a plain click(): "Взять заказ" is enabled in the server-rendered
+    // HTML, so a click can land before React has attached its onClick and be
+    // dropped without a trace. See helpers/hydration.ts.
+    await clickWhenHydrated(page.getByRole('button', { name: 'Взять заказ' }));
+
+    await expect(page.getByTestId('order-manager-value')).toHaveText(fixtures.users.MANAGER.name);
+    expect((await readOrder(prisma, fixtures.unassigned.id)).managerId).toBe(fixtures.users.MANAGER.id);
+  });
+
+  /**
+   * The full-run-only flake this file used to have, made deterministic.
+   *
+   * Holding the client bundle puts the button on screen — visible, enabled
+   * and completely inert — at the moment the click lands, which is exactly
+   * the state a loaded machine produced by accident. With a plain click()
+   * this test fails: nothing is sent and the order stays unassigned.
+   */
+  test('a claim made before the page has hydrated still reaches the server', async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    await signIn(context, 'MANAGER', baseURL!);
+    await page.route('**/*.js', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+      await route.continue();
+    });
+    // 'commit' so the wait for the held scripts happens *after* this returns.
+    await page.goto(`/admin/orders/${fixtures.unassigned.id}`, { waitUntil: 'commit' });
+
+    await clickWhenHydrated(page.getByRole('button', { name: 'Взять заказ' }));
 
     await expect(page.getByTestId('order-manager-value')).toHaveText(fixtures.users.MANAGER.name);
     expect((await readOrder(prisma, fixtures.unassigned.id)).managerId).toBe(fixtures.users.MANAGER.id);
@@ -339,7 +375,7 @@ test.describe('manager assignment', () => {
     // A colleague takes it while this page is open.
     await assignManagerBehindTheUi(prisma, fixtures.unassigned.id, fixtures.otherManager.id);
 
-    await page.getByRole('button', { name: 'Взять заказ' }).click();
+    await clickWhenHydrated(page.getByRole('button', { name: 'Взять заказ' }));
     await expect(page.getByTestId('order-manager-error')).toContainText('уже был изменён');
     expect((await readOrder(prisma, fixtures.unassigned.id)).managerId).toBe(fixtures.otherManager.id);
   });

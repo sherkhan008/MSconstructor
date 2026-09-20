@@ -18,9 +18,10 @@ import { rateLimitIdentity, resolveClientIp } from '@/lib/security/client-ip';
  * - public limiters (`local-fallback`) keep enforcing the SAME numbers from
  *   per-process memory — degraded to per-instance counting, never unlimited,
  *   and the storefront stays up.
- * - adminLogin (`deny`) refuses the attempt: brute-force protection is only
- *   as strong as the shared counter, so a Redis outage must not multiply the
- *   allowance by the instance count. Existing admin sessions are unaffected.
+ * - adminLogin and payments (`deny`) refuse the attempt: their protection is
+ *   only as strong as the shared counter, so a Redis outage must not multiply
+ *   the allowance by the instance count. Existing admin sessions are
+ *   unaffected, and no order or payment record is touched by a refusal.
  */
 
 export type SharedStoreFailurePolicy = 'local-fallback' | 'deny';
@@ -36,6 +37,11 @@ export const RATE_LIMITS = {
   orders: { limit: 5, windowMs: 60_000, whenSharedStoreUnavailable: 'local-fallback' },
   contact: { limit: 5, windowMs: 60_000, whenSharedStoreUnavailable: 'local-fallback' },
   promoCode: { limit: 20, windowMs: 60_000, whenSharedStoreUnavailable: 'local-fallback' },
+  // Starting a payment is idempotent per order (src/lib/payments/store.ts), so
+  // the limit is about stopping an order-number sweep rather than protecting a
+  // write. `deny` on a store outage: unlike the storefront, an unavailable
+  // payment path costs a retry, not a lost visitor.
+  payments: { limit: 10, windowMs: 60_000, whenSharedStoreUnavailable: 'deny' },
   adminLogin: { limit: 10, windowMs: 60_000, whenSharedStoreUnavailable: 'deny' },
 } as const satisfies Record<string, RateLimitRule>;
 

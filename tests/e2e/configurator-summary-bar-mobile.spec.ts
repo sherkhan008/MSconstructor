@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './helpers/test';
 
 /**
  * The order summary bar is `fixed inset-x-0 bottom-0`, so any content wider

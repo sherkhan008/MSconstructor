@@ -31,38 +31,9 @@ function orderSummaryText(order: OrderRecord): string {
   return lines.join('\n');
 }
 
-async function notifyTelegram(order: OrderRecord): Promise<NotificationOutcome> {
-  if (!integrations.telegram) return { channel: 'telegram', success: false, error: 'not_configured' };
-  try {
-    const url = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: env.TELEGRAM_CHAT_ID, text: orderSummaryText(order) }),
-    });
-    if (!response.ok) throw new Error(`Telegram API responded ${response.status}`);
-    return { channel: 'telegram', success: true };
-  } catch (error) {
-    return { channel: 'telegram', success: false, error: error instanceof Error ? error.message : 'unknown_error' };
-  }
-}
-
-/**
- * SMTP email is intentionally not wired to a transport library in the MVP —
- * see EMAIL_FROM/SMTP_* in .env.example. Plug nodemailer (or another
- * provider) into this function; every caller already treats it as
- * best-effort and ignores its absence.
- */
-async function notifyEmail(order: OrderRecord): Promise<NotificationOutcome> {
-  if (!integrations.email) return { channel: 'email', success: false, error: 'not_configured' };
-  try {
-     
-    console.info(`[email:stub] Would email ${env.MANAGER_EMAIL ?? env.EMAIL_FROM} about order ${order.orderNumber}`);
-    return { channel: 'email', success: true };
-  } catch (error) {
-    return { channel: 'email', success: false, error: error instanceof Error ? error.message : 'unknown_error' };
-  }
-}
+// Telegram/email for order events now live in ./service.ts (redacted payloads,
+// delivery outbox). This file keeps the legacy WhatsApp/CRM fan-out and the
+// contact-form alert.
 
 async function notifyWhatsAppBusinessApi(order: OrderRecord): Promise<NotificationOutcome> {
   if (!integrations.whatsappApi) return { channel: 'whatsapp_api', success: false, error: 'not_configured' };
@@ -114,8 +85,6 @@ async function notifyCrmWebhook(name: 'amocrm' | 'bitrix24', webhookUrl: string 
  */
 export async function notifyNewOrder(order: OrderRecord): Promise<NotificationOutcome[]> {
   const results = await Promise.allSettled([
-    notifyTelegram(order),
-    notifyEmail(order),
     notifyWhatsAppBusinessApi(order),
     notifyCrmWebhook('amocrm', env.AMOCRM_WEBHOOK_URL, order),
     notifyCrmWebhook('bitrix24', env.BITRIX24_WEBHOOK_URL, order),
@@ -124,7 +93,7 @@ export async function notifyNewOrder(order: OrderRecord): Promise<NotificationOu
   return results.map((result, index) =>
     result.status === 'fulfilled'
       ? result.value
-      : { channel: ['telegram', 'email', 'whatsapp_api', 'amocrm', 'bitrix24'][index], success: false, error: 'rejected' },
+      : { channel: ['whatsapp_api', 'amocrm', 'bitrix24'][index], success: false, error: 'rejected' },
   );
 }
 

@@ -161,6 +161,35 @@ const ADMIN_ONLY_MODULES = [
   '@/lib/admin/internal-notes',
 ];
 
+/**
+ * The one deliberate exception, by (module → importer).
+ *
+ * `@/lib/admin/orders` owns updateOrderStatus, which is the single writer of
+ * Order.status — the transition policy, the compare-and-swap and the audit
+ * row all live inside it. The order workflow has two trusted channels, ADMIN
+ * and PAYMENT_PROVIDER (src/lib/orders/status-transitions.ts), so the payment
+ * service has to reach that writer; re-implementing the write on the payment
+ * side would mean a second, unaudited path to Order.status, which is far
+ * worse than this import.
+ *
+ * It is not a hole in the privacy rule. The rule protects customer PAYLOADS
+ * from admin data (internal notes, manager, cost-bearing BOM), and
+ * updateOrderStatus returns none of it — only { previousStatus, newStatus,
+ * changed, updatedAt }. The next test pins exactly which symbols may cross,
+ * so the exception cannot widen into "payments may read admin orders".
+ */
+const ALLOWED_ADMIN_IMPORTERS: Record<string, readonly string[]> = {
+  '@/lib/admin/orders': ['lib/payments/service.ts'],
+};
+
+/** Symbols the exception above covers. Strictly the status writer and the
+ * two errors its caller has to catch — nothing that reads order data. */
+const PAYMENT_SERVICE_ADMIN_SYMBOLS = [
+  'updateOrderStatus',
+  'AdminOrderStatusTransitionNotAllowedError',
+  'AdminOrderConflictError',
+];
+
 /** Everything under these paths is behind the admin session. */
 function isAdminPath(relativePath: string): boolean {
   const normalized = relativePath.split(sep).join('/');
@@ -191,14 +220,47 @@ describe('module boundary', () => {
   });
 
   it.each(ADMIN_ONLY_MODULES)('no customer-facing module imports %s at runtime', (module) => {
+    const allowed = ALLOWED_ADMIN_IMPORTERS[module] ?? [];
     const offenders = customerFacingFiles.filter((file) => {
       const source = readFileSync(join(SRC, file), 'utf8');
       // `import type` is erased at build time and cannot carry a value into a
       // customer payload; a value import can.
       const valueImport = new RegExp(`import\\s+(?!type\\s)[^;]*?from\\s+['"]${module}['"]`, 's');
       const dynamicImport = new RegExp(`import\\(\\s*['"]${module}['"]`);
-      return valueImport.test(source) || dynamicImport.test(source);
+      if (!valueImport.test(source) && !dynamicImport.test(source)) return false;
+      return !allowed.includes(file.split(sep).join('/'));
     });
     expect(offenders, `imported by: ${offenders.join(', ')}`).toEqual([]);
+  });
+
+  it('every allowed admin importer still exists', () => {
+    // Keeps the exception list honest: a stale entry would silently permit a
+    // file that no longer needs permission.
+    for (const files of Object.values(ALLOWED_ADMIN_IMPORTERS)) {
+      for (const file of files) {
+        expect(customerFacingFiles.map((f) => f.split(sep).join('/'))).toContain(file);
+      }
+    }
+  });
+
+  it('the payment service takes only the order-status writer from the admin module', () => {
+    const source = readFileSync(join(SRC, 'lib', 'payments', 'service.ts'), 'utf8');
+    const imports = [...source.matchAll(/import\s*\(\s*['"]@\/lib\/admin\/orders['"]\s*\)/g)];
+    expect(imports.length).toBeGreaterThan(0);
+
+    // Every symbol destructured out of that module, from any import form.
+    const destructured = [...source.matchAll(/(?:const|let)\s*\{([^}]*)\}\s*=\s*await\s*import\(\s*['"]@\/lib\/admin\/orders['"]/gs)]
+      .flatMap((match) => match[1].split(','))
+      .map((name) => name.trim())
+      .filter(Boolean);
+
+    expect(destructured.length).toBeGreaterThan(0);
+    for (const symbol of destructured) {
+      expect(PAYMENT_SERVICE_ADMIN_SYMBOLS).toContain(symbol);
+    }
+    // In particular: nothing that READS an order's admin view.
+    for (const reader of ['getAdminOrder', 'listAdminOrders', 'AdminOrderDetail', 'internalNotes']) {
+      expect(source).not.toContain(reader);
+    }
   });
 });

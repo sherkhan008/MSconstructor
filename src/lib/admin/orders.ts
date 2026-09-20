@@ -2,6 +2,8 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { assertAdminDatabaseConfigured } from '@/lib/env';
 import { recordAuditLog } from '@/lib/admin/audit';
+import { buildOrderEvent } from '@/lib/notifications/events';
+import { emitOrderEventInBackground } from '@/lib/notifications/service';
 import { INTERNAL_NOTES_MAX_LENGTH, toPlainTextNotes } from '@/lib/admin/internal-notes';
 import {
   UNASSIGNED_MANAGER_VALUE,
@@ -504,7 +506,14 @@ export interface UpdateOrderStatusParams {
   channel: OrderStatusChannel;
   /** Order.updatedAt as the client loaded it — the lost-update guard. */
   expectedUpdatedAt?: string;
-  actor: { id: string; name: string };
+  /**
+   * Who is making the change. `id` is a User row and is absent for a channel
+   * that is not a person — the PAYMENT_PROVIDER path has no admin account, and
+   * pointing AuditLog.userId at an invented id would break its foreign key.
+   * `name` is always required and is snapshotted into the audit row either
+   * way, so the trail never loses who (or what) moved the order.
+   */
+  actor: { id?: string; name: string };
   ipAddress?: string;
   userAgent?: string;
 }
@@ -546,10 +555,11 @@ export interface UpdateOrderStatusResult {
 export async function updateOrderStatus(params: UpdateOrderStatusParams): Promise<UpdateOrderStatusResult> {
   assertAdminDatabaseConfigured();
 
-  return prisma.$transaction(async (tx) => {
+  let eventOrder: { orderNumber: string; grandTotal: number } | undefined;
+  const result = await prisma.$transaction(async (tx) => {
     const existing = await tx.order.findUnique({
       where: { id: params.orderId },
-      select: { status: true, updatedAt: true },
+      select: { status: true, updatedAt: true, orderNumber: true, grandTotal: true },
     });
     if (!existing) throw new AdminOrderNotFoundError(params.orderId);
 
@@ -626,6 +636,7 @@ export async function updateOrderStatus(params: UpdateOrderStatusParams): Promis
       select: { updatedAt: true },
     });
 
+    eventOrder = { orderNumber: existing.orderNumber, grandTotal: Number(existing.grandTotal) };
     return {
       previousStatus,
       newStatus: params.newStatus,
@@ -633,6 +644,20 @@ export async function updateOrderStatus(params: UpdateOrderStatusParams): Promis
       updatedAt: (after?.updatedAt ?? existing.updatedAt).toISOString(),
     } satisfies UpdateOrderStatusResult;
   });
+
+  // After commit, never inside the transaction: a notification problem must not
+  // roll back or delay the status change. Fire-and-forget; cannot throw.
+  if (result.changed && eventOrder) {
+    const base = {
+      orderNumber: eventOrder.orderNumber,
+      status: result.newStatus,
+      previousStatus: result.previousStatus,
+      grandTotal: eventOrder.grandTotal,
+    };
+    emitOrderEventInBackground(buildOrderEvent({ event: 'order.status_changed', ...base }));
+    if (result.newStatus === 'PAID') emitOrderEventInBackground(buildOrderEvent({ event: 'order.paid', ...base }));
+  }
+  return result;
 }
 
 /* -------------------------------------------------------------------------- */

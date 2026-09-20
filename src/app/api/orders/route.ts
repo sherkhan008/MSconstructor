@@ -8,6 +8,8 @@ import { enforceRateLimit } from '@/lib/rate-limit';
 import { generateOrderNumber, saveOrder } from '@/lib/orders/store';
 import type { OrderItemRecord, OrderRecord } from '@/lib/orders/types';
 import { notifyNewOrder } from '@/lib/notifications';
+import { buildOrderEvent } from '@/lib/notifications/events';
+import { emitOrderEventInBackground } from '@/lib/notifications/service';
 import { createOrderBuyerSnapshot, createOrderItemDocumentSnapshot } from '@/lib/documents/snapshots';
 
 export const runtime = 'nodejs';
@@ -134,6 +136,14 @@ export async function POST(request: NextRequest) {
 
     // Best-effort — a notification failure must never roll back a saved order.
     void notifyNewOrder(saved);
+    emitOrderEventInBackground(
+      buildOrderEvent({
+        event: 'order.created',
+        orderNumber: saved.orderNumber,
+        status: saved.status,
+        grandTotal: saved.grandTotal,
+      }),
+    );
 
     return apiOk({ orderNumber: saved.orderNumber, grandTotal: saved.grandTotal }, 201);
   } catch (error) {
