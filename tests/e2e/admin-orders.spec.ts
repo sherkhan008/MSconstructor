@@ -203,7 +203,7 @@ test.describe('layout', () => {
   test('marks new orders apart from the rest', async ({ page }) => {
     await search(page, fixtures.prefix);
     await expect(rowFor(page, fixtures.unassigned.orderNumber)).toHaveAttribute('data-status', 'NEW');
-    await expect(rowFor(page, fixtures.assigned.orderNumber)).toHaveAttribute('data-status', 'CONTACTED');
+    await expect(rowFor(page, fixtures.assigned.orderNumber)).toHaveAttribute('data-status', 'CONFIRMED');
   });
 
   test('never scrolls the page sideways', async ({ page }) => {

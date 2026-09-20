@@ -11,8 +11,15 @@ export const adminLoginSchema = z.object({
 });
 export type AdminLoginInput = z.infer<typeof adminLoginSchema>;
 
+/**
+ * A workflow step. Parsing only answers "is this a real status value" — which
+ * step is legal from where, and who is trusted to take it, is decided by
+ * src/lib/orders/status-transitions.ts inside updateOrderStatus().
+ */
 export const updateOrderStatusSchema = z.object({
   status: z.enum(ORDER_STATUS_VALUES),
+  /** Order.updatedAt as the client loaded it — the lost-update guard. */
+  expectedUpdatedAt: z.string().datetime().optional(),
 });
 export type UpdateOrderStatusInput = z.infer<typeof updateOrderStatusSchema>;
 

@@ -18,6 +18,11 @@ import {
   canClaimUnassignedOrder,
   canEditInternalNotes,
 } from '@/lib/auth/authorize';
+import {
+  checkOrderStatusTransition,
+  type OrderStatusChannel,
+  type OrderStatusTransitionRejection,
+} from '@/lib/orders/status-transitions';
 import type { OrderItemRecord } from '@/lib/orders/types';
 import type {
   AdminRole,
@@ -467,6 +472,23 @@ export class AdminOrderManagerNotAssignableError extends Error {
   }
 }
 
+/** The requested status change is not in the allowed graph, or the channel
+ * asking for it is not trusted with it. Carries the exact reason so the route
+ * can answer 403 (untrusted) vs 409 (impossible from this state). */
+export class AdminOrderStatusTransitionNotAllowedError extends Error {
+  readonly reason: OrderStatusTransitionRejection;
+  readonly from: OrderStatus;
+  readonly to: OrderStatus;
+
+  constructor(from: OrderStatus, to: OrderStatus, reason: OrderStatusTransitionRejection) {
+    super(`Order status transition ${from} → ${to} rejected: ${reason}.`);
+    this.name = 'AdminOrderStatusTransitionNotAllowedError';
+    this.reason = reason;
+    this.from = from;
+    this.to = to;
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* Status                                                                      */
 /* -------------------------------------------------------------------------- */
@@ -474,6 +496,14 @@ export class AdminOrderManagerNotAssignableError extends Error {
 export interface UpdateOrderStatusParams {
   orderId: string;
   newStatus: OrderStatus;
+  /**
+   * The trusted path this change arrives through — see OrderStatusChannel.
+   * Required, with no default: a caller must state what it is, so a new call
+   * site can never inherit admin-level trust by forgetting to say anything.
+   */
+  channel: OrderStatusChannel;
+  /** Order.updatedAt as the client loaded it — the lost-update guard. */
+  expectedUpdatedAt?: string;
   actor: { id: string; name: string };
   ipAddress?: string;
   userAgent?: string;
@@ -483,29 +513,84 @@ export interface UpdateOrderStatusResult {
   previousStatus: OrderStatus;
   newStatus: OrderStatus;
   changed: boolean;
+  /** The order's `updatedAt` after the call — the client's next CAS token. */
+  updatedAt: string;
 }
 
 /**
+ * Moves one order through the workflow.
+ *
+ * The transition itself is decided by checkOrderStatusTransition() — the same
+ * policy the admin screen renders its buttons from — and it is re-checked HERE,
+ * against the status the row really has inside the transaction, because the
+ * button the admin clicked was rendered from a page that may now be minutes
+ * old. A status the graph forbids, and any status this channel is not trusted
+ * with (PAID above all), is rejected and writes nothing.
+ *
  * Updates Order.status, appends OrderStatusHistory, and writes an AuditLog
- * row — all inside one Prisma transaction, so a partial write (status
- * changed but no history/audit trail, or vice versa) can never happen.
- * A no-op request (new status === current status) writes nothing and
- * reports changed: false, so re-submitting the same status from the UI
- * doesn't spam the history/audit trail.
+ * row — all inside one Prisma transaction, so a partial write (status changed
+ * but no history/audit trail, or vice versa) can never happen.
+ *
+ * Concurrency: the UPDATE is a compare-and-swap on (updatedAt, status), so two
+ * admins clicking two different transitions on the same order cannot both
+ * win — the loser gets AdminOrderConflictError (409) and the order keeps the
+ * first change. This holds even when the caller sends no expectedUpdatedAt:
+ * the CAS pins the status the transition was checked against, so a stale
+ * double-submit ("Подтвердить заказ" clicked twice, or replayed) can never
+ * apply a second time.
+ *
+ * A no-op request (new status === current status) writes nothing and reports
+ * changed: false, so re-submitting the same status from the UI doesn't spam
+ * the history/audit trail.
  */
 export async function updateOrderStatus(params: UpdateOrderStatusParams): Promise<UpdateOrderStatusResult> {
   assertAdminDatabaseConfigured();
 
   return prisma.$transaction(async (tx) => {
-    const existing = await tx.order.findUnique({ where: { id: params.orderId }, select: { status: true } });
+    const existing = await tx.order.findUnique({
+      where: { id: params.orderId },
+      select: { status: true, updatedAt: true },
+    });
     if (!existing) throw new AdminOrderNotFoundError(params.orderId);
 
-    const previousStatus = existing.status as OrderStatus;
-    if (previousStatus === params.newStatus) {
-      return { previousStatus, newStatus: params.newStatus, changed: false };
+    if (params.expectedUpdatedAt !== undefined) {
+      const expected = new Date(params.expectedUpdatedAt).getTime();
+      if (Number.isNaN(expected) || expected !== existing.updatedAt.getTime()) {
+        throw new AdminOrderConflictError(existing.updatedAt.toISOString());
+      }
     }
 
-    await tx.order.update({ where: { id: params.orderId }, data: { status: params.newStatus } });
+    const previousStatus = existing.status as OrderStatus;
+    const check = checkOrderStatusTransition({
+      from: previousStatus,
+      to: params.newStatus,
+      channel: params.channel,
+    });
+    if (!check.ok) {
+      if (check.reason === 'SAME_STATUS') {
+        return {
+          previousStatus,
+          newStatus: params.newStatus,
+          changed: false,
+          updatedAt: existing.updatedAt.toISOString(),
+        } satisfies UpdateOrderStatusResult;
+      }
+      throw new AdminOrderStatusTransitionNotAllowedError(previousStatus, params.newStatus, check.reason);
+    }
+
+    // Compare-and-swap on both the concurrency token and the field being
+    // changed: matches 0 rows if anyone moved this order in the meantime.
+    const updated = await tx.order.updateMany({
+      where: { id: params.orderId, updatedAt: existing.updatedAt, status: previousStatus },
+      data: { status: params.newStatus },
+    });
+    if (updated.count !== 1) {
+      const current = await tx.order.findUnique({
+        where: { id: params.orderId },
+        select: { updatedAt: true },
+      });
+      throw new AdminOrderConflictError(current?.updatedAt.toISOString());
+    }
 
     await tx.orderStatusHistory.create({
       data: {
@@ -522,14 +607,31 @@ export async function updateOrderStatus(params: UpdateOrderStatusParams): Promis
         entityType: 'ORDER',
         entityId: params.orderId,
         previousData: { status: previousStatus },
-        newData: { status: params.newStatus },
+        newData: {
+          status: params.newStatus,
+          // Snapshot of the actor and the path they came through, so the trail
+          // still answers "who moved this order, and how" after the account is
+          // deleted and AuditLog.userId becomes NULL.
+          actorName: params.actor.name,
+          channel: params.channel,
+        },
         ipAddress: params.ipAddress,
         userAgent: params.userAgent,
       },
       tx,
     );
 
-    return { previousStatus, newStatus: params.newStatus, changed: true };
+    const after = await tx.order.findUnique({
+      where: { id: params.orderId },
+      select: { updatedAt: true },
+    });
+
+    return {
+      previousStatus,
+      newStatus: params.newStatus,
+      changed: true,
+      updatedAt: (after?.updatedAt ?? existing.updatedAt).toISOString(),
+    } satisfies UpdateOrderStatusResult;
   });
 }
 

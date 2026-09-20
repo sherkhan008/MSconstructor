@@ -4,14 +4,12 @@ import type { OrderStatus } from '@/lib/types/domain';
  * `z.enum` validation and the label map below both derive from. */
 export const ORDER_STATUS_VALUES = [
   'NEW',
-  'CONTACTED',
-  'APPROVED',
+  'CONFIRMED',
   'AWAITING_PAYMENT',
   'PAID',
-  'PRODUCTION',
-  'READY_FOR_DELIVERY',
+  'IN_PROGRESS',
+  'READY',
   'DELIVERED',
-  'COMPLETED',
   'CANCELLED',
 ] as const satisfies readonly OrderStatus[];
 
@@ -23,13 +21,28 @@ export const ORDER_STATUS_VALUES = [
  */
 export const ORDER_STATUS_LABEL_RU: Record<OrderStatus, string> = {
   NEW: 'Новый',
-  CONTACTED: 'Связались',
-  APPROVED: 'Подтверждён',
+  CONFIRMED: 'Подтверждён',
   AWAITING_PAYMENT: 'Ожидает оплаты',
   PAID: 'Оплачен',
-  PRODUCTION: 'В работе',
-  READY_FOR_DELIVERY: 'Готов к доставке',
+  IN_PROGRESS: 'В работе',
+  READY: 'Готов к выдаче',
   DELIVERED: 'Доставлен',
-  COMPLETED: 'Завершён',
   CANCELLED: 'Отменён',
+};
+
+/**
+ * The button copy for *moving* an order into a status, as opposed to naming
+ * the status it is in. "Ожидает оплаты" is a state; "Выставить счёт" is the
+ * action an admin is about to take — a separate map because an action label
+ * that reads like a state label makes the workflow buttons ambiguous.
+ */
+export const ORDER_STATUS_ACTION_LABEL_RU: Record<OrderStatus, string> = {
+  NEW: 'Вернуть в новые',
+  CONFIRMED: 'Подтвердить заказ',
+  AWAITING_PAYMENT: 'Выставить к оплате',
+  PAID: 'Отметить оплаченным',
+  IN_PROGRESS: 'Взять в работу',
+  READY: 'Готов к выдаче',
+  DELIVERED: 'Отметить доставленным',
+  CANCELLED: 'Отменить заказ',
 };

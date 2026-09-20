@@ -51,7 +51,7 @@ export interface OrderFixtures {
   prefix: string;
   /** NEW, nobody responsible, individual customer — the claim/assign subject. */
   unassigned: FixtureOrder;
-  /** CONTACTED, already held by another manager — the "cannot take" subject. */
+  /** CONFIRMED, already held by another manager — the "cannot take" subject. */
   assigned: FixtureOrder & { managerId: string; managerName: string };
   /** PAID, 40 days old, legal entity — the search/filter subject. */
   legacy: FixtureOrder & { companyName: string; binIin: string };
@@ -129,7 +129,7 @@ function bomJson(): Prisma.InputJsonValue {
 export interface CreateOrderInput {
   prefix: string;
   index: number;
-  status: 'NEW' | 'CONTACTED' | 'PAID';
+  status: 'NEW' | 'CONFIRMED' | 'PAID';
   customerType: 'INDIVIDUAL' | 'LEGAL_ENTITY';
   fullName: string;
   companyName?: string;
@@ -291,7 +291,7 @@ export async function createOrderFixtures(
   const assignedOrder = await createOrder(prisma, {
     prefix,
     index: 2,
-    status: 'CONTACTED',
+    status: 'CONFIRMED',
     customerType: 'INDIVIDUAL',
     fullName: `${prefix} Ержан Занятый`,
     managerId: otherManager.id,

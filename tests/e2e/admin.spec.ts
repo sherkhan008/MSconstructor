@@ -101,10 +101,14 @@ test.describe('order detail', () => {
     // The internal BOM — component-level detail a customer never sees.
     await expect(page.getByText('MS-SHELF-1000-500')).toBeVisible();
 
-    await page.getByLabel('Статус заказа').selectOption('CONTACTED');
-    await page.getByRole('button', { name: 'Изменить статус' }).click();
+    // A NEW order offers exactly two steps: confirm it, or cancel it. There
+    // is no control for jumping straight to PAID.
+    await expect(page.getByTestId('order-status-value')).toHaveText('Новый');
+    await expect(page.getByTestId('order-status-to-PAID')).toHaveCount(0);
 
-    await expect(page.getByText('Связались').first()).toBeVisible();
-    expect((await readOrder(prisma, fixtures.unassigned.id)).status).toBe('CONTACTED');
+    await page.getByTestId('order-status-to-CONFIRMED').click();
+
+    await expect(page.getByTestId('order-status-value')).toHaveText('Подтверждён');
+    expect((await readOrder(prisma, fixtures.unassigned.id)).status).toBe('CONFIRMED');
   });
 });
