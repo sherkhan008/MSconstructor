@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { describe, expect, it } from 'vitest';
 import {
   IMPORT_PROFILES,
@@ -7,12 +8,19 @@ import {
   SupplierPriceFileError,
   expectedRowCount,
   expectedSellingPrice,
+  genericRestoreReason,
   parseSupplierPriceCsv,
+  planGenericRestore,
+  planScopedComponent,
+  scopedComponentSku,
+  supplierImportReasonPrefix,
   supplierImportSourceLabel,
   supplierRowComponentWhere,
+  supplierRowGenericTemplateWhere,
   supplierRowIdentity,
   supplierRowKey,
   validateSupplierPriceFile,
+  type PriceHistoryEntry,
   type SupplierPriceRow,
 } from '@/lib/admin/supplier-price-import';
 import {
@@ -259,9 +267,19 @@ describe('supplier price import — component matching', () => {
     });
   });
 
-  it('accepts a model-agnostic row or one that names the model, like findComponent does', () => {
+  it('writes only to a row scoped to EXACTLY the imported model — never a generic or shared row', () => {
     const where = supplierRowComponentWhere(row({}));
-    expect(where.OR).toEqual([{ models: { isEmpty: true } }, { models: { has: 'ms-standard' } }]);
+    expect(where.models).toEqual({ equals: ['ms-standard'] });
+    expect(where.OR).toBeUndefined();
+  });
+
+  it('takes the physical attributes of a new scoped row from the generic row of the same structure', () => {
+    const shelf = row({ kind: 'SHELF_STANDARD', height: null, width: 1200, depth: 600 });
+    const template = supplierRowGenericTemplateWhere(shelf);
+    expect(template.models).toEqual({ isEmpty: true });
+    const { models: _scopedModels, ...scopedStructure } = supplierRowComponentWhere(shelf);
+    const { models: _genericModels, ...templateStructure } = template;
+    expect(templateStructure).toEqual(scopedStructure);
   });
 
   it('never matches on a display name', () => {
@@ -275,6 +293,106 @@ describe('supplier price import — component matching', () => {
       'ms-standard/SHELF_STANDARD/700x300',
     );
     expect(supplierRowIdentity(row({ kind: 'UPRIGHT', height: 1800 }))).toBe('UPRIGHT h=1800');
+  });
+});
+
+describe('supplier price import — model-scoped rows', () => {
+  const rows = parseSupplierPriceCsv(completeCsv());
+  const upright = rows.find((r) => r.kind === 'UPRIGHT' && r.height === 2000)!;
+  const shelf = rows.find((r) => r.kind === 'SHELF_STANDARD' && r.width === 1000 && r.depth === 300)!;
+  const P = MS_STANDARD_IMPORT_PROFILE;
+
+  it('derives a deterministic SKU from structural identity only', () => {
+    expect(scopedComponentSku(P, upright)).toBe('MSS-UPR-H2000');
+    expect(scopedComponentSku(P, shelf)).toBe('MSS-SHF-1000X300');
+    expect(scopedComponentSku(P, { ...shelf, purchasePrice: 0 as never, lineNumber: 99 })).toBe('MSS-SHF-1000X300');
+  });
+
+  it('gives each of the 26 approved rows its own SKU (7 uprights + 19 shelves)', () => {
+    const skus = rows.map((r) => scopedComponentSku(P, r));
+    expect(skus).toHaveLength(26);
+    expect(new Set(skus).size).toBe(26);
+    expect(skus.filter((s) => s.startsWith('MSS-UPR-'))).toHaveLength(7);
+    expect(skus.filter((s) => s.startsWith('MSS-SHF-'))).toHaveLength(19);
+  });
+
+  const generic = { sku: 'SHF-0033' };
+  const own = { sku: 'MSS-SHF-1000X300' };
+
+  it('first import: creates the scoped row from the single generic template', () => {
+    expect(planScopedComponent(P, shelf, [], [generic], false)).toEqual({
+      action: 'CREATE',
+      template: generic,
+      sku: 'MSS-SHF-1000X300',
+    });
+  });
+
+  it('repeated import: updates the same scoped row instead of creating a duplicate', () => {
+    expect(planScopedComponent(P, shelf, [own], [generic], true)).toEqual({ action: 'UPDATE', component: own });
+  });
+
+  it('blocks rather than guesses', () => {
+    const blocked = (plan: { action: string }) => expect(plan.action).toBe('BLOCKED');
+    blocked(planScopedComponent(P, shelf, [own, { sku: 'MSS-OTHER' }], [generic], true)); // two scoped rows
+    blocked(planScopedComponent(P, shelf, [{ sku: 'HAND-MADE-1' }], [generic], false)); // non-deterministic SKU
+    blocked(planScopedComponent(P, shelf, [], [generic], true)); // SKU held by an unrelated/inactive row
+    blocked(planScopedComponent(P, shelf, [], [], false)); // nothing to scope
+    blocked(planScopedComponent(P, shelf, [], [generic, { sku: 'SHF-9999' }], false)); // ambiguous template
+  });
+});
+
+describe('supplier price import — restoring generic rows', () => {
+  const P = MS_STANDARD_IMPORT_PROFILE;
+  const D = (value: number) => new Prisma.Decimal(value);
+  const importReason = supplierImportSourceLabel(P, 'private-data/pricing/ms-standard.csv');
+  const at = (minute: number) => new Date(Date.UTC(2026, 0, 1, 0, minute));
+
+  const importWrite: PriceHistoryEntry = {
+    field: 'SELLING_PRICE',
+    oldValue: D(5000),
+    newValue: D(1234),
+    adminName: SUPPLIER_IMPORT_ACTOR_NAME,
+    reason: importReason,
+    createdAt: at(10),
+  };
+
+  it('restores the verified pre-import value when the import is the latest change', () => {
+    expect(planGenericRestore(P, 'SELLING_PRICE', [importWrite], D(1234))).toEqual({
+      action: 'RESTORE',
+      value: D(5000),
+      importedValue: D(1234),
+    });
+  });
+
+  it('only looks at the requested field', () => {
+    expect(planGenericRestore(P, 'PURCHASE_PRICE', [importWrite], D(1234)).action).toBe('SKIP');
+  });
+
+  it('is idempotent: once a restore is recorded, a second run skips', () => {
+    const restore: PriceHistoryEntry = {
+      ...importWrite,
+      oldValue: D(1234),
+      newValue: D(5000),
+      reason: genericRestoreReason(P),
+      createdAt: at(20),
+    };
+    expect(planGenericRestore(P, 'SELLING_PRICE', [importWrite, restore], D(5000)).action).toBe('SKIP');
+  });
+
+  it('never overrides an admin edit made after the import', () => {
+    const edit: PriceHistoryEntry = { ...importWrite, oldValue: D(1234), newValue: D(4000), adminName: 'Admin', reason: null, createdAt: at(30) };
+    expect(planGenericRestore(P, 'SELLING_PRICE', [edit, importWrite], D(4000)).action).toBe('SKIP');
+  });
+
+  it('refuses to restore when the current value is unexplained or the old value is unknown', () => {
+    expect(planGenericRestore(P, 'SELLING_PRICE', [importWrite], D(999)).action).toBe('BLOCKED');
+    expect(planGenericRestore(P, 'SELLING_PRICE', [{ ...importWrite, oldValue: null }], D(1234)).action).toBe('BLOCKED');
+  });
+
+  it('ignores rows another model\'s import or a human wrote', () => {
+    const human = { ...importWrite, adminName: 'Admin' };
+    expect(planGenericRestore(P, 'SELLING_PRICE', [human], D(1234)).action).toBe('SKIP');
+    expect(genericRestoreReason(P).startsWith(supplierImportReasonPrefix(P))).toBe(false);
   });
 });
 

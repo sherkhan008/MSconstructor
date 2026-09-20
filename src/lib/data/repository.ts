@@ -242,26 +242,21 @@ export interface ComponentQuery {
 }
 
 /**
- * Finds the single best-matching in-stock component for a BOM line.
- * A component field of `undefined` acts as a wildcard; an explicit field
- * must equal the query value. Among ties, the entry with the most matched
- * (non-wildcard) fields wins, so a fully-specific SKU beats a generic one.
+ * Precedence between two components that both match a query, as a sort
+ * comparator (negative = `a` wins). Explicit and total, so the result never
+ * depends on catalog/database row order:
+ *
+ *   1. MODEL SCOPE — a row scoped to the queried model (non-empty `models`
+ *      that includes it) beats a generic row (`models` empty). This is what
+ *      lets a model carry its own price for a physical part without touching
+ *      the generic row every other model shares (e.g. MS Standard's
+ *      supplier-priced uprights/shelves — scripts/import-supplier-prices.ts).
+ *   2. SPECIFICITY — more matched (non-wildcard) fields wins, so a
+ *      fully-specific SKU beats a wildcard one.
+ *   3. SKU — final lexical tie-break.
  */
-export function findComponent(catalog: Catalog, query: ComponentQuery): ShelvingComponent | undefined {
-  const candidates = catalog.components.filter((c) => {
-    if (c.type !== query.type || !c.active || !c.inStock) return false;
-    if (c.models.length > 0 && !c.models.includes(query.modelSlug)) return false;
-    if (c.height !== undefined && c.height !== query.height) return false;
-    if (c.width !== undefined && c.width !== query.width) return false;
-    if (c.depth !== undefined && c.depth !== query.depth) return false;
-    if (c.loadCapacity !== undefined && c.loadCapacity !== query.loadCapacity) return false;
-    if (c.shelfType !== undefined && c.shelfType !== query.shelfType) return false;
-    if (c.variant !== undefined && c.variant !== query.variant) return false;
-    return true;
-  });
-
-  if (candidates.length === 0) return undefined;
-
+export function compareComponentPrecedence(a: ShelvingComponent, b: ShelvingComponent): number {
+  const scope = (c: ShelvingComponent) => Number(c.models.length > 0);
   const specificity = (c: ShelvingComponent) =>
     Number(c.height !== undefined) +
     Number(c.width !== undefined) +
@@ -270,7 +265,74 @@ export function findComponent(catalog: Catalog, query: ComponentQuery): Shelving
     Number(c.shelfType !== undefined) +
     Number(c.variant !== undefined);
 
-  return candidates.sort((a, b) => specificity(b) - specificity(a))[0];
+  return (
+    scope(b) - scope(a) ||
+    specificity(b) - specificity(a) ||
+    (a.sku < b.sku ? -1 : a.sku > b.sku ? 1 : 0)
+  );
+}
+
+/**
+ * Does this component answer the query at all, ignoring whether it can
+ * currently be sold? A field of `undefined` acts as a wildcard; an explicit
+ * field must equal the query value. A row scoped to other models is not a
+ * candidate for this model, so it can neither be used nor shadow anything.
+ */
+function matchesComponentQuery(c: ShelvingComponent, query: ComponentQuery): boolean {
+  if (c.type !== query.type) return false;
+  if (c.models.length > 0 && !c.models.includes(query.modelSlug)) return false;
+  if (c.height !== undefined && c.height !== query.height) return false;
+  if (c.width !== undefined && c.width !== query.width) return false;
+  if (c.depth !== undefined && c.depth !== query.depth) return false;
+  if (c.loadCapacity !== undefined && c.loadCapacity !== query.loadCapacity) return false;
+  if (c.shelfType !== undefined && c.shelfType !== query.shelfType) return false;
+  if (c.variant !== undefined && c.variant !== query.variant) return false;
+  return true;
+}
+
+/** A component that may actually be sold right now. */
+const isSellable = (c: ShelvingComponent) => c.active && c.inStock;
+
+/**
+ * Finds the single best-matching sellable component for a BOM line.
+ *
+ * SCOPED ROWS SHADOW GENERIC ROWS
+ * -------------------------------
+ * The candidate pool is decided BEFORE availability is considered:
+ *
+ *   - if any row scoped to the queried model matches the query, the pool is
+ *     exactly those scoped rows and every generic (`models = []`) match is
+ *     shadowed out of it — whether or not the scoped rows can be sold;
+ *   - otherwise the pool is the generic matches.
+ *
+ * Only then is the pool narrowed to what is active and in stock, and the
+ * winner picked with compareComponentPrecedence.
+ *
+ * The consequence that matters commercially: when a model carries its own
+ * price for a part (MS Standard's supplier-priced uprights and shelves,
+ * scripts/import-supplier-prices.ts) and that scoped row is deactivated or
+ * goes out of stock, the configuration becomes UNAVAILABLE — this returns
+ * `undefined`, which buildBom turns into a missing critical component and the
+ * pricing engine into INDIVIDUAL_QUOTE_REQUIRED. It must never quietly fall
+ * back to the generic row, because that row carries a different model's price
+ * and the customer would be quoted the wrong figure.
+ *
+ * Generic fallback stays fully available for every identity that has no
+ * scoped row at all, which is how MS Strong and Archive MS are priced.
+ *
+ * Reading inactive rows: buildDbCatalog() therefore loads components without
+ * an `active` filter, so a deactivated scoped row is still visible here and
+ * can do its shadowing.
+ */
+export function findComponent(catalog: Catalog, query: ComponentQuery): ShelvingComponent | undefined {
+  const matches = catalog.components.filter((c) => matchesComponentQuery(c, query));
+  const scoped = matches.filter((c) => c.models.length > 0);
+  const pool = scoped.length > 0 ? scoped : matches;
+
+  const sellable = pool.filter(isSellable);
+  if (sellable.length === 0) return undefined;
+
+  return sellable.sort(compareComponentPrecedence)[0];
 }
 
 export function stripComponentSecrets(component: ShelvingComponent) {

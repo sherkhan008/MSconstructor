@@ -42,6 +42,8 @@ export interface ModelImportProfile {
    * different stored rate rather than silently repricing at one.
    */
   expectedVatPercent: number;
+  /** SKU prefix of this model's scoped supplier-priced components (see scopedComponentSku). */
+  scopedSkuPrefix: string;
   /** Every upright height the list must price, from the authoritative matrix. */
   requiredUprightHeights: number[];
   /** Every ordinary (STANDARD) shelf width×depth the list must price. */
@@ -60,6 +62,7 @@ export const MS_STANDARD_IMPORT_PROFILE: ModelImportProfile = {
   label: 'MS Стандарт',
   sellingPriceIncludesModelMarkup: true,
   expectedVatPercent: 16,
+  scopedSkuPrefix: 'MSS',
   requiredUprightHeights: [...MS_STANDARD_HEIGHTS],
   requiredShelfSizes: MS_STANDARD_WIDTHS.flatMap((width) =>
     getAllowedDepthsForWidth(width).map((depth) => ({ width, depth })),
@@ -330,13 +333,22 @@ export function expectedSellingPrice(purchasePrice: Prisma.Decimal | number, upl
 /* -------------------------------------------------------------------------- */
 
 /**
- * A component row belongs to a model when it is either model-agnostic (empty
- * `models` array) or explicitly lists the slug — the exact rule
- * findComponent() uses in src/lib/data/repository.ts.
+ * MODEL-SCOPED PRICE ROWS
+ *
+ * A supplier price list prices ONE model. The physical upright/shelf it
+ * quotes is often the same generic catalog Component (`models = []`) that
+ * other models (MS Strong, Archive MS, …) also resolve to, so writing the
+ * supplier figure into that generic row would silently reprice every other
+ * model. The import therefore writes ONLY to a component scoped to exactly
+ * the imported model (`models = [slug]`), creating it from the generic row
+ * on first import. findComponent() (src/lib/data/repository.ts) ranks a
+ * model-scoped match above a generic one, so the imported model uses the
+ * scoped price and every other model keeps the generic row untouched.
+ *
+ * The scoped row's SKU is DERIVED from the supplier row's structural identity
+ * (see scopedComponentSku), so repeated imports always address the same row
+ * and never create a duplicate.
  */
-function modelCompatible(modelSlug: string): Prisma.ComponentWhereInput {
-  return { OR: [{ models: { isEmpty: true } }, { models: { has: modelSlug } }] };
-}
 
 /**
  * The structural fingerprint of the component a supplier row prices — stable
@@ -352,8 +364,8 @@ function modelCompatible(modelSlug: string): Prisma.ComponentWhereInput {
  * `shelfType = 'STANDARD'` excludes the reinforced / extra-reinforced /
  * perforated / galvanised shelves this price list does not quote.
  */
-export function supplierRowComponentWhere(row: SupplierPriceRow): Prisma.ComponentWhereInput {
-  const common = { active: true, ...modelCompatible(row.model) };
+function supplierRowStructuralWhere(row: SupplierPriceRow): Prisma.ComponentWhereInput {
+  const common = { active: true };
   if (row.kind === 'UPRIGHT') {
     return {
       ...common,
@@ -379,6 +391,147 @@ export function supplierRowComponentWhere(row: SupplierPriceRow): Prisma.Compone
 }
 
 /**
+ * The component a supplier row writes to: the structural match that is
+ * scoped to EXACTLY the imported model. A generic row, or one shared with
+ * any other model (`['ms-standard', 'archive-ms']`), is never an import
+ * target — writing there would reprice the other model.
+ */
+export function supplierRowComponentWhere(row: SupplierPriceRow): Prisma.ComponentWhereInput {
+  return { ...supplierRowStructuralWhere(row), models: { equals: [row.model] } };
+}
+
+/**
+ * The generic (`models = []`) row a scoped component is first created from.
+ * It supplies the physical attributes (names, weight, colours, lead time);
+ * its prices are never written by the import.
+ */
+export function supplierRowGenericTemplateWhere(row: SupplierPriceRow): Prisma.ComponentWhereInput {
+  return { ...supplierRowStructuralWhere(row), models: { isEmpty: true } };
+}
+
+/**
+ * Deterministic SKU of the model-scoped component for a supplier row, derived
+ * only from its structural identity: `MSS-UPR-H2000`, `MSS-SHF-1000X300`.
+ */
+export function scopedComponentSku(profile: ModelImportProfile, row: SupplierPriceRow): string {
+  return row.kind === 'UPRIGHT'
+    ? `${profile.scopedSkuPrefix}-UPR-H${row.height}`
+    : `${profile.scopedSkuPrefix}-SHF-${row.width}X${row.depth}`;
+}
+
+export type ScopedComponentPlan<C> =
+  | { action: 'UPDATE'; component: C }
+  | { action: 'CREATE'; template: C; sku: string }
+  | { action: 'BLOCKED'; reason: string };
+
+/**
+ * Decides, for one supplier row, whether the import updates the existing
+ * model-scoped component, creates it from the generic template, or must stop.
+ * Anything other than one clean answer blocks the whole import — never a
+ * guess, never a duplicate.
+ *
+ * @param scoped     rows matching supplierRowComponentWhere
+ * @param templates  rows matching supplierRowGenericTemplateWhere
+ * @param skuTaken   whether ANY component already holds the deterministic SKU
+ */
+export function planScopedComponent<C extends { sku: string }>(
+  profile: ModelImportProfile,
+  row: SupplierPriceRow,
+  scoped: C[],
+  templates: C[],
+  skuTaken: boolean,
+): ScopedComponentPlan<C> {
+  const sku = scopedComponentSku(profile, row);
+  if (scoped.length > 1) {
+    return { action: 'BLOCKED', reason: `AMBIGUOUS: ${scoped.length} ${row.model}-scoped rows (${scoped.map((c) => c.sku).join(', ')})` };
+  }
+  if (scoped.length === 1) {
+    if (scoped[0].sku !== sku) {
+      return { action: 'BLOCKED', reason: `scoped row ${scoped[0].sku} does not carry the deterministic SKU ${sku}` };
+    }
+    return { action: 'UPDATE', component: scoped[0] };
+  }
+  if (skuTaken) {
+    return { action: 'BLOCKED', reason: `SKU ${sku} already exists but is not the ${row.model}-scoped row for this size` };
+  }
+  if (templates.length !== 1) {
+    return {
+      action: 'BLOCKED',
+      reason: templates.length === 0 ? 'NO MATCH: no generic component to scope' : `AMBIGUOUS: ${templates.length} generic templates`,
+    };
+  }
+  return { action: 'CREATE', template: templates[0], sku };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Restoring generic rows overwritten by earlier (pre-scoping) imports          */
+/* -------------------------------------------------------------------------- */
+
+/** Prefix of every PriceHistory.reason an import of this model has written. */
+export function supplierImportReasonPrefix(profile: ModelImportProfile): string {
+  return `Импорт прайс-листа поставщика — ${profile.label} (`;
+}
+
+/** PriceHistory.reason recorded when a generic row is given back its value. */
+export function genericRestoreReason(profile: ModelImportProfile): string {
+  return `Восстановление общей цены: импорт ${profile.label} перенесён на позиции модели`;
+}
+
+export interface PriceHistoryEntry {
+  field: 'SELLING_PRICE' | 'PURCHASE_PRICE' | null;
+  oldValue: Prisma.Decimal | null;
+  newValue: Prisma.Decimal;
+  adminName: string | null;
+  reason: string | null;
+  createdAt: Date;
+}
+
+export type GenericRestorePlan =
+  | { action: 'RESTORE'; value: Prisma.Decimal; importedValue: Prisma.Decimal }
+  | { action: 'SKIP'; reason: string }
+  | { action: 'BLOCKED'; reason: string };
+
+/**
+ * Before scoping existed, imports wrote supplier figures straight into GENERIC
+ * rows. For one generic row and one price field, decides whether that write
+ * can be undone from VERIFIED evidence — its own PriceHistory row:
+ *
+ *   - the LATEST history entry for the field must be that import's write
+ *     (anything later — an admin edit, or a previous restore — wins, SKIP);
+ *   - the current value must still equal what the import wrote (otherwise
+ *     something changed it without a trail — BLOCKED, value preserved);
+ *   - the import must have recorded the previous value (otherwise there is
+ *     nothing verified to restore — BLOCKED, never invented).
+ *
+ * A restore appends its own history row, so a second run finds that as the
+ * latest entry and skips: the restoration is idempotent.
+ */
+export function planGenericRestore(
+  profile: ModelImportProfile,
+  field: 'SELLING_PRICE' | 'PURCHASE_PRICE',
+  history: PriceHistoryEntry[],
+  current: Prisma.Decimal,
+): GenericRestorePlan {
+  const entries = history
+    .filter((h) => h.field === field)
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  const latest = entries[entries.length - 1];
+  const prefix = supplierImportReasonPrefix(profile);
+  const isImport = (h: PriceHistoryEntry) =>
+    h.adminName === SUPPLIER_IMPORT_ACTOR_NAME && (h.reason ?? '').startsWith(prefix);
+
+  if (!entries.some(isImport)) return { action: 'SKIP', reason: 'never written by this import' };
+  if (!isImport(latest)) return { action: 'SKIP', reason: 'changed after the import (restored or edited)' };
+  if (!current.equals(latest.newValue)) {
+    return { action: 'BLOCKED', reason: 'current value differs from the imported value, with no history of why' };
+  }
+  if (latest.oldValue === null) {
+    return { action: 'BLOCKED', reason: 'the import recorded no previous value to restore' };
+  }
+  return { action: 'RESTORE', value: latest.oldValue, importedValue: latest.newValue };
+}
+
+/**
  * Actor label for the audit trail. `PriceHistory.adminId` stays NULL because
  * an import has no human admin behind it; the schema already allows that (the
  * column is nullable, and `adminName` exists precisely to keep the trail
@@ -389,5 +542,5 @@ export const SUPPLIER_IMPORT_ACTOR_NAME = 'Импорт прайс-листа (�
 
 /** The `reason` recorded on every PriceHistory row of one import run. */
 export function supplierImportSourceLabel(profile: ModelImportProfile, filePath: string): string {
-  return `Импорт прайс-листа поставщика — ${profile.label} (${filePath})`;
+  return `${supplierImportReasonPrefix(profile)}${filePath})`;
 }
