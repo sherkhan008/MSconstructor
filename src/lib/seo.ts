@@ -36,6 +36,13 @@ export function buildMetadata(input: {
   };
 }
 
+/**
+ * The legal seller as an Organization: legal name, BIN, address and public
+ * email — the same identity the public offer carries. Deliberately absent:
+ * `telephone` (the seller publishes no voice number, and schema.org must not
+ * be fed a fabricated one), `postalCode`, `geo` and `sameAs`. Banking details
+ * never appear here — they are server-only and belong on invoices alone.
+ */
 export function organizationJsonLd() {
   return {
     '@context': 'https://schema.org',
@@ -44,16 +51,14 @@ export function organizationJsonLd() {
     alternateName: site.name,
     url: appUrl,
     logo: new URL('/images/models/ms-standard.svg', appUrl).toString(),
-    telephone: site.phoneHref,
+    taxID: site.bin,
     email: site.email,
     address: {
       '@type': 'PostalAddress',
       streetAddress: site.address,
       addressLocality: site.city,
-      postalCode: site.postalCode,
       addressCountry: 'KZ',
     },
-    sameAs: Object.values(site.social),
   };
 }
 

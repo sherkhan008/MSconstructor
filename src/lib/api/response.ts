@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import type { ZodIssue } from 'zod';
 
 /**
  * Consistent API response envelope (spec §48). Every route returns either
@@ -19,8 +20,51 @@ export type ApiErrorCode =
   | 'CONFLICT'
   | 'INTERNAL_ERROR';
 
-export function apiError(code: ApiErrorCode, message: string, status: number, details?: string[]) {
-  return NextResponse.json({ ok: false, code, message, details }, { status });
+export function apiError(
+  code: ApiErrorCode,
+  message: string,
+  status: number,
+  details?: string[],
+  fieldErrors?: PublicFieldError[],
+) {
+  return NextResponse.json({ ok: false, code, message, details, ...(fieldErrors ? { fieldErrors } : {}) }, { status });
+}
+
+/**
+ * One failed form field, as a public API reports it. `field` is the
+ * machine-readable top-level field name (for the browser to bind to);
+ * `message` is the customer-facing text and never contains a field name,
+ * schema path or property name — UI renders `message` only.
+ */
+export interface PublicFieldError {
+  field: string;
+  message: string;
+}
+
+/**
+ * Zod issues → PublicFieldError[]. A nested issue (e.g. items.0.configuration
+ * .height) is reported on its top-level field; `nestedMessages` replaces its
+ * message with customer wording for fields the customer does not type
+ * directly (the cart's configurations). Duplicates are collapsed.
+ */
+export function toPublicFieldErrors(issues: ZodIssue[], nestedMessages: Record<string, string> = {}): PublicFieldError[] {
+  const seen = new Set<string>();
+  const result: PublicFieldError[] = [];
+  for (const issue of issues) {
+    const field = typeof issue.path[0] === 'string' ? issue.path[0] : 'form';
+    const message = issue.path.length > 1 && nestedMessages[field] ? nestedMessages[field] : issue.message;
+    const key = JSON.stringify([field, message]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({ field, message });
+  }
+  return result;
+}
+
+/** 400 VALIDATION_ERROR: `details` carries the messages alone, `fieldErrors` the field ↔ message pairs. */
+export function validationError(message: string, fieldErrors: PublicFieldError[]) {
+  const details = [...new Set(fieldErrors.map((e) => e.message))];
+  return apiError('VALIDATION_ERROR', message, 400, details, fieldErrors);
 }
 
 export function apiOk<T extends Record<string, unknown>>(data: T, status = 200) {

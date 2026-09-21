@@ -71,7 +71,7 @@ export default function PrivacyPage() {
         <section>
           <h2 className="font-display text-2xl">6. Контакты</h2>
           <p className="mt-2">
-            По вопросам обработки персональных данных обращайтесь: {site.email}, {site.phone}, {site.address}.
+            По вопросам обработки персональных данных обращайтесь: {site.email}, {site.address}.
           </p>
         </section>
       </div>

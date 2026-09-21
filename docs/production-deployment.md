@@ -26,6 +26,9 @@ app     Next.js standalone (node server.js, uid 1001), port 3000 — not publish
   └──► redis     7-alpine, rate-limit counters only network: backend (internal)
 
 migrate  one-shot `prisma migrate deploy`, then exits   network: backend (internal)
+
+notifications-worker  retries failed notification deliveries every 60 s
+         (migrate image, tsx loop)                  networks: edge + backend
 ```
 
 `backend` is a Docker `internal` network: PostgreSQL and Redis have no host
@@ -37,6 +40,7 @@ through nginx, which is what makes trusting `X-Real-IP` safe.
 | proxy | `PUBLIC_HTTP_BIND` (default `80`) → 8080 | unless-stopped | — (starts after app is healthy) | none |
 | app | no | unless-stopped | `GET /api/health` every 30 s | none |
 | migrate | no | no (one-shot) | exit code | none |
+| notifications-worker | no | unless-stopped | — (restarts on crash; see §10a) | none (state lives in PostgreSQL) |
 | postgres | no | unless-stopped | `pg_isready` | volume `postgres_data` |
 | redis | no | unless-stopped | `redis-cli ping` (authenticated) | none |
 
@@ -59,9 +63,10 @@ as required secret / required / optional.
 | `POSTGRES_USER`, `POSTGRES_DB` | optional | default `ms_shelving` |
 | `PUBLIC_HTTP_BIND` | optional | default `80`; `127.0.0.1:8080` behind a host-level TLS terminator |
 | `SELLER_*` | optional (required before invoices) | confidential banking details |
-| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | optional (token is a secret) | order events `order.created`, `order.status_changed`, `order.paid` with redacted payloads (no customer data). Unset = skipped + warn log; orders/payments are never affected. Sent/failed attempts are stored in `NotificationDelivery`; `retryFailedDeliveries()` re-sends failures (no scheduler yet) |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | optional (token is a secret) | order events `order.created`, `order.status_changed`, `order.paid` with redacted payloads (no customer data). Unset = skipped + warn log; orders/payments are never affected. Sent/failed attempts are stored in `NotificationDelivery`; transient failures are retried automatically by `notifications-worker` (§10a) |
 | `SMTP_*`, `MANAGER_EMAIL`, `EMAIL_FROM` | optional (password is a secret) | email channel has no transport yet: reported as unavailable, never as sent |
-| `WHATSAPP_API_*`, `AMOCRM_*`, `BITRIX24_*` | optional (tokens are secrets) | |
+| `WHATSAPP_NOTIFICATIONS_ENABLED`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ADMIN_RECIPIENT`, `WHATSAPP_TEMPLATE_NAME`, `WHATSAPP_TEMPLATE_LANGUAGE`, `WHATSAPP_GRAPH_API_VERSION` | optional, off by default (token is a secret) | internal `order.created` alert to the admin's WhatsApp via the official Cloud API, as an approved template with 6 body parameters (order number, customer name, phone, city, total, delivery method). Enabled with any required value missing = startup error. Failures are logged as codes and stored in `NotificationDelivery`, and transient ones are retried automatically by `notifications-worker` (§10a); orders are never affected. Never sent to customers |
+| `AMOCRM_*`, `BITRIX24_*` | optional (URLs embed credentials) | |
 | `PAYMENTS_ENABLED`, `PAYMENTS_PROVIDER` | optional; **leave off** | online payment is not live — §13 |
 | `NEXT_PUBLIC_GOOGLE_ANALYTICS_ID`, `NEXT_PUBLIC_YANDEX_METRICA_ID` | optional (build time) | |
 | `BACKUP_DIR`, `BACKUP_RETENTION_DAYS`, `BACKUP_MIN_KEEP` | optional | backup script only |
@@ -191,8 +196,9 @@ SMOKE_ADMIN_EMAIL=... SMOKE_ADMIN_PASSWORD=... bash scripts/ops/smoke-test.sh
 `deploy.sh`: validate config → **backup** (aborts the deploy if it fails) →
 build `ms-shelving-app:<commit>` and `ms-shelving-migrate:<commit>` → start
 PostgreSQL/Redis → **migrate** (aborts on failure) → recreate the app and wait
-for `/api/health` → ensure nginx → check health through nginx → tag the
-release `:latest` and append it to `.deploy/history`.
+for `/api/health` → ensure nginx → (re)start `notifications-worker` on the new
+migrate image → check health through nginx → tag the release `:latest` and
+append it to `.deploy/history`.
 
 Expect a few seconds of `502` while the app container is replaced (single
 instance). nginx re-resolves the app's address itself (`resolver` +
@@ -208,7 +214,8 @@ bash scripts/ops/rollback-app.sh <previous-tag>
 ```
 
 Starts the previous image without running migrations or rebuilding; the
-database is untouched. Old images stay on the host until you prune them
+database is untouched. `notifications-worker` is moved to the same tag's
+migrate image (or stopped, with a warning, if that release predates it). Old images stay on the host until you prune them
 (`docker image ls ms-shelving-app`); keep at least the last 3 releases.
 
 **Database rollback is never automatic.** Migrations are not rolled back by
@@ -312,6 +319,49 @@ sources. Details: [production-client-ip-and-rate-limiting.md](production-client-
   most privacy laws); container log rotation bounds retention.
 - Seller banking details, passwords and secrets are not logged by the app or
   by `scripts/ops`. Never run the scripts with `bash -x`.
+
+## 10a. Notification retries (`notifications-worker`)
+
+A failed order notification (Telegram, WhatsApp) never affects the order: the
+web app sends once, fire-and-forget, and records the attempt in the
+`NotificationDelivery` table. Failed rows are retried by one dedicated
+container, `notifications-worker`. There is no queue broker: the table is
+the queue, and the worker is a 60-second loop
+(`tsx scripts/notification-retry-worker.ts`) in the migrate image. The app
+itself never retries.
+
+- **Which errors retry:** `TIMEOUT`, `NETWORK_ERROR`, HTTP 408, 429 and 5xx,
+  Meta's temporary/rate-limit error codes (1, 2, 4, 80007, 130429, 131000,
+  131016, 131048, 131056, 133004), `ORDER_LOOKUP_FAILED`, `ADAPTER_ERROR`.
+  Every other code (e.g. `HTTP_400_META_132001`, template not found; `HTTP_401`,
+  bad token; `ORDER_NOT_FOUND`) is permanent and never retried.
+- **Schedule:** at most 6 attempts in total. The first retry comes 1 min after
+  the original send, then 5 min, 15 min, 1 h and 3 h (last retry ≈ 4 h 20 min
+  after the order). Rows older than 24 h are never retried.
+- **Duplicate protection:** only `FAILED` rows with a due `nextAttemptAt` are
+  read, so a `SENT` row is never resent. The worker claims each row (a
+  conditional update that pushes `nextAttemptAt` 5 min ahead) before sending.
+  That stops a crashed pass or a second worker from resending in a tight loop.
+  WhatsApp additionally never sends `order.created` twice for one order.
+- **Channel disabled/unconfigured at retry time:** the row is postponed 1 h
+  without spending an attempt, until the 24 h limit ends it.
+- **Final state:** a row that will not be retried stays `FAILED` with
+  `nextAttemptAt` NULL and its last error code.
+
+The worker gets the same notification variables as `app` (docker-compose.yml)
+and refuses to start without PostgreSQL or with an incomplete WhatsApp
+configuration.
+
+| Task | Command |
+| --- | --- |
+| Worker logs | `docker compose --env-file .env.production logs -f --tail 200 notifications-worker` |
+| Restart worker | `docker compose --env-file .env.production up -d --no-deps --no-build notifications-worker` |
+| One pass by hand | `docker compose --env-file .env.production run --rm --no-deps notifications-worker ./node_modules/.bin/tsx scripts/notification-retry-worker.ts --once` |
+| Pending retries | `docker compose --env-file .env.production exec postgres psql -U ms_shelving -d ms_shelving -c 'SELECT channel, "orderNumber", attempts, "lastError", "nextAttemptAt" FROM "NotificationDelivery" WHERE status = '"'"'FAILED'"'"' ORDER BY "createdAt" DESC LIMIT 20;'` |
+
+Log lines are codes only: `[notifications] retry failed|retry gave up|retry
+postponed|retry abandoned event=… channel=… order=… error=… attempt=…` and
+`[notifications-worker] started|stopped|retried deliveries sent=N|pass failed error=<ErrorClass>`.
 
 ## 11. Routine operations
 

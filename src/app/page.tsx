@@ -27,7 +27,7 @@ const ADVANTAGES = [
   { title: 'Модульная конструкция', description: 'Наращивайте секции и полки по мере роста склада' },
   { title: 'Регулируемый шаг полок', description: 'Настройте высоту под конкретные грузы без сверления' },
   { title: 'Быстрая сборка', description: 'Болтовое соединение — без сварки, силами одной бригады' },
-  { title: 'Любые размеры', description: '6 высот, 4 ширины, 4 глубины и точный расчёт под задачу' },
+  { title: 'Размеры на выбор', description: 'Стандартные высоты, ширины и глубины — подберите сочетание в конфигураторе' },
   { title: 'Доставка по Казахстану', description: 'Самовывоз, доставка по городу и в регионы' },
   { title: 'Физическим и юридическим лицам', description: 'Работаем с частными клиентами, компаниями и госорганизациями' },
   { title: 'Документы с НДС', description: 'Полный пакет закрывающих документов для бухгалтерии' },
@@ -292,9 +292,9 @@ export default async function HomePage() {
           <div className="border border-line p-6">
             <h2 className="font-display text-2xl">Способы получения</h2>
             <ul className="mt-4 space-y-2 text-sm text-steel">
-              <li>• Самовывоз со склада в Алматы</li>
-              <li>• Доставка по городу на следующий день</li>
-              <li>• Доставка по Казахстану транспортной компанией</li>
+              <li>• Склады в Алматы, Астане, Караганде и Шымкенте</li>
+              <li>• Доставка по Алматы, Астане, Караганде и Шымкенту — бесплатно, в тот же день</li>
+              <li>• Доставка в другие города и регионы Казахстана — 2–3 дня. Стоимость доставки рассчитывается индивидуально.</li>
               <li>• Профессиональная сборка на объекте</li>
             </ul>
             <LinkButton href="/delivery" variant="outline" className="mt-4">
@@ -323,16 +323,10 @@ export default async function HomePage() {
             <h2 className="font-display text-3xl">Свяжитесь с нами</h2>
             <dl className="mt-4 space-y-3 text-sm">
               <div>
-                <dt className="tech-label">Телефон</dt>
-                <dd className="mono text-base">
-                  <a href={`tel:${site.phoneHref}`}>{site.phone}</a>
-                </dd>
-              </div>
-              <div>
                 <dt className="tech-label">WhatsApp</dt>
-                <dd>
+                <dd className="mono text-base">
                   <a href={whatsAppContactUrl()} target="_blank" rel="noopener noreferrer" className="text-success hover:underline">
-                    Написать в WhatsApp
+                    {site.whatsappDisplay}
                   </a>
                 </dd>
               </div>
@@ -351,9 +345,6 @@ export default async function HomePage() {
                 <dd>{site.workingHours}</dd>
               </div>
             </dl>
-            <div className="mt-4 flex aspect-video items-center justify-center border border-line bg-surface text-sm text-steel">
-              Карта — укажите виджет 2GIS/Яндекс.Карт в src/lib/config/site.ts
-            </div>
           </div>
 
           <div className="border border-line bg-surface p-6">

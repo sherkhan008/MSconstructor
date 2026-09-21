@@ -45,7 +45,7 @@ export function InstallDeliveryPanel({ catalog }: { catalog: PublicCatalog }) {
         {selectedDelivery?.description.ru && <span className="text-xs text-steel">{selectedDelivery.description.ru}</span>}
       </label>
 
-      <p className="text-xs text-steel">Точная стоимость доставки уточняется менеджером после оформления заявки.</p>
+      <p className="text-xs text-steel">Доставка по Алматы, Астане, Караганде и Шымкенту — бесплатно, в тот же день. Доставка в другие города и регионы Казахстана — 2–3 дня. Стоимость доставки рассчитывается индивидуально.</p>
     </div>
   );
 }

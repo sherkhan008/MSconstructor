@@ -372,14 +372,31 @@ export interface PriceResult {
   rowLengthMm: number;
   leadTimeDays: number;
   deliveryNote: string | null;
+  /**
+   * Customer-facing notices, written in commercial language: they are
+   * projected verbatim to the browser by toPublicPriceResult() and rendered
+   * in the configurator. Nothing here may name an internal commercial
+   * concept (markup, margin, cost, price-level enum, BOM rule) — see
+   * `internalWarnings` for those.
+   */
   warnings: string[];
+  /**
+   * Server-only diagnostics: missing BOM components, formula failures and
+   * the margin floor that capped a discount. Useful to admin/support and to
+   * logs, never to a customer — the public projection is an allow-list
+   * (src/lib/pricing/public-result.ts) and deliberately omits this field.
+   */
+  internalWarnings: string[];
 }
 
 export interface PriceFailure {
   ok: false;
   code: PricingErrorCode;
   message: string;
+  /** Customer-facing detail lines; same language rules as PriceResult.warnings. */
   details?: string[];
+  /** Server-only diagnostics; same rules as PriceResult.internalWarnings. */
+  internalDetails?: string[];
 }
 
 export type PricingOutcome = PriceResult | PriceFailure;

@@ -235,7 +235,7 @@ export const MODELS: ProductModel[] = [
     seo: {
       title: 'Стеллаж MS Стандарт — модульный металлический стеллаж | купить в Казахстане',
       description:
-        'Металлический стеллаж MS Стандарт: нагрузка до 150 кг на полку, любые размеры, сборка без сварки. Рассчитайте цену в конфигураторе и закажите с доставкой по Казахстану.',
+        'Металлический стеллаж MS Стандарт: нагрузка до 150 кг на полку, стандартные размеры на выбор, сборка без сварки. Рассчитайте цену в конфигураторе и закажите с доставкой по Казахстану.',
     },
   },
   {
@@ -1108,7 +1108,7 @@ export const ASSEMBLY_SERVICES: AssemblyService[] = [
   {
     id: 'assembly-individual',
     name: { ru: 'Индивидуальный расчёт', kk: 'Жеке есептеу' },
-    description: { ru: 'Для нестандартных объёмов и сложных объектов', kk: 'Стандартты емес көлемдер мен күрделі нысандарға' },
+    description: { ru: 'Для больших объёмов работ и сложных объектов', kk: 'Үлкен жұмыс көлемдері мен күрделі нысандарға' },
     method: 'INDIVIDUAL',
     value: 0,
     sortOrder: 3,
@@ -1121,7 +1121,10 @@ export const DELIVERY_METHODS: DeliveryMethod[] = [
     id: 'delivery-pickup',
     kind: 'PICKUP',
     name: { ru: 'Самовывоз со склада', kk: 'Қоймадан өзі алып кету' },
-    description: { ru: 'Бесплатно, склад в г. Алматы', kk: 'Тегін, Алматы қаласындағы қоймадан' },
+    description: {
+      ru: 'Бесплатно, склады в Алматы, Астане, Караганде и Шымкенте',
+      kk: 'Тегін, Алматы, Астана, Қарағанды және Шымкент қалаларындағы қоймалардан',
+    },
     basePrice: 0,
     requiresAddress: false,
     sortOrder: 0,
@@ -1131,8 +1134,11 @@ export const DELIVERY_METHODS: DeliveryMethod[] = [
     id: 'delivery-city',
     kind: 'CITY',
     name: { ru: 'Доставка по городу', kk: 'Қала бойынша жеткізу' },
-    description: { ru: 'Доставка в пределах Алматы на следующий день', kk: 'Алматы шегінде келесі күні жеткізу' },
-    basePrice: null,
+    description: {
+      ru: 'Доставка по Алматы, Астане, Караганде и Шымкенту — бесплатно, в тот же день.',
+      kk: 'Алматы, Астана, Қарағанды және Шымкент қалаларында жеткізу — тегін, сол күні.',
+    },
+    basePrice: 0,
     requiresAddress: true,
     sortOrder: 1,
     active: true,
@@ -1141,7 +1147,10 @@ export const DELIVERY_METHODS: DeliveryMethod[] = [
     id: 'delivery-country',
     kind: 'COUNTRY',
     name: { ru: 'Доставка по Казахстану', kk: 'Қазақстан бойынша жеткізу' },
-    description: { ru: 'Транспортной компанией в любой регион', kk: 'Кез келген аймаққа тасымал компаниясымен' },
+    description: {
+      ru: 'Доставка в другие города и регионы Казахстана — 2–3 дня. Стоимость доставки рассчитывается индивидуально.',
+      kk: 'Қазақстанның басқа қалалары мен өңірлеріне жеткізу — 2–3 күн. Жеткізу құны жеке есептеледі.',
+    },
     basePrice: null,
     requiresAddress: true,
     sortOrder: 2,
@@ -1152,7 +1161,7 @@ export const DELIVERY_METHODS: DeliveryMethod[] = [
     kind: 'TRANSPORT_COMPANY',
     name: { ru: 'Передача транспортной компании', kk: 'Тасымал компаниясына беру' },
     description: { ru: 'Отгрузка на терминал транспортной компании по вашему выбору', kk: 'Сіз таңдаған тасымал компаниясының терминалына жүктеу' },
-    basePrice: 0,
+    basePrice: null,
     requiresAddress: false,
     sortOrder: 3,
     active: true,
@@ -1161,7 +1170,7 @@ export const DELIVERY_METHODS: DeliveryMethod[] = [
     id: 'delivery-individual',
     kind: 'INDIVIDUAL',
     name: { ru: 'Индивидуальный расчёт', kk: 'Жеке есептеу' },
-    description: { ru: 'Для крупных и нестандартных заказов', kk: 'Ірі және стандартты емес тапсырыстарға' },
+    description: { ru: 'Для крупных заказов и особых условий доставки', kk: 'Ірі тапсырыстарға және ерекше жеткізу жағдайларына' },
     basePrice: null,
     requiresAddress: true,
     sortOrder: 4,

@@ -691,9 +691,13 @@ model NotificationDelivery {
   payload     Json
   attempts    Int      @default(1)
   lastError   String?
+  /// When the notifications worker retries this FAILED row. Null = no
+  /// automatic retry (SENT, permanent error, or retry limit reached).
+  nextAttemptAt DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([status, channel])
   @@index([orderNumber])
+  @@index([status, nextAttemptAt])
 }

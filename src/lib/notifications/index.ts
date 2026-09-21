@@ -1,5 +1,4 @@
 import { env, integrations } from '@/lib/env';
-import { formatPrice } from '@/lib/money';
 import type { OrderRecord } from '@/lib/orders/types';
 import type { ContactRequestInput } from '@/lib/contact-schema';
 
@@ -19,45 +18,11 @@ interface NotificationOutcome {
   error?: string;
 }
 
-function orderSummaryText(order: OrderRecord): string {
-  const lines = [
-    `Новый заказ №${order.orderNumber}`,
-    `Клиент: ${order.customer.fullName} (${order.customer.phone})`,
-    `Город: ${order.customer.city}`,
-    `Позиций: ${order.items.length}`,
-    `Сумма: ${formatPrice(order.grandTotal)}`,
-    `Оплата: ${order.paymentPreference}`,
-  ];
-  return lines.join('\n');
-}
-
-// Telegram/email for order events now live in ./service.ts (redacted payloads,
-// delivery outbox). This file keeps the legacy WhatsApp/CRM fan-out and the
-// contact-form alert.
-
-async function notifyWhatsAppBusinessApi(order: OrderRecord): Promise<NotificationOutcome> {
-  if (!integrations.whatsappApi) return { channel: 'whatsapp_api', success: false, error: 'not_configured' };
-  try {
-    const url = `${env.WHATSAPP_API_URL}/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${env.WHATSAPP_API_TOKEN}`,
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to: order.customer.whatsapp ?? order.customer.phone,
-        type: 'text',
-        text: { body: orderSummaryText(order) },
-      }),
-    });
-    if (!response.ok) throw new Error(`WhatsApp API responded ${response.status}`);
-    return { channel: 'whatsapp_api', success: true };
-  } catch (error) {
-    return { channel: 'whatsapp_api', success: false, error: error instanceof Error ? error.message : 'unknown_error' };
-  }
-}
+// Telegram/email/WhatsApp for order events live in ./service.ts (redacted
+// payloads, delivery outbox; WhatsApp is an internal admin alert only — see
+// ./providers/whatsapp.ts). This file keeps the legacy CRM fan-out and the
+// contact-form alert. The former customer-addressed WhatsApp send was removed:
+// no order notification is ever sent to a customer.
 
 async function notifyCrmWebhook(name: 'amocrm' | 'bitrix24', webhookUrl: string | undefined, order: OrderRecord): Promise<NotificationOutcome> {
   if (!webhookUrl) return { channel: name, success: false, error: 'not_configured' };
@@ -85,7 +50,6 @@ async function notifyCrmWebhook(name: 'amocrm' | 'bitrix24', webhookUrl: string 
  */
 export async function notifyNewOrder(order: OrderRecord): Promise<NotificationOutcome[]> {
   const results = await Promise.allSettled([
-    notifyWhatsAppBusinessApi(order),
     notifyCrmWebhook('amocrm', env.AMOCRM_WEBHOOK_URL, order),
     notifyCrmWebhook('bitrix24', env.BITRIX24_WEBHOOK_URL, order),
   ]);
@@ -93,7 +57,7 @@ export async function notifyNewOrder(order: OrderRecord): Promise<NotificationOu
   return results.map((result, index) =>
     result.status === 'fulfilled'
       ? result.value
-      : { channel: ['whatsapp_api', 'amocrm', 'bitrix24'][index], success: false, error: 'rejected' },
+      : { channel: ['amocrm', 'bitrix24'][index], success: false, error: 'rejected' },
   );
 }
 

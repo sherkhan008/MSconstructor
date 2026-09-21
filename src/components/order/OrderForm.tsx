@@ -36,6 +36,8 @@ export function OrderForm({ deliveryMethods = [] }: { deliveryMethods?: Delivery
   const paymentPreference = watch('paymentPreference');
   const phone = watch('phone');
   const total = items.reduce((sum, item) => sum + (item.priceSnapshot?.breakdown.total ?? 0), 0);
+  // Same server note as the cart: delivery calculated individually is not in the total.
+  const deliveryNotes = [...new Set(items.map((item) => item.priceSnapshot?.deliveryNote).filter(Boolean))];
 
   useEffect(() => {
     if (sameAsPhone) setValue('whatsapp', phone);
@@ -217,6 +219,9 @@ export function OrderForm({ deliveryMethods = [] }: { deliveryMethods?: Delivery
         <div className="border-t border-line pt-3">
           <div className="tech-label">Итого</div>
           <PriceTag value={total} size="lg" />
+          {deliveryNotes.map((note) => (
+            <p key={note} className="mt-1 text-xs text-steel">{note}</p>
+          ))}
           <p className="mt-1 text-xs text-steel">Точная сумма будет пересчитана и подтверждена сервером при оформлении.</p>
         </div>
       </aside>

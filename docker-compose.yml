@@ -98,9 +98,13 @@ services:
       - SMTP_PASSWORD
       - TELEGRAM_BOT_TOKEN
       - TELEGRAM_CHAT_ID
-      - WHATSAPP_API_URL
-      - WHATSAPP_API_TOKEN
+      - WHATSAPP_NOTIFICATIONS_ENABLED
+      - WHATSAPP_ACCESS_TOKEN
       - WHATSAPP_PHONE_NUMBER_ID
+      - WHATSAPP_ADMIN_RECIPIENT
+      - WHATSAPP_TEMPLATE_NAME
+      - WHATSAPP_TEMPLATE_LANGUAGE
+      - WHATSAPP_GRAPH_API_VERSION
       - AMOCRM_WEBHOOK_URL
       - BITRIX24_WEBHOOK_URL
     networks: [edge, backend]
@@ -142,6 +146,52 @@ services:
     security_opt:
       - no-new-privileges:true
     restart: "no"
+    logging: *logging
+
+  # Long-running notifications retry worker: every 60 s re-sends FAILED
+  # notification deliveries whose retry is due (bounded attempts, backoff —
+  # src/lib/notifications/retry-policy.ts). Reuses the migrator image (it
+  # ships src/, scripts/ and tsx), so there is no extra image to build. The
+  # web app never retries, so order creation never waits on this.
+  # Needs `backend` for PostgreSQL and `edge` for outbound HTTPS to the
+  # notification providers. Channel variables must match the app's.
+  notifications-worker:
+    build:
+      context: .
+      target: migrator
+    image: ms-shelving-migrate:${APP_IMAGE_TAG:-latest}
+    command: ["./node_modules/.bin/tsx", "scripts/notification-retry-worker.ts"]
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-ms_shelving}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-ms_shelving}?schema=public
+      - DIRECT_URL=postgresql://${POSTGRES_USER:-ms_shelving}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-ms_shelving}?schema=public
+      # Optional — passed through only when set in the env file.
+      - EMAIL_FROM
+      - MANAGER_EMAIL
+      - SMTP_HOST
+      - SMTP_PORT
+      - SMTP_USER
+      - SMTP_PASSWORD
+      - TELEGRAM_BOT_TOKEN
+      - TELEGRAM_CHAT_ID
+      - WHATSAPP_NOTIFICATIONS_ENABLED
+      - WHATSAPP_ACCESS_TOKEN
+      - WHATSAPP_PHONE_NUMBER_ID
+      - WHATSAPP_ADMIN_RECIPIENT
+      - WHATSAPP_TEMPLATE_NAME
+      - WHATSAPP_TEMPLATE_LANGUAGE
+      - WHATSAPP_GRAPH_API_VERSION
+    networks: [edge, backend]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    security_opt:
+      - no-new-privileges:true
+    # SIGTERM stops the loop between passes; a pass is bounded by the 10 s
+    # provider timeout per delivery.
+    stop_grace_period: 30s
+    restart: unless-stopped
     logging: *logging
 
   postgres:

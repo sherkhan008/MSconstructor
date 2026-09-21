@@ -1,6 +1,7 @@
 import { createClientIpPolicy } from '@/lib/security/client-ip';
 import { parseRedisUrl } from '@/lib/redis/resp-client';
 import { resolvePaymentsAvailability } from '@/lib/payments/config';
+import { resolveWhatsAppConfig, type WhatsAppEnvInput } from '@/lib/notifications/providers/whatsapp-config';
 
 /**
  * Production runtime configuration check, run once when the server starts
@@ -15,7 +16,7 @@ import { resolvePaymentsAvailability } from '@/lib/payments/config';
  * the variable and the problem — never the value.
  */
 
-export interface ProductionConfigInput {
+export interface ProductionConfigInput extends WhatsAppEnvInput {
   /** Server variables that failed schema validation in src/lib/env.ts (names only). */
   invalidVariables?: readonly string[];
   DATABASE_URL?: string;
@@ -146,14 +147,34 @@ export function checkProductionConfig(input: ProductionConfigInput): ProductionC
     }
   }
 
+  // --- WhatsApp new-order admin alert (off by default) ----------------------
+  // Disabled (the default) needs nothing. Enabled with incomplete credentials
+  // is an ERROR: the owner would believe new orders reach their WhatsApp
+  // while none ever would.
+  const whatsappEnabledRaw = input.WHATSAPP_NOTIFICATIONS_ENABLED?.trim();
+  if (whatsappEnabledRaw !== undefined && whatsappEnabledRaw !== 'true' && whatsappEnabledRaw !== 'false') {
+    warnings.push('WHATSAPP_NOTIFICATIONS_ENABLED is neither "true" nor "false"; WhatsApp notifications stay disabled.');
+  }
+  const whatsapp = resolveWhatsAppConfig(input);
+  if (whatsapp.state === 'invalid') {
+    errors.push(
+      `WHATSAPP_NOTIFICATIONS_ENABLED is true but the configuration is incomplete: ${whatsapp.problems.join('; ')}. ` +
+        'Set the missing values or set WHATSAPP_NOTIFICATIONS_ENABLED=false.',
+    );
+  }
+
   // --- Values that should not be here, or are business-critical -----------
   if (input.ADMIN_INITIAL_PASSWORD) {
     warnings.push('ADMIN_INITIAL_PASSWORD is set in the app runtime environment; it is only needed for the one-time seed. Remove it.');
   }
+  // WhatsApp is the seller's only published contact channel — there is no
+  // public voice number (src/lib/config/site.ts). Serving the development
+  // fallback would leave every customer with a dead link and no way to
+  // reach the shop, so this fails closed rather than warning.
   if (!input.NEXT_PUBLIC_WHATSAPP_NUMBER) {
-    warnings.push(
-      'NEXT_PUBLIC_WHATSAPP_NUMBER was not set when this image was built: WhatsApp links use a placeholder number. ' +
-        'It is inlined at build time — pass it as a build argument.',
+    errors.push(
+      'NEXT_PUBLIC_WHATSAPP_NUMBER was not set when this image was built: WhatsApp is the only public contact ' +
+        'channel and its links would be non-functional. It is inlined at build time — pass it as a build argument.',
     );
   }
 

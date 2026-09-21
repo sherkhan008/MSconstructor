@@ -131,11 +131,15 @@ describe('order notifications', () => {
 
   it('retries stored failures once the channel works', async () => {
     let healthy = false;
+    let now = new Date('2026-09-21T10:00:00.000Z');
+    const later = (minutes: number) => (now = new Date(now.getTime() + minutes * 60_000));
     const channel = fakeChannel(async () => (healthy ? { ok: true } : { ok: false, error: 'HTTP_500' }));
-    const deps = { channels: () => [channel] };
+    const deps = { channels: () => [channel], now: () => now };
     await emitOrderEvent(created, deps);
+    later(1);
     expect(await retryFailedDeliveries(deps)).toBe(0);
     healthy = true;
+    later(5);
     expect(await retryFailedDeliveries(deps)).toBe(1);
     expect(getMemoryDeliveries()[0]).toMatchObject({ status: 'SENT', attempts: 3 });
   });

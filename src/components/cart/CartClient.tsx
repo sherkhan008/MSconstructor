@@ -107,6 +107,10 @@ export function CartClient({ catalog }: { catalog: PublicCatalog }) {
 
   const total = items.reduce((sum, item) => sum + (item.priceSnapshot?.breakdown.total ?? 0), 0);
   const allPriced = items.every((item) => item.priceSnapshot !== null);
+  // The server's own note for delivery that is not in the total (regional
+  // delivery is calculated individually) — shown so the total never reads as
+  // delivery-included.
+  const deliveryNotes = [...new Set(items.map((item) => item.priceSnapshot?.deliveryNote).filter(Boolean))];
 
   function handleCheckout() {
     trackEvent('order_submitted', { stage: 'cart_to_checkout', items: items.length });
@@ -136,6 +140,9 @@ export function CartClient({ catalog }: { catalog: PublicCatalog }) {
         <div>
           <div className="tech-label">Итого по корзине</div>
           <PriceTag value={total} size="xl" />
+          {deliveryNotes.map((note) => (
+            <p key={note} className="mt-1 text-xs text-steel">{note}</p>
+          ))}
         </div>
         <Button onClick={handleCheckout} disabled={!allPriced} size="lg">
           Оформить заказ

@@ -92,7 +92,6 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
             {priceResult.breakdown.discount > 0 && <Row label="Скидка" value={-priceResult.breakdown.discount} tone="success" />}
           </dl>
           {priceResult.deliveryNote && <p className="mt-2 text-xs text-blueprint">{priceResult.deliveryNote}</p>}
-          <p className="tech-label mt-2">Срок изготовления: {priceResult.leadTimeDays} дн.</p>
         </div>
       )}
 

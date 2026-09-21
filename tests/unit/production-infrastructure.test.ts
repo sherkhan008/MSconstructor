@@ -45,7 +45,25 @@ describe('docker-compose.yml (production)', () => {
   const services = composeServices(compose);
 
   it('defines the expected services', () => {
-    expect([...services.keys()].sort()).toEqual(['app', 'migrate', 'postgres', 'proxy', 'redis']);
+    expect([...services.keys()].sort()).toEqual(['app', 'migrate', 'notifications-worker', 'postgres', 'proxy', 'redis']);
+  });
+
+  it('runs the notifications retry worker as its own long-running service from the migrate image', () => {
+    const worker = services.get('notifications-worker') ?? '';
+    expect(worker).toMatch(/target: migrator/);
+    expect(worker).toMatch(/image: ms-shelving-migrate:\$\{APP_IMAGE_TAG:-latest\}/);
+    expect(worker).toMatch(/command: \["\.\/node_modules\/\.bin\/tsx", "scripts\/notification-retry-worker\.ts"\]/);
+    expect(worker).toMatch(/restart: unless-stopped/);
+    expect(worker).toMatch(/^ {4}networks: \[edge, backend\]$/m);
+    expect(worker).toMatch(/migrate:\n\s+condition: service_completed_successfully/);
+    expect(withoutComments(worker)).not.toMatch(/ADMIN_INITIAL_PASSWORD|AUTH_SECRET/);
+    // Same notification channel variables as the app, so a retry uses the same configuration.
+    const channelVars = (block: string) =>
+      [...block.matchAll(/^ {6}- ((?:TELEGRAM|WHATSAPP|SMTP)_[A-Z_]+)$/gm)].map((m) => m[1]).sort();
+    expect(channelVars(worker)).toEqual(channelVars(services.get('app') ?? ''));
+    expect(channelVars(worker).length).toBeGreaterThan(0);
+    const deploy = withoutComments(read('scripts/ops/deploy.sh'));
+    expect(deploy).toMatch(/compose up -d --no-deps --no-build notifications-worker/);
   });
 
   it('publishes host ports only for the nginx proxy', () => {

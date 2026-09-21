@@ -8,6 +8,7 @@ import {
 } from '@/lib/data/repository';
 import { addVat, clampMin, extractVat, multiply, percentOf, roundTenge, sum, type Tenge } from '@/lib/money';
 import type { PriceBreakdown, PriceResult, PricingOutcome, ShelvingConfiguration } from '@/lib/types/domain';
+import { quotedDeliveryPrice } from '@/lib/delivery/city-delivery';
 import { buildBom } from './bom';
 import { validateCompatibility } from './compatibility';
 import { parseConfiguration } from './schema';
@@ -33,7 +34,10 @@ export function calculatePrice(rawConfig: unknown, catalog: Catalog, context: Pr
       ok: false,
       code: 'VALIDATION_ERROR',
       message: 'Некорректные данные конфигурации',
-      details: parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`),
+      // Customer-facing: messages only. The schema paths (sections.0.width…)
+      // are developer diagnostics and stay in the server-only channel.
+      details: parsed.error.issues.map((issue) => issue.message),
+      internalDetails: parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`),
     };
   }
   const config = parsed.data as ShelvingConfiguration;
@@ -58,8 +62,12 @@ export function calculatePrice(rawConfig: unknown, catalog: Catalog, context: Pr
     return {
       ok: false,
       code: 'INDIVIDUAL_QUOTE_REQUIRED',
-      message: 'Эта конфигурация требует индивидуального расчёта. Пожалуйста, свяжитесь с менеджером.',
-      details: bomResult.warnings,
+      message: 'Для этой конфигурации требуется индивидуальный расчёт. Пожалуйста, свяжитесь с менеджером.',
+      // No customer-facing `details`: the BOM's own diagnostics name the
+      // internal rules and components that failed to resolve, which tells a
+      // customer nothing and exposes how the kit is assembled internally.
+      // They stay on the server for support and logs instead.
+      internalDetails: bomResult.warnings,
     };
   }
 
@@ -70,7 +78,12 @@ export function calculatePrice(rawConfig: unknown, catalog: Catalog, context: Pr
     return { ok: false, code: 'MISSING_COMPONENT', message: 'Часть выбранных опций недоступна' };
   }
 
-  const warnings = [...bomResult.warnings];
+  // Two separate channels, by audience: `warnings` is projected to the
+  // browser verbatim, `internalWarnings` never is. The BOM's diagnostics
+  // (missing component for rule «X», formula failures) name internal rules
+  // and belong to the second channel.
+  const warnings: string[] = [];
+  const internalWarnings = [...bomResult.warnings];
 
   const componentsSubtotal: Tenge = sum(bomResult.lines.map((l) => l.totalPrice));
   const costSubtotal: Tenge = sum(bomResult.lines.map((l) => (l.unitCost ?? 0) * l.quantity));
@@ -91,12 +104,15 @@ export function calculatePrice(rawConfig: unknown, catalog: Catalog, context: Pr
     warnings.push('Стоимость сборки будет рассчитана индивидуально менеджером');
   }
 
+  // Regional delivery (anything but PICKUP / four-city CITY) is calculated
+  // individually: null + a note, never a 0 ₸ that reads as free.
+  const quotedDelivery = quotedDeliveryPrice(delivery);
   let deliveryTotal: Tenge | null = null;
   let deliveryNote: string | null = null;
-  if (delivery.basePrice === null) {
-    deliveryNote = 'Стоимость доставки будет подтверждена менеджером.';
+  if (quotedDelivery === null) {
+    deliveryNote = 'Стоимость доставки рассчитывается индивидуально.';
   } else {
-    deliveryTotal = roundTenge(delivery.basePrice);
+    deliveryTotal = roundTenge(quotedDelivery);
   }
 
   const settings = catalog.pricingSettings;
@@ -107,7 +123,10 @@ export function calculatePrice(rawConfig: unknown, catalog: Catalog, context: Pr
   const levelDiscount = config.priceLevel ? settings.priceLevelDiscounts[config.priceLevel] ?? 0 : 0;
   if (levelDiscount > 0) {
     discountPercent += levelDiscount;
-    discountReasons.push(`Скидка уровня цены (${config.priceLevel}): ${levelDiscount}%`);
+    // Deliberately without config.priceLevel: it is an internal enum value
+    // (RETAIL/WHOLESALE/DEALER/CORPORATE/GOVERNMENT) and discountReasons is
+    // customer-facing (PublicPriceBreakdown).
+    discountReasons.push(`Скидка по уровню цены: ${levelDiscount}%`);
   }
 
   const qtyBreak = [...settings.quantityBreaks]
@@ -146,7 +165,10 @@ export function calculatePrice(rawConfig: unknown, catalog: Catalog, context: Pr
   const maxDiscount = clampMin(preDiscountNet - minAllowedNet, 0);
   const discount = Math.min(rawDiscount, maxDiscount);
   if (rawDiscount > maxDiscount) {
-    warnings.push('Скидка ограничена минимальной наценкой и была уменьшена');
+    // Internal only: the minimum margin is exactly the kind of commercial
+    // internal the customer UI must never name. The discount the customer
+    // actually receives is already in `discount`/`total` below.
+    internalWarnings.push('Скидка ограничена минимальной наценкой и была уменьшена');
   }
 
   const netBeforeVat = preDiscountNet - discount;
@@ -203,6 +225,7 @@ export function calculatePrice(rawConfig: unknown, catalog: Catalog, context: Pr
     leadTimeDays,
     deliveryNote,
     warnings,
+    internalWarnings,
   };
   return result;
 }

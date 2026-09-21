@@ -134,8 +134,14 @@ async function setup(opts: SetupOptions = {}) {
   vi.unstubAllEnvs();
   vi.stubEnv('AUTH_SECRET', AUTH_SECRET);
   vi.stubEnv('DATABASE_URL', 'postgresql://user:pass@localhost:5432/db');
-  for (const name of SELLER_NAMES) expect(process.env[name], `${name} must not leak into tests`).toBeUndefined();
+  // Seller details are per-test input, never ambient: a developer machine
+  // with real SELLER_* values in .env must not change what these tests see.
+  // Clear every one, then set only what the test asked for, and verify it.
+  for (const name of SELLER_NAMES) vi.stubEnv(name, undefined);
   for (const [key, value] of Object.entries(opts.sellerEnv ?? {})) vi.stubEnv(key, value);
+  for (const name of SELLER_NAMES) {
+    expect(process.env[name], `${name} must come only from the test's sellerEnv`).toBe(opts.sellerEnv?.[name]);
+  }
 
   let token: string | undefined;
   if (opts.role !== null) {

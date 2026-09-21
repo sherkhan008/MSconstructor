@@ -34,6 +34,14 @@ compose up -d --no-deps proxy || die "proxy failed to start"
 docker tag "ms-shelving-app:$APP_IMAGE_TAG" ms-shelving-app:latest
 if docker image inspect "ms-shelving-migrate:$APP_IMAGE_TAG" >/dev/null 2>&1; then
   docker tag "ms-shelving-migrate:$APP_IMAGE_TAG" ms-shelving-migrate:latest
+  # The notifications worker runs from the migrate image; keep it on the same
+  # release as the app. (An older image predating the worker simply lacks it.)
+  if docker run --rm --entrypoint test "ms-shelving-migrate:$APP_IMAGE_TAG" -f scripts/notification-retry-worker.ts; then
+    compose up -d --no-deps --no-build notifications-worker || die "notifications worker failed to start"
+  else
+    compose stop notifications-worker >/dev/null 2>&1 || true
+    log "WARNING: $APP_IMAGE_TAG has no notifications worker; failed notifications are not retried until the next deploy"
+  fi
 fi
 mkdir -p "$OPS_ROOT/.deploy"
 printf '%s rollback %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$APP_IMAGE_TAG" >>"$OPS_ROOT/.deploy/history"

@@ -24,6 +24,7 @@
     "db:sync-ms-standard-constraints": "tsx scripts/sync-ms-standard-constraints.ts",
     "db:sync-ms-standard-fasteners": "tsx scripts/sync-ms-standard-fasteners.ts",
     "db:sync-catalog-products": "tsx scripts/sync-catalog-products.ts",
+    "db:sync-public-copy": "tsx scripts/sync-public-copy.ts",
     "db:import-supplier-prices": "tsx scripts/import-supplier-prices.ts"
   },
   "prisma": {

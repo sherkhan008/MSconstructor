@@ -142,7 +142,7 @@ const orderRequestObjectSchema = z.object({
     .refine((v) => v === '' || kzPhoneRegex.test(v), PHONE_ERROR)
     .optional(),
   email: z.string().trim().max(200).email('Укажите корректный email'),
-  city: z.string().trim().min(1).max(120),
+  city: z.string().trim().min(1, 'Укажите город').max(120),
   companyName: z.string().trim().max(300).optional(),
   binIin: z
     .string()

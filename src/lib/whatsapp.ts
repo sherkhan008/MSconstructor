@@ -6,9 +6,9 @@ import type { PublicPriceResult } from '@/lib/pricing/public-result';
 
 /**
  * WhatsApp deep links for the MVP. `https://wa.me/<phone>?text=<message>` needs
- * no API credentials and works everywhere — the WhatsApp Business API (see
- * src/lib/env.ts `integrations.whatsappApi`) can replace this later behind
- * the same call sites without touching UI code.
+ * no API credentials and works everywhere. (The WhatsApp Cloud API is used
+ * only for the internal new-order admin alert — see
+ * src/lib/notifications/providers/whatsapp.ts.)
  *
  * Every message built here only ever includes customer-facing data (the
  * configuration, the final server-calculated total, an order number) — never

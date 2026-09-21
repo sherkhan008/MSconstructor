@@ -761,7 +761,7 @@ export function ShelvingPreview({
               share this bottom strip. */}
           {!hasInteracted && (
             <p className="tech-label pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 px-2 py-1 text-center text-steel drop-shadow-[0_1px_1px_rgba(255,255,255,0.9)]">
-              Кликните секцию, чтобы выбрать, или перетащите маркеры
+              Нажмите на секцию, чтобы выбрать её, или перетащите точки изменения размера.
             </p>
           )}
           <div role="status" aria-live="polite" className="sr-only">

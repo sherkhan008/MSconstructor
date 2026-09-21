@@ -34,6 +34,13 @@ const SECTION_LEVEL_TYPES: ComponentType[] = ['SHELF', 'BEAM_LONGITUDINAL', 'REA
 export interface BomResult {
   lines: BomLine[];
   totalWeightKg: number;
+  /**
+   * Server-only diagnostics. They name the internal configuration rule and
+   * the component that failed to resolve, which is meaningless to a customer
+   * and describes how the kit is assembled internally — calculatePrice()
+   * routes them to PriceResult.internalWarnings / PriceFailure.internalDetails,
+   * never to the customer-facing channel.
+   */
   warnings: string[];
   missingCritical: boolean;
   rowLengthMm: number;

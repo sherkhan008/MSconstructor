@@ -34,9 +34,18 @@ const serverSchema = z.object({
   TELEGRAM_BOT_TOKEN: optionalString,
   TELEGRAM_CHAT_ID: optionalString,
 
-  WHATSAPP_API_URL: optionalString,
-  WHATSAPP_API_TOKEN: optionalString,
+  // Internal new-order WhatsApp alert to the admin (official Cloud API,
+  // template message). OFF unless WHATSAPP_NOTIFICATIONS_ENABLED is exactly
+  // "true"; the rest is validated then — see
+  // src/lib/notifications/providers/whatsapp-config.ts. Server-only: never
+  // mirror any of these into NEXT_PUBLIC_*.
+  WHATSAPP_NOTIFICATIONS_ENABLED: optionalString,
+  WHATSAPP_ACCESS_TOKEN: optionalString,
   WHATSAPP_PHONE_NUMBER_ID: optionalString,
+  WHATSAPP_ADMIN_RECIPIENT: optionalString,
+  WHATSAPP_TEMPLATE_NAME: optionalString,
+  WHATSAPP_TEMPLATE_LANGUAGE: optionalString,
+  WHATSAPP_GRAPH_API_VERSION: optionalString,
 
   AMOCRM_WEBHOOK_URL: optionalString,
   BITRIX24_WEBHOOK_URL: optionalString,
@@ -192,7 +201,6 @@ export const appUrl =
 export const integrations = {
   email: Boolean(env.SMTP_HOST && env.SMTP_USER),
   telegram: Boolean(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID),
-  whatsappApi: Boolean(env.WHATSAPP_API_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID),
   amocrm: Boolean(env.AMOCRM_WEBHOOK_URL),
   bitrix24: Boolean(env.BITRIX24_WEBHOOK_URL),
   storage: Boolean(env.STORAGE_ENDPOINT && env.STORAGE_BUCKET),

@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { contactRequestSchema } from '@/lib/contact-schema';
-import { apiError, apiOk, internalError } from '@/lib/api/response';
+import { apiError, apiOk, internalError, toPublicFieldErrors, validationError } from '@/lib/api/response';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { notifyContactRequest } from '@/lib/notifications';
 
@@ -21,12 +21,7 @@ export async function POST(request: NextRequest) {
 
   const parsed = contactRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return apiError(
-      'VALIDATION_ERROR',
-      'Проверьте правильность заполнения формы',
-      400,
-      parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
-    );
+    return validationError('Проверьте правильность заполнения формы', toPublicFieldErrors(parsed.error.issues));
   }
 
   try {

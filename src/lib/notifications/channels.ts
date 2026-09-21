@@ -1,5 +1,6 @@
 import { env } from '@/lib/env';
-import { formatOrderEventText, type OrderEventPayload } from './events';
+import { formatOrderEventText, type OrderEventPayload, type OrderEventType } from './events';
+import { createWhatsAppChannel } from './providers/whatsapp';
 
 /**
  * Channel adapters. Each one answers two questions and nothing else:
@@ -13,6 +14,10 @@ export type ChannelSendResult = { ok: true } | { ok: false; error: string };
 
 export interface NotificationChannel {
   id: string;
+  /** Events this channel handles; omitted = every event. Others are ignored silently. */
+  events?: readonly OrderEventType[];
+  /** Skip an event already SENT on this channel for the same order (outbox check). */
+  oncePerOrder?: boolean;
   availability(): ChannelAvailability;
   send(payload: OrderEventPayload): Promise<ChannelSendResult>;
 }
@@ -71,7 +76,11 @@ export function createEmailChannel(): NotificationChannel {
   };
 }
 
-// WhatsApp is a future provider: implement NotificationChannel and add it here.
+/** WhatsApp (internal admin alert, order.created only) is added only when
+ * WHATSAPP_NOTIFICATIONS_ENABLED is exactly "true": disabled means no channel,
+ * no log line, no network call. */
 export function defaultChannels(): NotificationChannel[] {
-  return [createTelegramChannel(), createEmailChannel()];
+  const channels = [createTelegramChannel(), createEmailChannel()];
+  if (env.WHATSAPP_NOTIFICATIONS_ENABLED?.trim() === 'true') channels.push(createWhatsAppChannel());
+  return channels;
 }
