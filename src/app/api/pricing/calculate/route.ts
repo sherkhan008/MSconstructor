@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { getCatalog } from '@/lib/data/repository';
 import { calculatePrice } from '@/lib/pricing';
-import { toPublicPriceResult } from '@/lib/pricing/public-result';
+import { toPublicPriceFailure, toPublicPriceResult } from '@/lib/pricing/public-result';
 import { apiError, apiOk, internalError, type ApiErrorCode } from '@/lib/api/response';
 import { enforceRateLimit } from '@/lib/rate-limit';
 
@@ -44,7 +44,10 @@ export async function POST(request: NextRequest) {
         INDIVIDUAL_QUOTE_REQUIRED: 200,
       };
       const apiCode: ApiErrorCode = result.code === 'INVALID_FORMULA' ? 'INTERNAL_ERROR' : result.code;
-      return apiError(apiCode, result.message, statusByCode[result.code], result.details);
+      // Through the public projection, never straight off the engine result:
+      // a PriceFailure can carry server-only diagnostics (internalDetails).
+      const publicFailure = toPublicPriceFailure(result);
+      return apiError(apiCode, publicFailure.message, statusByCode[result.code], publicFailure.details);
     }
 
     const { ok: _ok, ...publicResult } = toPublicPriceResult(result);

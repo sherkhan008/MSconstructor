@@ -76,6 +76,10 @@ fi
 log "ensuring proxy is running"
 compose up -d --no-deps proxy || die "proxy failed to start"
 
+# Same image as `migrate` (built above); retries failed notification deliveries.
+log "starting notifications worker $APP_IMAGE_TAG"
+compose up -d --no-deps --no-build notifications-worker || die "notifications worker failed to start"
+
 log "verifying /api/health through the proxy"
 ok=0
 for _ in $(seq 1 15); do

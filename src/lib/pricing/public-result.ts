@@ -1,5 +1,5 @@
 import { toPublicBom } from './bom';
-import type { PriceBreakdown, PriceResult } from '@/lib/types/domain';
+import type { PriceBreakdown, PriceFailure, PriceResult } from '@/lib/types/domain';
 
 /**
  * The customer-safe shape of a price calculation — what /api/pricing/calculate
@@ -95,6 +95,35 @@ export function toPublicPriceResult(result: PriceResult): PublicPriceResult {
     rowLengthMm: result.rowLengthMm,
     leadTimeDays: result.leadTimeDays,
     deliveryNote: result.deliveryNote,
+    // The customer-facing channel only. PriceResult.internalWarnings (missing
+    // BOM components, formula failures, the margin floor that capped a
+    // discount) is absent by construction — this object is built field by
+    // field, so a diagnostic added to the engine stays server-side until
+    // someone deliberately promotes it here.
     warnings: [...result.warnings],
+  };
+}
+
+/** The customer-safe shape of a failed calculation. */
+export interface PublicPriceFailure {
+  ok: false;
+  code: PriceFailure['code'];
+  message: string;
+  details?: string[];
+}
+
+/**
+ * Same allow-list discipline as toPublicPriceResult, for the failure branch:
+ * `message` and `details` are the customer-facing fields, and
+ * PriceFailure.internalDetails is omitted by construction. Every public route
+ * that turns a PricingOutcome into a response goes through here, so a
+ * diagnostic attached to a failure cannot reach a customer by accident.
+ */
+export function toPublicPriceFailure(failure: PriceFailure): PublicPriceFailure {
+  return {
+    ok: false,
+    code: failure.code,
+    message: failure.message,
+    ...(failure.details ? { details: [...failure.details] } : {}),
   };
 }

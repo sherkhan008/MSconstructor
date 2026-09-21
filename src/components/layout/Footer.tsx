@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { FOOTER_LINKS, site } from '@/lib/config/site';
+import { whatsAppContactUrl } from '@/lib/whatsapp';
 import { Container } from '@/components/ui/Container';
 
 export function Footer() {
@@ -29,8 +30,13 @@ export function Footer() {
           <h3 className="tech-label mb-3 text-accent">Контакты</h3>
           <ul className="space-y-2 text-sm text-steel-soft">
             <li>
-              <a href={`tel:${site.phoneHref}`} className="mono hover:text-background">
-                {site.phone}
+              <a
+                href={whatsAppContactUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mono hover:text-background"
+              >
+                WhatsApp {site.whatsappDisplay}
               </a>
             </li>
             <li>
@@ -46,6 +52,7 @@ export function Footer() {
         <div>
           <h3 className="tech-label mb-3 text-accent">Реквизиты</h3>
           <ul className="space-y-2 text-sm text-steel-soft">
+            <li>{site.legalName}</li>
             <li className="mono">БИН: {site.bin}</li>
             <li>Работаем с физическими и юридическими лицами</li>
             <li>Работаем с НДС, предоставляем документы</li>

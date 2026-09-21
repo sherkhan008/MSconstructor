@@ -7,7 +7,7 @@ import { ContactForm } from '@/components/contact/ContactForm';
 
 export const metadata: Metadata = buildMetadata({
   title: 'Контакты',
-  description: `Свяжитесь с ${site.name}: телефон, WhatsApp, email и адрес склада в Алматы.`,
+  description: `Свяжитесь с ${site.name}: WhatsApp, email и адрес.`,
   path: '/contacts',
 });
 
@@ -21,16 +21,10 @@ export default function ContactsPage() {
         <div>
           <dl className="space-y-4 text-sm">
             <div>
-              <dt className="tech-label">Телефон</dt>
-              <dd className="mono text-lg">
-                <a href={`tel:${site.phoneHref}`}>{site.phone}</a>
-              </dd>
-            </div>
-            <div>
               <dt className="tech-label">WhatsApp</dt>
-              <dd>
-                <a href={whatsAppContactUrl()} target="_blank" rel="noopener noreferrer" className="text-success hover:underline">
-                  {site.phone}
+              <dd className="text-lg">
+                <a href={whatsAppContactUrl()} target="_blank" rel="noopener noreferrer" className="mono text-success hover:underline">
+                  {site.whatsappDisplay}
                 </a>
               </dd>
             </div>
@@ -57,10 +51,6 @@ export default function ContactsPage() {
               </dd>
             </div>
           </dl>
-
-          <div className="mt-6 flex aspect-video items-center justify-center border border-line bg-surface-muted text-sm text-steel">
-            Карта — укажите виджет 2GIS/Яндекс.Карт в src/lib/config/site.ts
-          </div>
         </div>
 
         <div className="border border-line bg-surface p-6">

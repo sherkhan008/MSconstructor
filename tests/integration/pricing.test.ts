@@ -187,16 +187,20 @@ describe('pricing engine', () => {
     expect(result.breakdown.net).toBeGreaterThanOrEqual(0);
   });
 
-  it('reports pickup delivery as free and city delivery as manager-confirmed', () => {
+  it('reports pickup and warehouse-city delivery as free and other-region delivery as individually calculated', () => {
     const pickup = calculatePrice(baseConfig({ deliveryId: 'delivery-pickup' }), catalog);
     const city = calculatePrice(baseConfig({ deliveryId: 'delivery-city' }), catalog);
+    const country = calculatePrice(baseConfig({ deliveryId: 'delivery-country' }), catalog);
     expect(pickup.ok).toBe(true);
     expect(city.ok).toBe(true);
-    if (!pickup.ok || !city.ok) return;
+    expect(country.ok).toBe(true);
+    if (!pickup.ok || !city.ok || !country.ok) return;
     expect(pickup.breakdown.delivery).toBe(0);
     expect(pickup.deliveryNote).toBeNull();
-    expect(city.breakdown.delivery).toBeNull();
-    expect(city.deliveryNote).toMatch(/менеджер/i);
+    expect(city.breakdown.delivery).toBe(0);
+    expect(city.deliveryNote).toBeNull();
+    expect(country.breakdown.delivery).toBeNull();
+    expect(country.deliveryNote).toBe('Стоимость доставки рассчитывается индивидуально.');
   });
 
   it('charges assembly per section for the PER_SECTION method', () => {

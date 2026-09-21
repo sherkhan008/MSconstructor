@@ -7,10 +7,10 @@ import {
   type DocumentIssuance,
   type OrderDocumentModel,
 } from '@/lib/documents/build';
-import type { OrderDocumentKind } from '@/lib/documents/kinds';
+import { ORDER_DOCUMENT_KINDS, type OrderDocumentKind } from '@/lib/documents/kinds';
 import type { OrderDocumentSource } from '@/lib/documents/order-source';
 import { renderOrderDocumentPdf } from '@/lib/documents/pdf';
-import { readSellerConfig, type SellerDetails } from '@/lib/documents/seller';
+import { readSellerConfig, sellerConfigIssues, type SellerDetails } from '@/lib/documents/seller';
 import { configuration, decimal, issuance, item, orderSource } from './helpers/order-document-fixtures';
 import { pdfSyntax, readPdfText } from './helpers/pdf-text';
 
@@ -268,6 +268,51 @@ describe('invoice lines — every row reconciles, services and discounts are exp
   it('an unpriced delivery (confirmed later by a manager) is not invoiced as a row', () => {
     const m = model('invoice', orderSource({ items: [item({ delivery: null, snapshot: { deliveryName: 'Доставка по Казахстану' } })] }));
     expect(m.lines.map((l) => l.kind)).toEqual(['goods']);
+  });
+});
+
+describe('optional seller fields that are not configured', () => {
+  /** SELLER_PHONE and SELLER_KNP are optional. When the seller has not
+   * supplied them, both documents must simply leave them out — never a
+   * placeholder, a dummy code or the word "undefined" on a payment
+   * document. */
+  const WITHOUT_OPTIONAL: SellerDetails = readSellerConfig({
+    SELLER_LEGAL_NAME: 'ИП "Тестовый Продавец"',
+    SELLER_BIN: '987654321098',
+    SELLER_ADDRESS: 'г. Астана, ул. Тестовая, 1',
+    SELLER_EMAIL: 'sales@example.invalid',
+    SELLER_BANK_NAME: 'АО "Тестовый Банк"',
+    SELLER_IBAN: 'KZ00TEST000000000000',
+    SELLER_BIC: 'TESTKZKA',
+    SELLER_KBE: '17',
+  }).details;
+
+  it('still allows an invoice to be issued', () => {
+    expect(WITHOUT_OPTIONAL.phone).toBeUndefined();
+    expect(WITHOUT_OPTIONAL.knp).toBeUndefined();
+    expect(sellerConfigIssues('invoice', { details: WITHOUT_OPTIONAL, invalid: [] })).toEqual([]);
+  });
+
+  it.each([...ORDER_DOCUMENT_KINDS])('%s omits them instead of printing a placeholder', async (kind) => {
+    const { text } = await render(kind, orderSource(), { seller: WITHOUT_OPTIONAL });
+    expect(text.flat).not.toMatch(/undefined|null|—\s*—/);
+    // The supplier block carries no phone; the buyer's own phone still does.
+    const supplier = text.flat.slice(text.flat.indexOf('ПОСТАВЩИК'), text.flat.indexOf('ПОКУПАТЕЛЬ'));
+    expect(supplier).not.toContain('Телефон');
+    expect(text.flat).toContain('Тестовый Продавец');
+  });
+
+  it('invoice prints the beneficiary block with an empty КНП cell, and quotes/IBAN intact', async () => {
+    const { text } = await render('invoice', orderSource(), { seller: WITHOUT_OPTIONAL });
+    const t = text.flat;
+    expect(t).toContain('ИП "Тестовый Продавец"');
+    expect(t).toContain('АО "Тестовый Банк"');
+    // IBAN on one unbroken run — never hyphenated or split across lines.
+    expect(t).toContain('KZ00TEST000000000000');
+    expect(t).toContain('БИК TESTKZKA');
+    expect(t).toContain('Кбе 17');
+    expect(t).toMatch(/Код назначения платежа Счёт на оплату/);
+    expect(t.slice(t.indexOf('Поставщик:'), t.indexOf('Покупатель:'))).not.toContain('тел.');
   });
 });
 

@@ -179,7 +179,10 @@ describe('POST /api/orders', () => {
       const response = await postOrder(validOrderBody({ email: '' }));
       const json = await response.json();
       expect(response.status).toBe(400);
-      expect(json.details?.some((d: string) => d.includes('email'))).toBe(true);
+      // The failed field is machine-readable in fieldErrors; the displayed
+      // details carry the message alone, without an "email:" prefix.
+      expect(json.fieldErrors?.some((e: { field: string }) => e.field === 'email')).toBe(true);
+      expect(json.details?.some((d: string) => d.startsWith('email:'))).toBe(false);
       expect(countMemoryOrders()).toBe(0);
     });
 

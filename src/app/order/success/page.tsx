@@ -3,7 +3,6 @@ import { getOrderByNumber } from '@/lib/orders/store';
 import { buildMetadata } from '@/lib/seo';
 import { formatPrice } from '@/lib/money';
 import { whatsAppOrderUrl } from '@/lib/whatsapp';
-import { site } from '@/lib/config/site';
 import { PAYMENT_METHOD_LABEL } from '@/lib/orders/payment-methods';
 import { Container } from '@/components/ui/Container';
 import { LinkButton } from '@/components/ui/Button';
@@ -54,8 +53,8 @@ export default async function OrderSuccessPage({
       )}
 
       <p className="max-w-md text-sm text-steel">
-        Наш менеджер свяжется с вами по телефону {site.phone} в ближайшее рабочее время для подтверждения заказа,
-        уточнения деталей доставки и выставления счёта.
+        Наш менеджер свяжется с вами в ближайшее рабочее время для подтверждения заказа, уточнения деталей
+        доставки и выставления счёта.
       </p>
 
       <div className="flex flex-wrap justify-center gap-3">

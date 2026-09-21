@@ -3,11 +3,21 @@ import { getCatalog } from '@/lib/data/repository';
 import { buildMetadata } from '@/lib/seo';
 import { Container } from '@/components/ui/Container';
 import { LinkButton } from '@/components/ui/Button';
+import { quotedDeliveryPrice } from '@/lib/delivery/city-delivery';
+import type { DeliveryMethod } from '@/lib/types/domain';
+
+/** Regional methods have no quoted price (see quotedDeliveryPrice), so they
+ * read "calculated individually" even if a 0 is stored for them. */
+function deliveryPriceLabel(method: DeliveryMethod): string {
+  const price = quotedDeliveryPrice(method);
+  if (price === null) return 'Стоимость доставки рассчитывается индивидуально.';
+  return price === 0 ? 'Бесплатно' : `от ${price.toLocaleString('ru-RU')} ₸`;
+}
 
 export const metadata: Metadata = buildMetadata({
   title: 'Доставка и сборка стеллажей MS по Казахстану',
   description:
-    'Самовывоз со склада в Алматы, доставка по городу и по Казахстану, профессиональная сборка стеллажей MS. Условия и сроки.',
+    'Склады в Алматы, Астане, Караганде и Шымкенте: самовывоз, бесплатная доставка в день заказа по четырём городам и доставка по Казахстану, профессиональная сборка стеллажей MS. Условия и сроки.',
   path: '/delivery',
 });
 
@@ -23,7 +33,10 @@ export default async function DeliveryPage() {
       <h1 className="font-display text-4xl">Доставка и сборка</h1>
       <p className="mt-3 max-w-2xl text-steel">
         Мы доставляем стеллажи MS по всему Казахстану и предлагаем профессиональную сборку на объекте заказчика.
-        Точная стоимость доставки зависит от города, объёма и адреса — менеджер уточнит её после оформления заявки.
+        Доставка по Алматы, Астане, Караганде и Шымкенту — бесплатно, в тот же день. Доставка в другие города и регионы
+        Казахстана — 2–3 дня. Стоимость доставки рассчитывается индивидуально. Стоимость стеллажа рассчитывается
+        автоматически в конфигураторе на основании выбранной комплектации. Доступны только размеры, представленные в
+        конфигураторе.
       </p>
 
       <section className="mt-10">
@@ -34,11 +47,7 @@ export default async function DeliveryPage() {
               <h3 className="font-medium">{method.name.ru}</h3>
               <p className="mt-1 text-sm text-steel">{method.description.ru}</p>
               <p className="tech-label mt-2">
-                {method.basePrice === null
-                  ? 'Стоимость уточняется менеджером'
-                  : method.basePrice === 0
-                    ? 'Бесплатно'
-                    : `от ${method.basePrice.toLocaleString('ru-RU')} ₸`}
+                {deliveryPriceLabel(method)}
               </p>
             </div>
           ))}

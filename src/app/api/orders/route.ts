@@ -2,8 +2,9 @@ import type { NextRequest } from 'next/server';
 import { findDelivery, findModel, getCatalog } from '@/lib/data/repository';
 import { calculatePrice } from '@/lib/pricing';
 import { stripBomCosts } from '@/lib/pricing/bom';
+import { toPublicPriceFailure } from '@/lib/pricing/public-result';
 import { orderRequestSchema } from '@/lib/pricing/schema';
-import { apiError, apiOk, internalError } from '@/lib/api/response';
+import { apiError, apiOk, internalError, toPublicFieldErrors, validationError } from '@/lib/api/response';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { generateOrderNumber, saveOrder } from '@/lib/orders/store';
 import type { OrderItemRecord, OrderRecord } from '@/lib/orders/types';
@@ -11,8 +12,18 @@ import { notifyNewOrder } from '@/lib/notifications';
 import { buildOrderEvent } from '@/lib/notifications/events';
 import { emitOrderEventInBackground } from '@/lib/notifications/service';
 import { createOrderBuyerSnapshot, createOrderItemDocumentSnapshot } from '@/lib/documents/snapshots';
+import {
+  CITY_DELIVERY_UNAVAILABLE_MESSAGE,
+  isCityDeliveryCity,
+  requiresCityDeliveryCity,
+} from '@/lib/delivery/city-delivery';
 
 export const runtime = 'nodejs';
+
+const FORM_ERROR_MESSAGE = 'Проверьте правильность заполнения формы';
+/** Customer wording for any schema issue inside a cart configuration (items.N…). */
+const CART_ITEM_ERROR_MESSAGE =
+  'Одна из конфигураций в корзине некорректна. Откройте её в конфигураторе и добавьте в корзину заново.';
 
 /**
  * Order submission (spec §30). Every configuration in the request is
@@ -34,11 +45,9 @@ export async function POST(request: NextRequest) {
 
   const parsed = orderRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return apiError(
-      'VALIDATION_ERROR',
-      'Проверьте правильность заполнения формы',
-      400,
-      parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
+    return validationError(
+      FORM_ERROR_MESSAGE,
+      toPublicFieldErrors(parsed.error.issues, { items: CART_ITEM_ERROR_MESSAGE }),
     );
   }
   const input = parsed.data;
@@ -50,11 +59,15 @@ export async function POST(request: NextRequest) {
     for (const rawItem of input.items) {
       const result = calculatePrice(rawItem.configuration, catalog);
       if (!result.ok) {
+        // Through the public projection, never straight off the engine
+        // result: a PriceFailure can carry server-only diagnostics
+        // (internalDetails) that must not reach the checkout form.
+        const publicFailure = toPublicPriceFailure(result);
         return apiError(
           result.code === 'INVALID_FORMULA' ? 'INTERNAL_ERROR' : result.code,
-          `Не удалось рассчитать одну из позиций заказа: ${result.message}`,
+          `Не удалось рассчитать одну из позиций заказа: ${publicFailure.message}`,
           422,
-          result.details,
+          publicFailure.details,
         );
       }
       const model = findModel(catalog, result.configuration.modelSlug);
@@ -89,12 +102,19 @@ export async function POST(request: NextRequest) {
     // already-validated deliveryId against the catalog, never guessed.
     const addressRequired = items.some((item) => findDelivery(catalog, item.configuration.deliveryId)?.requiresAddress);
     if (addressRequired && !input.deliveryAddress?.trim()) {
-      return apiError(
-        'VALIDATION_ERROR',
-        'Проверьте правильность заполнения формы',
-        400,
-        ['deliveryAddress: Укажите адрес доставки'],
-      );
+      return validationError(FORM_ERROR_MESSAGE, [{ field: 'deliveryAddress', message: 'Укажите адрес доставки' }]);
+    }
+
+    // Free same-day CITY delivery exists only in Алматы, Астана, Караганда
+    // and Шымкент. The deliveryId comes from the browser, so the server checks
+    // the resolved method's kind against the customer's city — a CITY
+    // deliveryId forged for any other city is rejected, never priced.
+    const cityDeliveryUsed = items.some((item) => {
+      const method = findDelivery(catalog, item.configuration.deliveryId);
+      return method !== undefined && requiresCityDeliveryCity(method.kind);
+    });
+    if (cityDeliveryUsed && !isCityDeliveryCity(input.city)) {
+      return validationError(FORM_ERROR_MESSAGE, [{ field: 'city', message: CITY_DELIVERY_UNAVAILABLE_MESSAGE }]);
     }
 
     const netTotal = items.reduce((sum, item) => sum + item.breakdown.net, 0);

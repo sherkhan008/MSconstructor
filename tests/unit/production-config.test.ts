@@ -54,13 +54,20 @@ describe('checkProductionConfig', () => {
       APP_URL: 'http://localhost:8080',
       REDIS_URL: undefined,
       ADMIN_INITIAL_PASSWORD: 'Str0ng-and-long-enough',
-      NEXT_PUBLIC_WHATSAPP_NUMBER: undefined,
     });
     expect(errors).toEqual([]);
     expect(warnings.join('\n')).toMatch(/not https/);
     expect(warnings.join('\n')).toMatch(/REDIS_URL is not set/);
     expect(warnings.join('\n')).toMatch(/ADMIN_INITIAL_PASSWORD/);
-    expect(warnings.join('\n')).toMatch(/NEXT_PUBLIC_WHATSAPP_NUMBER/);
+  });
+
+  /** WhatsApp is the seller's only public contact channel — there is no
+   * published voice number — so an image built without it would ship a
+   * non-functional link and no way to reach the shop. */
+  it('refuses to start without the WhatsApp number it was built with', () => {
+    const { errors } = check({ NEXT_PUBLIC_WHATSAPP_NUMBER: undefined });
+    expect(errors.join('\n')).toMatch(/NEXT_PUBLIC_WHATSAPP_NUMBER/);
+    expect(errors.join('\n')).toMatch(/only public contact/);
   });
 
   it('never echoes a secret value in any message', () => {

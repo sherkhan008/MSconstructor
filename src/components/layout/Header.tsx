@@ -39,14 +39,6 @@ export function Header() {
 
         <div className="flex items-center gap-2 sm:gap-3">
           <a
-            href={`tel:${site.phoneHref}`}
-            onClick={() => trackEvent('phone_clicked', { location: 'header' })}
-            className="mono hidden text-sm text-foreground hover:text-blueprint md:inline"
-          >
-            {site.phone}
-          </a>
-
-          <a
             href={whatsAppContactUrl()}
             target="_blank"
             rel="noopener noreferrer"
@@ -97,8 +89,14 @@ export function Header() {
                 {link.labelRu}
               </Link>
             ))}
-            <a href={`tel:${site.phoneHref}`} className="mono px-2 py-2.5 text-sm text-steel">
-              {site.phone}
+            <a
+              href={whatsAppContactUrl()}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => trackEvent('whatsapp_clicked', { location: 'header' })}
+              className="mono px-2 py-2.5 text-sm text-steel"
+            >
+              WhatsApp {site.whatsappDisplay}
             </a>
             <LinkButton href="/configurator" className="mt-2" onClick={() => setMenuOpen(false)}>
               Конфигурировать стеллаж
