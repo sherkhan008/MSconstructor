@@ -20,20 +20,15 @@ type ProductModel = PublicCatalog['models'][number];
 type WallField = 'rearWall' | 'leftWall' | 'rightWall';
 
 /**
- * Compact, table-like replacement for the old GeneralSettingsPanel +
- * SectionTable pair: one narrow "row parameters" column (height, depth,
- * shelves, load) next to one column per section (width, walls), styled
- * after paksmet.ru's konfig-2 layout (visual reference only — no copied
- * markup/code). Reuses the exact same store state/actions those two
- * components used; no new configuration state is introduced.
- *
- * A single flat list of "blocks" (params block, one block per section, add
- * block) is rendered once and reflowed by CSS alone (flex-col on mobile,
- * grid on desktop) — every control (select, checkbox, button) exists exactly
- * once in the DOM, so plain CSS-attribute locators used by existing e2e
- * tests (e.g. `select[aria-label="Ширина секции 1"]`) never see duplicates.
+ * The configurator's configuration panel: row parameters (height, depth,
+ * shelves, load) followed by one row per section (width, walls) and the add
+ * button. Reuses the exact same store state/actions the old
+ * GeneralSettingsPanel + SectionTable pair used; no new configuration state
+ * is introduced. Every control exists exactly once in the DOM, so plain
+ * CSS-attribute locators used by existing e2e tests (e.g.
+ * `select[aria-label="Ширина секции 1"]`) never see duplicates.
  */
-export function ParametersSectionsTable({ catalog }: { catalog: PublicCatalog }) {
+export function ParametersSectionsTable({ catalog, onReset }: { catalog: PublicCatalog; onReset?: () => void }) {
   const config = useConfiguratorStore((s) => s.config);
   const activeSectionId = useConfiguratorStore((s) => s.activeSectionId);
   const setActiveSectionId = useConfiguratorStore((s) => s.setActiveSectionId);
@@ -55,7 +50,6 @@ export function ParametersSectionsTable({ catalog }: { catalog: PublicCatalog })
     model.slug === 'ms-standard' ? getAllowedWidthsForDepth(config.depth) : (model.widths ?? catalog.widths.map((w) => w.value));
   const canAdd = config.sections.length < MAX_SECTIONS;
   const canRemove = config.sections.length > MIN_SECTIONS;
-  const n = config.sections.length;
 
   function handleFocusSection(id: string) {
     setActiveSectionId(id);
@@ -71,66 +65,86 @@ export function ParametersSectionsTable({ catalog }: { catalog: PublicCatalog })
 
   return (
     <div className="border border-line bg-surface text-sm">
-      <div
-        className="flex flex-col divide-y divide-line lg:grid lg:divide-y-0"
-        style={{ gridTemplateColumns: `minmax(150px,1fr) repeat(${n}, minmax(100px,1fr)) 44px` }}
-      >
-        <div className="p-3 lg:border-r lg:border-line">
-          <span className="tech-label mb-2 block">{t(CF['CF-024'], locale)}</span>
-          <RowParamsFields config={config} model={model} catalog={catalog} setField={setField} />
-        </div>
-
-        {config.sections.map((section, i) => (
-          <div key={section.id} className="p-3 lg:border-r lg:border-line">
-            <div className="mb-2 flex items-center justify-between gap-1">
-              <button
-                type="button"
-                onClick={() => setActiveSectionId(section.id)}
-                className={`tech-label ${section.id === activeSectionId ? 'text-dimension-accent' : 'text-steel hover:text-foreground'}`}
-              >
-                {t(CF['CF-025'], locale, { N: i + 1 })}
-              </button>
-              <button
-                type="button"
-                disabled={!canRemove}
-                onClick={() => removeSection(section.id)}
-                aria-label={t(CF['CF-026'], locale)}
-                title={t(CF['CF-026'], locale)}
-                className="grid h-6 w-6 shrink-0 place-items-center text-steel hover:text-danger disabled:cursor-not-allowed disabled:opacity-30"
-              >
-                ×
-              </button>
-            </div>
-            <SectionFields
-              section={section}
-              index={i}
-              widths={widths}
-              onFocus={() => handleFocusSection(section.id)}
-              onChangeWidth={(w) => handleChangeWidth(section.id, w)}
-              onToggleWall={(field, checked) => handleToggleWall(section.id, field, checked)}
-            />
-          </div>
-        ))}
-
-        <div className="flex items-center justify-center p-3 lg:p-1">
-          <button
-            type="button"
-            disabled={!canAdd}
-            onClick={addSection}
-            aria-label={t(CF['CF-027'], locale)}
-            title={t(CF['CF-027'], locale)}
-            className="tech-label flex h-11 w-full items-center justify-center gap-1.5 border border-dimension-accent text-dimension-accent hover:bg-dimension-accent-soft disabled:cursor-not-allowed disabled:opacity-30 lg:h-8 lg:w-8 lg:rounded-full lg:p-0"
-          >
-            <span className="lg:hidden">{t(CF['CF-028'], locale)}</span>
-            <span className="hidden lg:inline">+</span>
-          </button>
-        </div>
+      <div className="p-4">
+        <h2 className="font-display text-lg leading-tight">{t(CF['CF-024'], locale)}</h2>
+        <RowParamsFields config={config} model={model} catalog={catalog} setField={setField} />
       </div>
 
-      {!canAdd && <p className="tech-label px-3 py-2 text-dimension-accent">{t(CF['CF-029'], locale)}</p>}
+      <ul className="border-t border-line">
+        {config.sections.map((section, i) => {
+          const active = section.id === activeSectionId;
+          return (
+            <li
+              key={section.id}
+              className={`border-b border-l-[3px] border-b-line px-4 pb-3 pt-1 ${active ? 'border-l-dimension-accent bg-surface' : 'border-l-transparent bg-background/60'}`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveSectionId(section.id)}
+                  aria-pressed={active}
+                  className={`-ml-1 min-h-11 px-1 text-left text-[15px] font-semibold ${active ? 'text-dimension-accent' : 'text-foreground hover:text-steel'}`}
+                >
+                  {t(CF['CF-025'], locale, { N: i + 1 })}
+                </button>
+                <button
+                  type="button"
+                  disabled={!canRemove}
+                  onClick={() => removeSection(section.id)}
+                  aria-label={t(CF['CF-026'], locale)}
+                  title={t(CF['CF-026'], locale)}
+                  className="-mr-2 grid h-11 w-11 shrink-0 place-items-center text-lg leading-none text-steel transition-colors hover:text-danger disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  ×
+                </button>
+              </div>
+              <SectionFields
+                section={section}
+                index={i}
+                widths={widths}
+                onFocus={() => handleFocusSection(section.id)}
+                onChangeWidth={(w) => handleChangeWidth(section.id, w)}
+                onToggleWall={(field, checked) => handleToggleWall(section.id, field, checked)}
+              />
+            </li>
+          );
+        })}
+      </ul>
+
+      <div className="p-4">
+        <button
+          type="button"
+          disabled={!canAdd}
+          onClick={addSection}
+          aria-label={t(CF['CF-027'], locale)}
+          title={t(CF['CF-027'], locale)}
+          className="flex min-h-11 w-full items-center justify-center border border-dashed border-line-strong text-[15px] font-medium text-foreground transition-colors hover:border-foreground disabled:cursor-not-allowed disabled:opacity-40 lg:min-h-10"
+        >
+          {t(CF['CF-028'], locale)}
+        </button>
+        {!canAdd && <p className="mt-2 text-[13px] text-steel">{t(CF['CF-029'], locale)}</p>}
+        {/* Reset sits with the settings it resets: easy to find at the end
+            of the panel, visually secondary to adding a section. Reuses the
+            store's reset(), passed in by the page. */}
+        {onReset && (
+          <button
+            type="button"
+            onClick={onReset}
+            className="mx-auto mt-2 flex min-h-11 items-center justify-center gap-2 px-2 text-center text-[13px] leading-tight text-steel transition-colors hover:text-foreground lg:min-h-10"
+          >
+            <ResetIcon />
+            {t(CF['CF-022'], locale)}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
+
+/** Shared field chrome: readable sentence-case label over a 44px control. */
+const FIELD_LABEL = 'text-[13px] leading-tight text-steel';
+const SELECT_CLASS =
+  'mono h-11 w-full min-w-0 border border-line bg-surface px-2.5 text-sm text-foreground outline-none transition-colors hover:border-line-strong focus:border-blueprint lg:h-10';
 
 function RowParamsFields({
   config,
@@ -158,14 +172,10 @@ function RowParamsFields({
   const locale = useLocale();
 
   return (
-    <div className="flex flex-col gap-2.5">
-      <label className="flex flex-col gap-1">
-        <span className="tech-label">{t(CF['CF-030'], locale)}</span>
-        <select
-          value={config.height}
-          onChange={(e) => setField('height', Number(e.target.value))}
-          className="mono h-9 w-full border border-line bg-surface px-2 text-sm outline-none focus:border-blueprint"
-        >
+    <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-3">
+      <label className="flex min-w-0 flex-col gap-1.5">
+        <span className={FIELD_LABEL}>{t(CF['CF-030'], locale)}</span>
+        <select value={config.height} onChange={(e) => setField('height', Number(e.target.value))} className={SELECT_CLASS}>
           {catalog.heights
             .filter((h) => allowedHeights.includes(h.value))
             .map((h) => (
@@ -176,13 +186,9 @@ function RowParamsFields({
         </select>
       </label>
 
-      <label className="flex flex-col gap-1">
-        <span className="tech-label">{t(CF['CF-031'], locale)}</span>
-        <select
-          value={config.depth}
-          onChange={(e) => setField('depth', Number(e.target.value))}
-          className="mono h-9 w-full border border-line bg-surface px-2 text-sm outline-none focus:border-blueprint"
-        >
+      <label className="flex min-w-0 flex-col gap-1.5">
+        <span className={FIELD_LABEL}>{t(CF['CF-031'], locale)}</span>
+        <select value={config.depth} onChange={(e) => setField('depth', Number(e.target.value))} className={SELECT_CLASS}>
           {catalog.depths
             .filter((d) => allowedDepths.includes(d.value))
             .map((d) => (
@@ -193,18 +199,16 @@ function RowParamsFields({
         </select>
       </label>
 
-      <div className="flex flex-col gap-1">
-        <span className="tech-label">{t(CF['CF-032'], locale)}</span>
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <span className={FIELD_LABEL}>{t(CF['CF-032'], locale)}</span>
         <NumberStepper value={config.shelves} min={shelvesMin} max={shelvesMax} onChange={(v) => setField('shelves', v)} testId="shelf-count" />
       </div>
 
-      <label className="flex flex-col gap-1">
-        <span className="tech-label">{t(CF['CF-033'], locale)}</span>
-        <select
-          value={config.loadCapacity}
-          onChange={(e) => setField('loadCapacity', Number(e.target.value))}
-          className="mono h-9 w-full border border-line bg-surface px-2 text-sm outline-none focus:border-blueprint"
-        >
+      {/* Load options are words, not a bare number: sans face, and a full
+          row below 400px so "Сөреге 150 кг" never clips inside the select. */}
+      <label className="col-span-2 flex min-w-0 flex-col gap-1.5 min-[400px]:col-span-1">
+        <span className={FIELD_LABEL}>{t(CF['CF-033'], locale)}</span>
+        <select value={config.loadCapacity} onChange={(e) => setField('loadCapacity', Number(e.target.value))} className={`${SELECT_CLASS} !font-sans`}>
           {catalog.loadCapacities.map((load) => {
             const modelCompatible = model.loadCapacities.includes(load.value);
             const dimensionCompatible = config.sections.every((s) => s.width <= load.maxWidth) && config.depth <= load.maxDepth;
@@ -240,15 +244,15 @@ function SectionFields({
   const locale = useLocale();
   return (
     <div className="flex flex-col gap-2.5">
-      <label className="flex flex-col gap-1">
-        <span className="tech-label">{t(CF['CF-035'], locale)}</span>
+      <label className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-3">
+        <span className={FIELD_LABEL}>{t(CF['CF-035'], locale)}</span>
         <select
           value={section.width}
           data-section-index={index}
           aria-label={t(CF['CF-036'], locale, { N: index + 1 })}
           onClick={onFocus}
           onChange={(e) => onChangeWidth(Number(e.target.value))}
-          className="mono h-9 w-full border border-line bg-surface px-1 text-center text-sm outline-none focus:border-blueprint"
+          className={SELECT_CLASS}
         >
           {widths.map((w) => (
             <option key={w} value={w}>
@@ -258,7 +262,7 @@ function SectionFields({
         </select>
       </label>
 
-      <div className="flex flex-col gap-1">
+      <div className="grid grid-cols-3 gap-2">
         <WallCheckbox label={t(CF['CF-037'], locale)} checked={section.rearWall} onFocus={onFocus} onChange={(checked) => onToggleWall('rearWall', checked)} />
         <WallCheckbox label={t(CF['CF-038'], locale)} checked={section.leftWall} onFocus={onFocus} onChange={(checked) => onToggleWall('leftWall', checked)} />
         <WallCheckbox label={t(CF['CF-039'], locale)} checked={section.rightWall} onFocus={onFocus} onChange={(checked) => onToggleWall('rightWall', checked)} />
@@ -267,6 +271,9 @@ function SectionFields({
   );
 }
 
+/** A native checkbox inside a chip-shaped label: the whole chip is the
+ * touch target, and the checked state reads from the tick and the darker
+ * border together — never from colour alone. */
 function WallCheckbox({
   label,
   checked,
@@ -279,15 +286,28 @@ function WallCheckbox({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label className="flex items-center justify-between gap-2 text-xs text-steel">
-      <span>{label}</span>
+    <label
+      className={`flex min-h-11 min-w-0 cursor-pointer items-center gap-2 border px-2 text-[13px] leading-tight transition-colors lg:min-h-10 ${
+        checked ? 'border-foreground bg-surface text-foreground' : 'border-line bg-surface text-steel hover:border-line-strong'
+      }`}
+    >
       <input
         type="checkbox"
         checked={checked}
         onFocus={onFocus}
         onChange={(e) => onChange(e.target.checked)}
-        className="h-4 w-4 accent-[color:var(--color-dimension-accent)]"
+        className="h-4 w-4 shrink-0 accent-[color:var(--color-foreground)]"
       />
+      <span className="min-w-0 break-words">{label}</span>
     </label>
+  );
+}
+
+function ResetIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true" className="shrink-0">
+      <path d="M3 8a5 5 0 1 0 1.5-3.55" stroke="currentColor" strokeWidth="1.4" strokeLinecap="square" />
+      <path d="M3 2.5V5h2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="square" />
+    </svg>
   );
 }

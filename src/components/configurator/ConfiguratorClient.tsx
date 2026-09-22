@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { trackEvent } from '@/lib/analytics';
 import { configurationToShareQuery, parseConfigurationFromSearchParams } from '@/lib/configurator/url';
@@ -23,7 +23,7 @@ import { BomTable } from './BomTable';
 import { useLivePrice } from './useLivePrice';
 import type { DimensionAxis } from './resize/dimension-scale';
 import { t } from '@/lib/i18n/format';
-import { CF } from '@/lib/i18n/strings';
+import { CF, CT } from '@/lib/i18n/strings';
 import { useLocale } from '@/components/i18n/LocaleProvider';
 import { registerSwitchQuery } from '@/components/i18n/switch-query';
 
@@ -212,79 +212,123 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
     removeSection(id);
   }
 
+  // Two-zone workspace: the rack (left, sticky on desktop) is the visual
+  // centre; configuration, kit summary and the purchase card share the
+  // right column. Below `lg` the same DOM stacks, and OrderSummaryBar pins
+  // itself to the bottom of the viewport instead (see its own classes).
   return (
-    <div className="pb-56 lg:pb-28">
-      <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-4 px-4 py-6 sm:px-6 lg:px-8">
-        <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="font-display text-xl uppercase tracking-wide sm:text-2xl">{t(CF['CF-002'], locale)}</h1>
-          <div className="inline-flex self-start border border-line" role="group" aria-label={t(CF['CF-003'], locale)}>
-            <button
-              type="button"
-              aria-pressed={previewMode === 'front'}
-              onClick={() => setPreviewMode('front')}
-              className={`font-display px-3 py-1.5 text-xs uppercase tracking-wide transition-colors ${previewMode === 'front' ? 'bg-foreground text-background' : 'hover:bg-surface-muted'}`}
-            >
-              {t(CF['CF-004'], locale)}
-            </button>
-            <button
-              type="button"
-              aria-pressed={previewMode === 'top'}
-              onClick={() => setPreviewMode('top')}
-              className={`font-display border-l border-line px-3 py-1.5 text-xs uppercase tracking-wide transition-colors ${previewMode === 'top' ? 'bg-foreground text-background' : 'hover:bg-surface-muted'}`}
-            >
-              {t(CF['CF-005'], locale)}
-            </button>
+    <div className="pb-40 lg:pb-16">
+      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+        <h1 className="py-4 font-display text-[1.375rem] leading-tight sm:py-6 sm:text-3xl lg:truncate lg:py-5 lg:text-[2rem] lg:leading-10">{t(CF['CF-002'], locale)}</h1>
+
+        <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(340px,380px)] lg:items-start xl:gap-8">
+          <div className="-mx-4 border-y border-line bg-surface sm:mx-0 sm:border-x lg:sticky lg:top-[calc(var(--header-height)+1rem)]">
+            <div className="border-b border-line p-2 sm:px-3">
+              <div className="flex w-full border border-line sm:w-auto sm:max-w-full sm:inline-flex" role="group" aria-label={t(CF['CF-003'], locale)}>
+                <ViewToggleButton pressed={previewMode === 'front'} onClick={() => setPreviewMode('front')}>
+                  {t(CF['CF-004'], locale)}
+                </ViewToggleButton>
+                <ViewToggleButton pressed={previewMode === 'top'} onClick={() => setPreviewMode('top')} className="border-l border-line">
+                  {t(CF['CF-005'], locale)}
+                </ViewToggleButton>
+              </div>
+            </div>
+
+            {previewMode === 'front' ? (
+              <ShelvingPreview
+                config={config}
+                color={color}
+                framed
+                frameClassName="configurator-frame"
+                interactive
+                allowedDimensions={model ? { heights: allowedHeights, widths: allowedWidths, depths: allowedDepths } : undefined}
+                activeSectionId={activeSectionId}
+                onSelectSection={setActiveSectionId}
+                onAddSectionAfter={handleAddSectionAfter}
+                onRemoveSectionAt={handleRemoveSectionAt}
+                onCommitDimension={handleCommitDimension}
+                minShelves={shelvesMin}
+                maxShelves={shelvesMax}
+                onIncreaseShelves={() => setField('shelves', Math.min(shelvesMax, config.shelves + 1))}
+                onDecreaseShelves={() => setField('shelves', Math.max(shelvesMin, config.shelves - 1))}
+              />
+            ) : (
+              <div>
+                {/* Same 4:3 frame as the front view, so switching modes never
+                    makes the workspace jump. */}
+                <div className="configurator-frame mx-auto flex aspect-[4/3] w-full items-center">
+                  <TopShelvingPreview
+                    config={config}
+                    color={color}
+                    className="!border-0"
+                    interactive
+                    activeSectionId={activeSectionId}
+                    onSelectSection={setActiveSectionId}
+                  />
+                </div>
+                <div className="flex justify-end border-t border-line px-4 py-2.5 text-[13px] leading-snug text-steel">
+                  <p className="mono whitespace-nowrap">{t(CT['CT-024'], locale, { N: config.loadCapacity })}</p>
+                </div>
+              </div>
+            )}
           </div>
-        </header>
 
-        {previewMode === 'front' ? (
-          <ShelvingPreview
-            config={config}
-            color={color}
-            className="aspect-[16/10] sm:min-h-[380px] lg:min-h-[460px]"
-            interactive
-            allowedDimensions={model ? { heights: allowedHeights, widths: allowedWidths, depths: allowedDepths } : undefined}
-            activeSectionId={activeSectionId}
-            onSelectSection={setActiveSectionId}
-            onAddSectionAfter={handleAddSectionAfter}
-            onRemoveSectionAt={handleRemoveSectionAt}
-            onCommitDimension={handleCommitDimension}
-            minShelves={shelvesMin}
-            maxShelves={shelvesMax}
-            onIncreaseShelves={() => setField('shelves', Math.min(shelvesMax, config.shelves + 1))}
-            onDecreaseShelves={() => setField('shelves', Math.max(shelvesMin, config.shelves - 1))}
-            onReset={reset}
-          />
-        ) : (
-          <TopShelvingPreview
-            config={config}
-            color={color}
-            className="sm:min-h-[240px]"
-            interactive
-            activeSectionId={activeSectionId}
-            onSelectSection={setActiveSectionId}
-          />
-        )}
+          {/* Desktop: one panel sized to the screen below the header and the
+              fixed-height (5rem) title — the configuration scrolls inside it
+              while the purchase card stays pinned to its foot, so price and
+              next step are in view without scrolling the page and never
+              cover the controls they summarise. */}
+          <div className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-[calc(var(--header-height)+1rem)] lg:max-h-[calc(100dvh-var(--header-height)-6.5rem)] lg:gap-0 lg:border lg:border-line lg:bg-surface">
+            <div className="flex min-w-0 flex-col gap-4 lg:min-h-0 lg:flex-1 lg:gap-0 lg:divide-y lg:divide-line lg:overflow-y-auto lg:overscroll-contain lg:[&>*]:border-0">
+            <ParametersSectionsTable catalog={catalog} onReset={reset} />
 
-        <ParametersSectionsTable catalog={catalog} />
+            <AdvancedSettingsAccordion catalog={catalog} />
 
-        <AdvancedSettingsAccordion catalog={catalog} />
+            {priceResult && <BomTable lines={priceResult.bom} totalWeightKg={priceResult.totalWeightKg} />}
 
-        {priceResult && <BomTable lines={priceResult.bom} totalWeightKg={priceResult.totalWeightKg} />}
+            {pricingError && (
+              <div role="alert" className="border border-danger bg-danger-soft px-4 py-3 text-sm text-danger">
+                {pricingError.message}
+              </div>
+            )}
+            {priceResult && priceResult.warnings.length > 0 && (
+              <ul className="space-y-1 border border-line bg-surface-muted px-4 py-3 text-[13px] text-steel">
+                {priceResult.warnings.map((warning) => (
+                  <li key={warning}>⚠ {warning}</li>
+                ))}
+              </ul>
+            )}
+            </div>
 
-        {pricingError && (
-          <div className="border border-danger bg-danger-soft px-4 py-3 text-sm text-danger">{pricingError.message}</div>
-        )}
-        {priceResult && priceResult.warnings.length > 0 && (
-          <ul className="tech-label space-y-1 border border-line bg-surface-muted px-4 py-3">
-            {priceResult.warnings.map((warning) => (
-              <li key={warning}>⚠ {warning}</li>
-            ))}
-          </ul>
-        )}
+            <OrderSummaryBar catalog={catalog} />
+          </div>
+        </div>
       </div>
-
-      <OrderSummaryBar catalog={catalog} />
     </div>
+  );
+}
+
+function ViewToggleButton({
+  pressed,
+  onClick,
+  className = '',
+  children,
+}: {
+  pressed: boolean;
+  onClick: () => void;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      onClick={onClick}
+      className={`min-h-11 flex-1 px-2 py-1 text-[13px] font-medium leading-tight transition-colors sm:flex-none lg:min-h-9 ${
+        pressed ? 'bg-foreground text-background' : 'bg-surface text-steel hover:text-foreground'
+      } ${className}`}
+    >
+      {children}
+    </button>
   );
 }

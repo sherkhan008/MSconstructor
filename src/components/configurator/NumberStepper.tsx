@@ -21,19 +21,19 @@ export function NumberStepper({
 }) {
   const locale = useLocale();
   return (
-    <div className="inline-flex h-9 items-stretch border border-line">
+    <div className="grid h-11 w-full grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-stretch border border-line bg-surface lg:h-10">
       <button
         type="button"
         aria-label={t(CF['CF-040'], locale)}
         onClick={() => onChange(Math.max(min, value - 1))}
         disabled={value <= min}
-        className="grid w-9 place-items-center text-sm text-foreground hover:bg-surface-muted disabled:opacity-30"
+        className="grid place-items-center text-base text-foreground transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-30"
       >
         −
       </button>
       <div
         data-testid={testId}
-        className="mono flex min-w-[48px] items-center justify-center border-x border-line px-2 text-sm font-medium"
+        className="mono flex items-center justify-center border-x border-line px-1 text-sm font-semibold"
       >
         {value}
         {suffix && <span className="ml-1 text-xs font-normal text-steel">{suffix}</span>}
@@ -43,7 +43,7 @@ export function NumberStepper({
         aria-label={t(CF['CF-041'], locale)}
         onClick={() => onChange(Math.min(max, value + 1))}
         disabled={value >= max}
-        className="grid w-9 place-items-center text-sm text-foreground hover:bg-surface-muted disabled:opacity-30"
+        className="grid place-items-center text-base text-foreground transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-30"
       >
         +
       </button>

@@ -102,9 +102,24 @@ function perforationYs(top: number, bottom: number): number[] {
 
 // Shared flat, compact language for every circular control around the rack
 // (section add/remove, shelf count +/-): plain surface fill, thin border,
-// no gradient/shadow — consistent with the rest of the configurator's UI.
-const CIRCLE_CONTROL =
-  'grid place-items-center rounded-full border border-line bg-surface font-medium text-steel transition-colors disabled:cursor-not-allowed disabled:opacity-30';
+// no gradient/shadow. The visible disc is deliberately smaller than the
+// button itself — the button stays a 44×44 touch target while the disc
+// stays light enough not to compete with the rack. A disabled disc stays
+// opaque (only its glyph and border fade) so the rack never shows through
+// a control that happens to sit over it.
+const CIRCLE_HIT =
+  'group grid h-11 w-11 place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-blueprint disabled:cursor-not-allowed';
+const CIRCLE_DISC =
+  'grid place-items-center rounded-full border bg-surface font-medium leading-none transition-colors group-disabled:!border-line group-disabled:!text-line-strong';
+
+// Stage size, in percent of the visible frame, when `framed` is set. Every
+// interactive control is still positioned in percent of the full 640×480
+// viewBox, and useDimensionDrag still measures the full stage — the frame
+// only clips the always-empty right and bottom quarter of the viewBox (the
+// rack is anchored top-left, see RACK_LEFT_MARGIN; the row is capped at
+// MAX_ROW_WIDTH_PX and the total-width tag ends at ~FLOOR_Y + 90), so the
+// rack renders 4/3 larger without any geometry changing.
+const FRAMED_STAGE_PERCENT = `${(4 / 3) * 100}%`;
 
 export interface AllowedDimensions {
   heights: number[];
@@ -134,6 +149,13 @@ interface Props {
    * store's existing `reset()` — this component never invents its own reset
    * logic, only renders the button when a handler is supplied. */
   onReset?: () => void;
+  /** Configurator workspace framing: renders the preview as a 4:3 frame
+   * that zooms onto the rack (see FRAMED_STAGE_PERCENT), with the first-run
+   * hint and load caption in a caption strip under the frame instead of
+   * floating over the drawing. `className` styles the outer wrapper and
+   * `frameClassName` the 4:3 frame itself. */
+  framed?: boolean;
+  frameClassName?: string;
 }
 
 const NO_ALLOWED: number[] = [];
@@ -156,6 +178,8 @@ export function ShelvingPreview({
   onIncreaseShelves,
   onDecreaseShelves,
   onReset,
+  framed = false,
+  frameClassName = '',
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const locale = useLocale();
@@ -351,8 +375,15 @@ export function ShelvingPreview({
   const canAdd = config.sections.length < MAX_SECTIONS;
   const canRemove = config.sections.length > MIN_SECTIONS;
 
-  return (
-    <div ref={containerRef} className={`relative w-full overflow-hidden border border-line bg-surface ${className}`}>
+  const showHint = interactive && !hasInteracted;
+  const hint = t(CF['CF-021'], locale);
+  const loadCaption = t(CT['CT-024'], locale, { N: config.loadCapacity });
+  // Only highlight the active section's own +/− when there is a choice of
+  // section at all — a single-section row has nothing to disambiguate.
+  const markActive = interactive && config.sections.length > 1;
+
+  const drawing = (
+    <>
       <svg viewBox={presentation && !interactive ? `0 ${Math.min(0, top + depthVec.dy - 30)} ${rowEnd + depthVec.dx + 50} ${FLOOR_Y + 110 - Math.min(0, top + depthVec.dy - 30)}` : `0 0 ${VIEWBOX_W} ${VIEWBOX_H}`} className="h-full w-full" role="img" aria-label={t(CF['CF-006'], locale)}>
         {/* 1. Rear posts — the physical steel frame, always visible regardless
              of any wall selection (a rear post is not the same thing as the
@@ -691,6 +722,7 @@ export function ShelvingPreview({
           {layout.map((section, i) => {
             const xPercent = ((section.x + section.width / 2) / VIEWBOX_W) * 100;
             const yPercent = ((top - 24) / VIEWBOX_H) * 100;
+            const isActive = markActive && section.id === activeSection.id;
             return (
               <div key={`add-${section.id}`} className="absolute z-20 -translate-x-1/2 -translate-y-1/2" style={{ left: `${xPercent}%`, top: `${yPercent}%` }}>
                 <button
@@ -699,9 +731,14 @@ export function ShelvingPreview({
                   onClick={() => onAddSectionAfter?.(section.id)}
                   title={t(CF['CF-015'], locale, { N: i + 1 })}
                   aria-label={t(CF['CF-016'], locale, { N: i + 1 })}
-                  className={`${CIRCLE_CONTROL} h-10 w-10 text-base hover:border-dimension-accent hover:text-dimension-accent`}
+                  className={CIRCLE_HIT}
                 >
-                  +
+                  <span
+                    aria-hidden="true"
+                    className={`${CIRCLE_DISC} h-8 w-8 text-base group-hover:border-foreground group-hover:text-foreground ${isActive ? 'border-foreground text-foreground' : 'border-line-strong text-steel'}`}
+                  >
+                    +
+                  </span>
                 </button>
               </div>
             );
@@ -709,6 +746,7 @@ export function ShelvingPreview({
           {layout.map((section, i) => {
             const xPercent = ((section.x + section.width / 2) / VIEWBOX_W) * 100;
             const yPercent = ((FLOOR_Y + 44) / VIEWBOX_H) * 100;
+            const isActive = markActive && section.id === activeSection.id;
             return (
               <div
                 key={`remove-${section.id}`}
@@ -721,70 +759,93 @@ export function ShelvingPreview({
                   onClick={() => onRemoveSectionAt?.(section.id)}
                   title={t(CF['CF-017'], locale, { N: i + 1 })}
                   aria-label={t(CF['CF-018'], locale, { N: i + 1 })}
-                  className={`${CIRCLE_CONTROL} h-8 w-8 text-sm hover:border-danger hover:text-danger`}
+                  className={CIRCLE_HIT}
                 >
-                  −
+                  <span
+                    aria-hidden="true"
+                    className={`${CIRCLE_DISC} h-7 w-7 text-sm group-hover:border-danger group-hover:text-danger ${isActive ? 'border-steel text-foreground' : 'border-line text-steel'}`}
+                  >
+                    −
+                  </span>
                 </button>
               </div>
             );
           })}
 
           {/* Global shelf count — a compact vertical control column just off
-              the rack's right edge, in the same glossy-circle language as
-              the section add/remove controls. */}
+              the rack's right edge, in the same circle language as the
+              section add/remove controls. The two 44px hit areas overlap the
+              count between them by design, so the column stays short. */}
           <div
-            className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1"
+            className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center -space-y-1.5"
             style={{
               left: `${(Math.min(rowEnd + 24, VIEWBOX_W - 16) / VIEWBOX_W) * 100}%`,
               top: `${(((top + FLOOR_Y) / 2) / VIEWBOX_H) * 100}%`,
             }}
           >
-            <button
-              type="button"
-              aria-label={t(CF['CF-019'], locale)}
-              onClick={onIncreaseShelves}
-              disabled={config.shelves >= maxShelves}
-              className={`${CIRCLE_CONTROL} h-8 w-8 text-sm hover:border-dimension-accent hover:text-dimension-accent`}
-            >
-              +
+            <button type="button" aria-label={t(CF['CF-019'], locale)} onClick={onIncreaseShelves} disabled={config.shelves >= maxShelves} className={CIRCLE_HIT}>
+              <span aria-hidden="true" className={`${CIRCLE_DISC} h-7 w-7 border-line-strong text-sm text-steel group-hover:border-foreground group-hover:text-foreground`}>
+                +
+              </span>
             </button>
-            <span className="mono text-[11px] font-semibold text-steel">{config.shelves}</span>
-            <button
-              type="button"
-              aria-label={t(CF['CF-020'], locale)}
-              onClick={onDecreaseShelves}
-              disabled={config.shelves <= minShelves}
-              className={`${CIRCLE_CONTROL} h-8 w-8 text-sm hover:border-danger hover:text-danger`}
-            >
-              −
+            <span className="mono relative z-10 text-xs font-semibold leading-none text-foreground">{config.shelves}</span>
+            <button type="button" aria-label={t(CF['CF-020'], locale)} onClick={onDecreaseShelves} disabled={config.shelves <= minShelves} className={CIRCLE_HIT}>
+              <span aria-hidden="true" className={`${CIRCLE_DISC} h-7 w-7 border-line-strong text-sm text-steel group-hover:border-danger group-hover:text-danger`}>
+                −
+              </span>
             </button>
           </div>
 
-          {/* No opaque background — this is a first-run nudge, not a control,
-              and must never visually cover the real section +/- buttons that
-              share this bottom strip. */}
-          {!hasInteracted && (
-            <p className="tech-label pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 px-2 py-1 text-center text-steel drop-shadow-[0_1px_1px_rgba(255,255,255,0.9)]">
-              {t(CF['CF-021'], locale)}
-            </p>
-          )}
           <div role="status" aria-live="polite" className="sr-only">
             {announcement}
           </div>
-
-          {onReset && (
-            <button
-              type="button"
-              onClick={onReset}
-              className="tech-label absolute right-3 top-3 text-steel underline-offset-2 hover:text-dimension-accent hover:underline"
-            >
-              {t(CF['CF-022'], locale)}
-            </button>
-          )}
         </>
       )}
+    </>
+  );
 
-      <div className="tech-label pointer-events-none absolute bottom-2 right-3">{t(CT['CT-024'], locale, { N: config.loadCapacity })}</div>
+  if (framed) {
+    return (
+      <div className={`bg-surface ${className}`}>
+        <div className={`relative mx-auto aspect-[4/3] w-full overflow-hidden ${frameClassName}`}>
+          <div ref={containerRef} className="absolute left-0 top-0" style={{ width: FRAMED_STAGE_PERCENT, height: FRAMED_STAGE_PERCENT }}>
+            {drawing}
+          </div>
+        </div>
+        <div className="flex items-start justify-between gap-x-4 gap-y-1 border-t border-line px-4 py-2.5 text-[13px] leading-snug text-steel">
+          {/* First-run nudge — sits under the drawing, so it can never cover
+              the rack or its controls at any width. */}
+          <p className="min-w-0">{showHint ? hint : null}</p>
+          <p className="mono shrink-0 whitespace-nowrap">{loadCaption}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={containerRef} className={`relative w-full overflow-hidden border border-line bg-surface ${className}`}>
+      {drawing}
+
+      {/* No opaque background — this is a first-run nudge, not a control,
+          and must never visually cover the real section +/- buttons that
+          share this bottom strip. */}
+      {showHint && (
+        <p className="tech-label pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 px-2 py-1 text-center text-steel drop-shadow-[0_1px_1px_rgba(255,255,255,0.9)]">
+          {hint}
+        </p>
+      )}
+
+      {interactive && onReset && (
+        <button
+          type="button"
+          onClick={onReset}
+          className="tech-label absolute right-3 top-3 text-steel underline-offset-2 hover:text-dimension-accent hover:underline"
+        >
+          {t(CF['CF-022'], locale)}
+        </button>
+      )}
+
+      <div className="tech-label pointer-events-none absolute bottom-2 right-3">{loadCaption}</div>
     </div>
   );
 }

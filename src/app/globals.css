@@ -182,6 +182,16 @@
     background-color: var(--color-accent);
   }
 
+  /* Configurator rack frame (4:3). On desktop the workspace fits one screen
+     below the header and the 5rem page title, so the frame is capped to the
+     height left after the preview's toolbar and caption strip (~6rem) and
+     the bottom margin — the whole rack and its controls stay in view. */
+  @media (min-width: 1024px) {
+    .configurator-frame {
+      max-width: max(22rem, calc((100dvh - var(--header-height) - 12.5rem) * 4 / 3));
+    }
+  }
+
   .price-flash {
     animation: price-flash 420ms var(--ease-technical);
   }

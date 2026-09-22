@@ -8,7 +8,7 @@ import { CF, CK, CN, CR, CT, DL, F, H, HM, OS, VL } from '../../src/lib/i18n/str
 
 /**
  * KZ-first public site in a real browser: Kazakh at the root, Russian under
- * /ru, the ҚАЗ / RU switcher opening the equivalent page, and customer state
+ * /ru, the KZ / RU switcher opening the equivalent page, and customer state
  * (configurator, cart, prices) surviving a language switch untouched.
  * Runs in both projects (desktop and Pixel 7).
  */
@@ -26,7 +26,7 @@ function watchErrors(page: Page): string[] {
   return errors;
 }
 
-async function switchTo(page: Page, label: 'RU' | 'ҚАЗ') {
+async function switchTo(page: Page, label: 'RU' | 'KZ') {
   const switcher = page.getByTestId('language-switcher');
   await expect(switcher).toBeVisible();
   const before = page.url();
@@ -73,7 +73,7 @@ for (const [kkPath, ruPath, heading] of [
     await expect(page.locator('html')).toHaveAttribute('lang', 'ru');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(ru(heading), { ignoreCase: true });
 
-    await switchTo(page, 'ҚАЗ');
+    await switchTo(page, 'KZ');
     expect(new URL(page.url()).pathname).toBe(kkPath);
     expect(errors.filter((e) => /hydrat|did not match/i.test(e))).toEqual([]);
   });
@@ -110,7 +110,7 @@ test('a configured rack, its price and every setting survive a language switch',
   await expect(page.locator('select[aria-label="Ширина секции 2"]')).toHaveValue('1000');
   await expect(page.getByTestId('shelf-count')).toContainText('4');
 
-  await switchTo(page, 'ҚАЗ');
+  await switchTo(page, 'KZ');
   expect(await configuratorTotal(page)).toBe(ruTotal);
 });
 
