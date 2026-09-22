@@ -1,13 +1,17 @@
 import Link from 'next/link';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
-type Variant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'whatsapp';
+/** `accent` is the configurator's CTA colour (see --color-accent-strong in
+ * globals.css); `outline-dark` is the outline button for dark surfaces. */
+type Variant = 'primary' | 'secondary' | 'accent' | 'outline' | 'outline-dark' | 'ghost' | 'whatsapp';
 type Size = 'sm' | 'md' | 'lg';
 
 const VARIANT_CLASSES: Record<Variant, string> = {
   primary: 'bg-foreground text-background hover:bg-blueprint border border-foreground hover:border-blueprint',
   secondary: 'bg-accent text-foreground hover:bg-accent/90 border border-accent',
+  accent: 'bg-accent text-foreground font-semibold hover:bg-accent-strong border border-accent hover:border-accent-strong',
   outline: 'bg-transparent text-foreground border border-line hover:border-foreground',
+  'outline-dark': 'bg-transparent text-background border border-line-dark hover:border-background',
   ghost: 'bg-transparent text-foreground hover:bg-surface-muted border border-transparent',
   whatsapp: 'bg-success text-white hover:bg-success/90 border border-success',
 };
