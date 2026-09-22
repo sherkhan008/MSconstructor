@@ -71,7 +71,9 @@ for (const width of [320, 375, 390, 430]) {
     expect(controls.length).toBeGreaterThanOrEqual(4);
     for (const c of controls) {
       expect(Math.min(...c.hit)).toBeGreaterThanOrEqual(44);
-      expect(c.disc).toBeLessThanOrEqual(36);
+      // Owner-approved ~15% reduction: add disc 32→27px, remove/shelf 28→24px.
+      expect(c.disc).toBeLessThanOrEqual(28);
+      expect(c.disc).toBeGreaterThanOrEqual(22);
     }
 
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);

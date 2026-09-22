@@ -29,7 +29,7 @@ export function FilterForm({
   const locale = useLocale();
 
   return (
-    <form ref={formRef} method="get" action={localizePath('/catalog', locale)} className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+    <form ref={formRef} method="get" action={localizePath('/catalog', locale)} className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
       <Select name="model" label={t(CT['CT-005'], locale)} defaultValue={defaults.model} onSubmit={() => formRef.current?.requestSubmit()}>
         <option value="">{t(CT['CT-006'], locale)}</option>
         {models.map((m) => (
@@ -67,7 +67,7 @@ export function FilterForm({
       </Select>
 
       <noscript>
-        <button type="submit" className="col-span-2 h-11 border border-foreground px-4 text-sm font-medium sm:col-span-1">
+        <button type="submit" className="h-11 border min-[400px]:col-span-2 border-foreground px-4 text-sm font-medium sm:col-span-1">
           {t(CT['CT-017'], locale)}
         </button>
       </noscript>

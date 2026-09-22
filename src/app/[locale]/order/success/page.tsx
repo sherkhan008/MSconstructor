@@ -40,7 +40,7 @@ export default async function OrderSuccessPage({
   return (
     <Container className="flex flex-col items-center gap-6 py-16 text-center">
       <div className="grid h-16 w-16 place-items-center border-2 border-success text-3xl text-success">✓</div>
-      <h1 className="font-display text-4xl">{t(OS['OS-001'], locale)}</h1>
+      <h1 className="font-display text-4xl text-success">{t(OS['OS-001'], locale)}</h1>
 
       {number ? (
         <p className="text-steel">

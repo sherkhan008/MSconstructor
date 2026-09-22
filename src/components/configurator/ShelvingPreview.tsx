@@ -107,10 +107,19 @@ function perforationYs(top: number, bottom: number): number[] {
 // stays light enough not to compete with the rack. A disabled disc stays
 // opaque (only its glyph and border fade) so the rack never shows through
 // a control that happens to sit over it.
+//
+// Colour is the site's graphite: a steel ring and graphite glyph at rest, a
+// graphite ring (plus a faint neutral fill) on the selected section, and a
+// solid graphite disc on hover/keyboard focus. Disabled discs fade to the
+// light steel/line tokens and ignore hover.
 const CIRCLE_HIT =
   'group grid h-11 w-11 place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-blueprint disabled:cursor-not-allowed';
 const CIRCLE_DISC =
-  'grid place-items-center rounded-full border bg-surface font-medium leading-none transition-colors group-disabled:!border-line group-disabled:!text-line-strong';
+  'grid place-items-center rounded-full border font-medium leading-none text-foreground transition-colors group-hover:border-foreground group-hover:bg-foreground group-hover:text-surface group-focus-visible:border-foreground group-focus-visible:bg-foreground group-focus-visible:text-surface group-disabled:!border-line group-disabled:!bg-surface group-disabled:!text-steel-soft';
+/** Visible disc sizes inside the 44×44 hit area: the section "add" disc is
+ * the larger one; section "remove" and shelf +/− share the smaller size. */
+const DISC_LARGE = 'h-[27px] w-[27px] text-base';
+const DISC_SMALL = 'h-6 w-6 text-sm';
 
 // Stage size, in percent of the visible frame, when `framed` is set. Every
 // interactive control is still positioned in percent of the full 640×480
@@ -130,6 +139,10 @@ export interface AllowedDimensions {
 interface Props {
   /** Tighter framing for storefront illustrations; interactive geometry is unchanged. */
   presentation?: boolean;
+  /** With `presentation`: start the frame just above the rack instead of at
+   * the viewBox origin, so a short rack does not sit under an empty band.
+   * Framing only — the drawing itself is unchanged. */
+  tightFraming?: boolean;
   config: ShelvingConfiguration;
   color?: ColorOption;
   className?: string;
@@ -166,6 +179,7 @@ export function ShelvingPreview({
   color,
   className = '',
   presentation = false,
+  tightFraming = false,
   interactive = false,
   allowedDimensions,
   activeSectionId,
@@ -382,9 +396,11 @@ export function ShelvingPreview({
   // section at all — a single-section row has nothing to disambiguate.
   const markActive = interactive && config.sections.length > 1;
 
+  const frameTop = tightFraming ? top + depthVec.dy - 30 : Math.min(0, top + depthVec.dy - 30);
+
   const drawing = (
     <>
-      <svg viewBox={presentation && !interactive ? `0 ${Math.min(0, top + depthVec.dy - 30)} ${rowEnd + depthVec.dx + 50} ${FLOOR_Y + 110 - Math.min(0, top + depthVec.dy - 30)}` : `0 0 ${VIEWBOX_W} ${VIEWBOX_H}`} className="h-full w-full" role="img" aria-label={t(CF['CF-006'], locale)}>
+      <svg viewBox={presentation && !interactive ? `0 ${frameTop} ${rowEnd + depthVec.dx + 50} ${FLOOR_Y + 110 - frameTop}` : `0 0 ${VIEWBOX_W} ${VIEWBOX_H}`} className="h-full w-full" role="img" aria-label={t(CF['CF-006'], locale)}>
         {/* 1. Rear posts — the physical steel frame, always visible regardless
              of any wall selection (a rear post is not the same thing as the
              optional rearWall panel). Perforated the same way as the front
@@ -735,7 +751,7 @@ export function ShelvingPreview({
                 >
                   <span
                     aria-hidden="true"
-                    className={`${CIRCLE_DISC} h-8 w-8 text-base group-hover:border-foreground group-hover:text-foreground ${isActive ? 'border-foreground text-foreground' : 'border-line-strong text-steel'}`}
+                    className={`${CIRCLE_DISC} ${DISC_LARGE} ${isActive ? 'border-foreground bg-surface-muted' : 'border-steel bg-surface'}`}
                   >
                     +
                   </span>
@@ -763,7 +779,7 @@ export function ShelvingPreview({
                 >
                   <span
                     aria-hidden="true"
-                    className={`${CIRCLE_DISC} h-7 w-7 text-sm group-hover:border-danger group-hover:text-danger ${isActive ? 'border-steel text-foreground' : 'border-line text-steel'}`}
+                    className={`${CIRCLE_DISC} ${DISC_SMALL} ${isActive ? 'border-foreground bg-surface-muted' : 'border-steel bg-surface'}`}
                   >
                     −
                   </span>
@@ -784,13 +800,13 @@ export function ShelvingPreview({
             }}
           >
             <button type="button" aria-label={t(CF['CF-019'], locale)} onClick={onIncreaseShelves} disabled={config.shelves >= maxShelves} className={CIRCLE_HIT}>
-              <span aria-hidden="true" className={`${CIRCLE_DISC} h-7 w-7 border-line-strong text-sm text-steel group-hover:border-foreground group-hover:text-foreground`}>
+              <span aria-hidden="true" className={`${CIRCLE_DISC} ${DISC_SMALL} border-steel bg-surface`}>
                 +
               </span>
             </button>
             <span className="mono relative z-10 text-xs font-semibold leading-none text-foreground">{config.shelves}</span>
             <button type="button" aria-label={t(CF['CF-020'], locale)} onClick={onDecreaseShelves} disabled={config.shelves <= minShelves} className={CIRCLE_HIT}>
-              <span aria-hidden="true" className={`${CIRCLE_DISC} h-7 w-7 border-line-strong text-sm text-steel group-hover:border-danger group-hover:text-danger`}>
+              <span aria-hidden="true" className={`${CIRCLE_DISC} ${DISC_SMALL} border-steel bg-surface`}>
                 −
               </span>
             </button>

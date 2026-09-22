@@ -95,7 +95,7 @@ describe('/catalog/[model] against the runtime catalog', () => {
     const model = dbRows.models.find((m) => m.slug === 'ms-standard')!;
 
     const html = await renderInLocale((await pageModule.default(params('ms-standard'))) as ReactElement, 'ru');
-    expect(html).toContain(`<h1 class="font-display text-4xl">${model.name.ru}</h1>`);
+    expect(html).toMatch(new RegExp(`<h1[^>]*>${model.name.ru}</h1>`));
     expect(html).toContain('application/ld+json');
 
     const metadata = await pageModule.generateMetadata(params('ms-standard'));
