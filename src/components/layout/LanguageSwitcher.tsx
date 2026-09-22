@@ -7,7 +7,7 @@ import { useLocale } from '@/components/i18n/LocaleProvider';
 import { currentSwitchSearch } from '@/components/i18n/switch-query';
 
 /**
- * ҚАЗ / RU switch. Each option links to the SAME page in the other language
+ * KZ / RU switch. Each option links to the SAME page in the other language
  * (/catalog ↔ /ru/catalog, /configurator?… ↔ /ru/configurator?…), never to
  * the homepage. The server-rendered href carries no query string (the header
  * is shared by every page and must not opt pages out of static rendering);
@@ -19,11 +19,11 @@ import { currentSwitchSearch } from '@/components/i18n/switch-query';
  * server for the target locale. Cart and configurator state live in
  * localStorage and survive it untouched.
  *
- * The labels are each language's own short name, identical on both locales,
+ * The labels are short Latin language codes (KZ, RU), identical on both locales,
  * so they are not translated copy.
  */
 const OPTIONS: { locale: Locale; label: string }[] = [
-  { locale: 'kk', label: 'ҚАЗ' },
+  { locale: 'kk', label: 'KZ' },
   { locale: 'ru', label: 'RU' },
 ];
 

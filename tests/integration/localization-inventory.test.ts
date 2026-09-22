@@ -346,8 +346,6 @@ describe('CSV ↔ current public source', () => {
     'src/lib/delivery/city-delivery.ts': ['Караганда', 'нур-султан', 'нұр-сұлтан'],
     // labelKk — already the target language.
     'src/lib/config/site.ts': ['Жеткізу және төлем', 'Байланыс'],
-    // Language switcher: each language's own short name, identical on every page — not translatable copy.
-    'src/components/layout/LanguageSwitcher.tsx': ['ҚАЗ'],
   };
 
   function cyrillicLiterals(file: string): { line: number; text: string }[] {

@@ -110,17 +110,15 @@ export function AdvancedSettingsAccordion({ catalog }: { catalog: PublicCatalog 
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between px-3 py-2 text-left"
+        className="flex min-h-12 w-full items-center justify-between gap-3 px-4 text-left text-[15px] font-semibold transition-colors hover:bg-background/60"
       >
-        <span className="tech-label">{t(CF['CF-042'], locale)}</span>
-        <span aria-hidden="true" className="text-steel">
-          {open ? '▴' : '▾'}
-        </span>
+        <span>{t(CF['CF-042'], locale)}</span>
+        <Chevron open={open} />
       </button>
 
       {open && model && (
-        <div className="flex flex-col gap-4 border-t border-line p-3">
-          <div className="flex flex-col gap-2.5">
+        <div className="flex flex-col gap-4 border-t border-line p-4">
+          <div className="flex flex-col gap-1">
             <OptionCheckbox
               label={t(CF['CF-043'], locale)}
               note={t(CF['CF-044'], locale)}
@@ -168,19 +166,28 @@ function OptionCheckbox({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label className={`flex items-start gap-2 ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
+    <label className={`flex min-h-11 items-center gap-2.5 py-1 leading-snug ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
       <input
         type="checkbox"
         checked={checked}
         disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
         aria-label={note ? `${label}. ${note}` : label}
-        className="mt-0.5 h-4 w-4 shrink-0 accent-[color:var(--color-dimension-accent)]"
+        className="h-4 w-4 shrink-0 accent-[color:var(--color-foreground)]"
       />
       <span className="flex flex-col">
         <span>{label}</span>
-        {note && <span className="text-xs text-steel">{note}</span>}
+        {note && <span className="text-[13px] text-steel">{note}</span>}
       </span>
     </label>
+  );
+}
+
+/** Disclosure chevron shared by the configurator's collapsible panels. */
+export function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" className={`shrink-0 text-steel transition-transform ${open ? 'rotate-180' : ''}`}>
+      <path d="M3 5L7 9L11 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square" />
+    </svg>
   );
 }
