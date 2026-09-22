@@ -51,9 +51,9 @@ export function LanguageSwitcher() {
             lang={locale}
             aria-current={active ? 'true' : undefined}
             onClick={(event) => handleClick(event, locale)}
-            className={`relative grid h-9 min-w-9 place-items-center px-2 text-xs font-semibold tracking-wide transition-colors before:absolute before:inset-x-0 before:-inset-y-1 before:content-[''] ${
+            className={`relative grid h-11 min-w-10 place-items-center px-2 text-xs font-semibold tracking-wide transition-colors ${
               index > 0 ? 'border-l border-line' : ''
-            } ${active ? 'bg-foreground text-background' : 'text-foreground hover:bg-surface-muted'}`}
+            } ${active ? 'bg-foreground text-background' : 'bg-surface text-foreground hover:bg-surface-muted'}`}
           >
             {label}
           </a>
