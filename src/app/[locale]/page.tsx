@@ -17,6 +17,7 @@ import { PriceTag } from '@/components/ui/PriceTag';
 import { ProductImage } from '@/components/ui/ProductImage';
 import { ProductCard } from '@/components/catalog/ProductCard';
 import { ContactForm } from '@/components/contact/ContactForm';
+import { ArrowIcon, CheckIcon } from '@/components/ui/Icons';
 import { pick, t } from '@/lib/i18n/format';
 import { localizePath, type Locale } from '@/lib/i18n/locales';
 import { resolveLocale, type LocaleParams } from '@/lib/i18n/page';
@@ -482,21 +483,5 @@ export default async function HomePage({ params }: { params: LocaleParams }) {
         </Container>
       </section>
     </>
-  );
-}
-
-function ArrowIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true" className="shrink-0">
-      <path d="M3 9H15M10 4L15 9L10 14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="square" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true" className="mt-px shrink-0 text-accent-strong">
-      <path d="M3.5 9.5L7 13L14.5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
-    </svg>
   );
 }
