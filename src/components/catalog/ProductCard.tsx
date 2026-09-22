@@ -11,6 +11,11 @@ import { configurationToShareQuery } from '@/lib/configurator/url';
 import { shelvesLabel } from '@/lib/plural';
 import { useCartStore } from '@/store/cart-store';
 import type { CatalogProduct, ShelvingConfiguration } from '@/lib/types/domain';
+import { pick, t } from '@/lib/i18n/format';
+import { localizePath } from '@/lib/i18n/locales';
+import { apiHeaders } from '@/lib/i18n/request';
+import { CT, G } from '@/lib/i18n/strings';
+import { useLocale } from '@/components/i18n/LocaleProvider';
 
 export function ProductCard({
   product,
@@ -29,15 +34,17 @@ export function ProductCard({
   visual?: ReactNode;
 }) {
   const addItem = useCartStore((s) => s.addItem);
+  const locale = useLocale();
   const [status, setStatus] = useState<'idle' | 'loading' | 'done'>('idle');
-  const configureHref = `/configurator?${configurationToShareQuery(configuration)}`;
+  const configureHref = localizePath(`/configurator?${configurationToShareQuery(configuration)}`, locale);
+  const name = pick(product.name, locale);
 
   async function handleAddToCart() {
     setStatus('loading');
     try {
       const response = await fetch('/api/pricing/calculate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: apiHeaders(locale),
         body: JSON.stringify(configuration),
       });
       const data = await response.json();
@@ -56,31 +63,31 @@ export function ProductCard({
 
   return (
     <div className="flex flex-col overflow-hidden border border-line bg-surface transition-shadow hover:shadow-sm">
-      <Link href={`/catalog/${product.modelSlug}`} className="block">
+      <Link href={localizePath(`/catalog/${product.modelSlug}`, locale)} className="block">
         {visual ?? (
-          <ProductImage src={product.image} alt={product.name.ru} className="h-48 w-full bg-surface-muted object-cover" />
+          <ProductImage src={product.image} alt={name} className="h-48 w-full bg-surface-muted object-cover" />
         )}
       </Link>
       <div className="flex flex-1 flex-col gap-2 p-4">
         <div className="flex items-start justify-between gap-2">
-          <h3 className="font-display text-lg leading-tight">{product.name.ru}</h3>
-          {product.featured && <Badge tone="accent">Популярно</Badge>}
+          <h3 className="font-display text-lg leading-tight">{name}</h3>
+          {product.featured && <Badge tone="accent">{t(CT['CT-019'], locale)}</Badge>}
         </div>
         <div className="tech-label flex flex-wrap gap-x-3 gap-y-1">
-          <span>{product.height}×{product.width}×{product.depth} мм</span>
-          <span>{shelvesLabel(product.shelves)}</span>
-          <span>{product.loadCapacity} кг/полка</span>
+          <span>{product.height}×{product.width}×{product.depth} {t(G['G-008'], locale)}</span>
+          <span>{shelvesLabel(product.shelves, locale)}</span>
+          <span>{t(CT['CT-024'], locale, { N: product.loadCapacity })}</span>
         </div>
         <div className="mt-auto flex items-center justify-between pt-2">
-          {priceTotal !== null ? <PriceTag value={priceTotal} size="lg" /> : <span className="text-sm text-steel">По запросу</span>}
+          {priceTotal !== null ? <PriceTag value={priceTotal} size="lg" /> : <span className="text-sm text-steel">{t(CT['CT-020'], locale)}</span>}
         </div>
 
         <div className="grid grid-cols-2 gap-2 pt-1" data-fab-avoid>
           <LinkButton href={configureHref} variant="outline" size="sm">
-            Настроить
+            {t(CT['CT-021'], locale)}
           </LinkButton>
           <Button onClick={handleAddToCart} size="sm" disabled={status === 'loading'}>
-            {status === 'done' ? 'Добавлено ✓' : 'В корзину'}
+            {status === 'done' ? t(CT['CT-023'], locale) : t(CT['CT-022'], locale)}
           </Button>
         </div>
       </div>

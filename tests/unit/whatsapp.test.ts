@@ -109,13 +109,13 @@ function decodeMessage(url: string): string {
 
 describe('whatsAppConfiguratorUrl', () => {
   it('uses the configured company number and points at wa.me', () => {
-    const url = whatsAppConfiguratorUrl(priceResult(baseConfig()), [], 'https://example.com/configurator?height=2000');
+    const url = whatsAppConfiguratorUrl(priceResult(baseConfig()), [], 'https://example.com/configurator?height=2000', 'ru');
     expect(url.startsWith(`https://wa.me/${site.whatsapp}?`)).toBe(true);
   });
 
   it('includes real height/depth/shelves/load for a single section', () => {
     const config = baseConfig({ height: 2000, depth: 500, shelves: 5, loadCapacity: 150, sections: [section(1000)] });
-    const message = decodeMessage(whatsAppConfiguratorUrl(priceResult(config), [], 'https://example.com/x'));
+    const message = decodeMessage(whatsAppConfiguratorUrl(priceResult(config), [], 'https://example.com/x', 'ru'));
     expect(message).toContain('Высота: 2000 мм');
     expect(message).toContain('Глубина: 500 мм');
     expect(message).toContain('Секций: 1');
@@ -126,7 +126,7 @@ describe('whatsAppConfiguratorUrl', () => {
 
   it('joins three mixed section widths with " + "', () => {
     const config = baseConfig({ sections: [section(700), section(1000), section(1200)] });
-    const message = decodeMessage(whatsAppConfiguratorUrl(priceResult(config), [], 'https://example.com/x'));
+    const message = decodeMessage(whatsAppConfiguratorUrl(priceResult(config), [], 'https://example.com/x', 'ru'));
     expect(message).toContain('Секций: 3');
     expect(message).toContain('Ширина секций: 700 + 1000 + 1200 мм');
   });
@@ -139,7 +139,7 @@ describe('whatsAppConfiguratorUrl', () => {
         section(1200, { leftWall: true, rightWall: true }),
       ],
     });
-    const message = decodeMessage(whatsAppConfiguratorUrl(priceResult(config), [], 'https://example.com/x'));
+    const message = decodeMessage(whatsAppConfiguratorUrl(priceResult(config), [], 'https://example.com/x', 'ru'));
     expect(message).toContain('Секция 1: задняя стенка');
     expect(message).toContain('Секция 2: без стенок');
     expect(message).toContain('Секция 3: левая + правая стенка');
@@ -147,7 +147,7 @@ describe('whatsAppConfiguratorUrl', () => {
 
   it('omits the wall block entirely when no section has any wall', () => {
     const config = baseConfig({ sections: [section(700), section(1000)] });
-    const message = decodeMessage(whatsAppConfiguratorUrl(priceResult(config), [], 'https://example.com/x'));
+    const message = decodeMessage(whatsAppConfiguratorUrl(priceResult(config), [], 'https://example.com/x', 'ru'));
     expect(message).not.toContain('Секция 1:');
     expect(message).not.toContain('стенк');
   });
@@ -162,7 +162,7 @@ describe('whatsAppConfiguratorUrl', () => {
       ],
       metalFootPad: true,
     });
-    const message = decodeMessage(whatsAppConfiguratorUrl(priceResult(config), ACCESSORIES, 'https://example.com/x'));
+    const message = decodeMessage(whatsAppConfiguratorUrl(priceResult(config), ACCESSORIES, 'https://example.com/x', 'ru'));
     expect(message).toContain('Дополнительные параметры:');
     expect(message).toContain('- Усиление полки');
     expect(message).toContain('- Крестовина жёсткости');
@@ -183,30 +183,30 @@ describe('whatsAppConfiguratorUrl', () => {
         { accessoryId: 'acc-cross-brace', quantity: 1, sectionId: s2.id },
       ],
     });
-    const message = decodeMessage(whatsAppConfiguratorUrl(priceResult(config), ACCESSORIES, 'https://example.com/x'));
+    const message = decodeMessage(whatsAppConfiguratorUrl(priceResult(config), ACCESSORIES, 'https://example.com/x', 'ru'));
     const occurrences = message.split('Крестовина жёсткости').length - 1;
     expect(occurrences).toBe(1);
   });
 
   it('omits the additional-options block entirely when nothing is selected', () => {
-    const message = decodeMessage(whatsAppConfiguratorUrl(priceResult(baseConfig()), ACCESSORIES, 'https://example.com/x'));
+    const message = decodeMessage(whatsAppConfiguratorUrl(priceResult(baseConfig()), ACCESSORIES, 'https://example.com/x', 'ru'));
     expect(message).not.toContain('Дополнительные параметры');
   });
 
   it('formats the final total using the real server-calculated price, space-grouped with the currency symbol', () => {
-    const message = decodeMessage(whatsAppConfiguratorUrl(priceResult(baseConfig(), 374_859), [], 'https://example.com/x'));
+    const message = decodeMessage(whatsAppConfiguratorUrl(priceResult(baseConfig(), 374_859), [], 'https://example.com/x', 'ru'));
     expect(message).toContain('Итого: 374 859 ₸');
   });
 
   it('includes the exact share URL passed in, not a reconstructed one', () => {
     const shareUrl = 'https://ms-stellazh.kz/configurator?model=ms-standard&height=2000&sections=1000%3A0%3A0%3A0';
-    const message = decodeMessage(whatsAppConfiguratorUrl(priceResult(baseConfig()), [], shareUrl));
+    const message = decodeMessage(whatsAppConfiguratorUrl(priceResult(baseConfig()), [], shareUrl, 'ru'));
     expect(message).toContain('Ссылка на конфигурацию:');
     expect(message).toContain(shareUrl);
   });
 
   it('URL-encodes the generated message correctly, including special characters', () => {
-    const url = whatsAppConfiguratorUrl(priceResult(baseConfig(), 374_859), [], 'https://example.com/x?a=1&b=2');
+    const url = whatsAppConfiguratorUrl(priceResult(baseConfig(), 374_859), [], 'https://example.com/x?a=1&b=2', 'ru');
     // The raw query string must not contain a literal newline, and the
     // share URL's own "&"/"?"/"=" must be safely nested inside the single
     // encoded "text" parameter rather than reappearing as top-level params.
@@ -224,7 +224,7 @@ describe('whatsAppConfiguratorUrl', () => {
     const config = baseConfig({
       accessories: [{ accessoryId: 'acc-cross-brace', quantity: 1, sectionId: baseConfig().sections[0].id }],
     });
-    const message = decodeMessage(whatsAppConfiguratorUrl(priceResult(config), ACCESSORIES, 'https://example.com/x'));
+    const message = decodeMessage(whatsAppConfiguratorUrl(priceResult(config), ACCESSORIES, 'https://example.com/x', 'ru'));
     expect(message).not.toContain('markup');
     expect(message).not.toContain('Наценка');
     expect(message).not.toContain('margin');
@@ -240,34 +240,34 @@ describe('whatsAppConfiguratorUrl', () => {
 
 describe('whatsAppOrderUrl', () => {
   it('includes the order number', () => {
-    const message = decodeMessage(whatsAppOrderUrl('MS-20260827-00042'));
+    const message = decodeMessage(whatsAppOrderUrl('MS-20260827-00042', undefined, 'ru'));
     expect(message).toContain('№MS-20260827-00042');
   });
 
   it('includes the final total when provided, formatted like the rest of the site', () => {
-    const message = decodeMessage(whatsAppOrderUrl('MS-20260827-00042', 374_859));
+    const message = decodeMessage(whatsAppOrderUrl('MS-20260827-00042', 374_859, 'ru'));
     expect(message).toContain('Сумма заказа: 374 859 ₸');
   });
 
   it('omits the total line rather than guessing when no total is available', () => {
-    const message = decodeMessage(whatsAppOrderUrl('MS-20260827-00042'));
+    const message = decodeMessage(whatsAppOrderUrl('MS-20260827-00042', undefined, 'ru'));
     expect(message).not.toContain('Сумма заказа');
   });
 });
 
 describe('whatsAppContactUrl / whatsAppProductUrl', () => {
   it('uses the improved default contact message', () => {
-    const message = decodeMessage(whatsAppContactUrl());
+    const message = decodeMessage(whatsAppContactUrl('ru'));
     expect(message).toBe('Здравствуйте! Хочу узнать подробнее о металлических стеллажах.');
   });
 
   it('accepts a custom message', () => {
-    const message = decodeMessage(whatsAppContactUrl('Custom text'));
+    const message = decodeMessage(whatsAppContactUrl('ru', 'Custom text'));
     expect(message).toBe('Custom text');
   });
 
   it('includes the model name and product URL', () => {
-    const message = decodeMessage(whatsAppProductUrl('MS Стандарт', 'https://example.com/catalog/ms-standard'));
+    const message = decodeMessage(whatsAppProductUrl('MS Стандарт', 'https://example.com/catalog/ms-standard', 'ru'));
     expect(message).toContain('MS Стандарт');
     expect(message).toContain('https://example.com/catalog/ms-standard');
   });
@@ -276,5 +276,39 @@ describe('whatsAppContactUrl / whatsAppProductUrl', () => {
 describe('the configured WhatsApp number', () => {
   it('contains digits only — no "+", spaces, parentheses or hyphens', () => {
     expect(/^\d+$/.test(site.whatsapp)).toBe(true);
+  });
+});
+
+describe('Kazakh pages send Kazakh messages (owner-reviewed CSV WA-*)', () => {
+  it('contact and product messages keep the approved greeting "Сәлеметсіз бе ?!"', () => {
+    expect(decodeMessage(whatsAppContactUrl('kk'))).toBe('Сәлеметсіз бе ?! Металл стеллаждар туралы толығырақ білгім келеді.');
+    expect(decodeMessage(whatsAppProductUrl('MS Стандарт', 'https://example.com/catalog/ms-standard', 'kk'))).toBe(
+      'Сәлеметсіз бе ?! «MS Стандарт» стеллажы туралы білгім келеді. Сілтеме: https://example.com/catalog/ms-standard',
+    );
+  });
+
+  it('the configurator message carries the same numbers in Kazakh, walls per section, and Kazakh option names', () => {
+    const config = baseConfig({
+      sections: [section(1000, { rearWall: true, rightWall: true }), section(700)],
+      metalFootPad: true,
+    });
+    const kk = decodeMessage(whatsAppConfiguratorUrl(priceResult(config), ACCESSORIES, 'https://example.com/x', 'kk'));
+    const ru = decodeMessage(whatsAppConfiguratorUrl(priceResult(config), ACCESSORIES, 'https://example.com/x', 'ru'));
+    expect(kk.split('\n')[0]).toBe('Сәлеметсіз бе ?! Стеллажға тапсырыс бергім келеді.');
+    expect(kk).toContain('Биіктігі: 2000 мм');
+    expect(kk).toContain('Сөре саны: 5');
+    expect(kk).toContain('1-секция: артқы + оң жақ қабырға');
+    expect(kk).toContain('2-секция: қабырғасыз');
+    expect(kk).toContain('- Металл өкшетірек');
+    expect(kk).toContain('Жиыны: 374 859 ₸');
+    expect(ru).toContain('Итого: 374 859 ₸');
+    expect(kk).not.toMatch(/Здравствуйте|Высота|Полок/);
+  });
+
+  it('the order message is Kazakh and keeps the server total', () => {
+    const kk = decodeMessage(whatsAppOrderUrl('MS-20260827-00042', 374_859, 'kk'));
+    expect(kk.split('\n')[0]).toBe('Сәлеметсіз бе ?!');
+    expect(kk).toContain('№MS-20260827-00042');
+    expect(kk).toContain('374 859 ₸');
   });
 });

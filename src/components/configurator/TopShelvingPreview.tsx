@@ -6,6 +6,9 @@ import { VIEWBOX_W, depthMmToTopPx } from './resize/dimension-scale';
 import { computeSectionLayout, computeBoundaryXs } from './resize/section-geometry';
 import { SectionWidthLabel } from './ShelvingPreview';
 import { resolveRackFill, shade } from './rack-colors';
+import { t } from '@/lib/i18n/format';
+import { CF } from '@/lib/i18n/strings';
+import { useLocale } from '@/components/i18n/LocaleProvider';
 
 /**
  * Plan/top view — a bird's-eye footprint of the current shelving row,
@@ -34,6 +37,7 @@ interface Props {
 }
 
 export function TopShelvingPreview({ config, color, className = '', interactive = false, activeSectionId, onSelectSection }: Props) {
+  const locale = useLocale();
   const layout = useMemo(
     () => computeSectionLayout(config.sections, MAX_ROW_WIDTH_PX, VIEWBOX_W),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -54,7 +58,7 @@ export function TopShelvingPreview({ config, color, className = '', interactive 
 
   return (
     <div className={`relative w-full overflow-hidden border border-line bg-surface ${className}`}>
-      <svg viewBox={`0 0 ${VIEWBOX_W} ${viewboxH}`} className="h-full w-full" role="img" aria-label="Схема стеллажа сверху">
+      <svg viewBox={`0 0 ${VIEWBOX_W} ${viewboxH}`} className="h-full w-full" role="img" aria-label={t(CF['CF-007'], locale)}>
         {layout.map((section, i) => {
           const isActive = section.id === activeSectionId;
           return (
@@ -62,7 +66,7 @@ export function TopShelvingPreview({ config, color, className = '', interactive 
               key={section.id}
               role={interactive ? 'button' : undefined}
               tabIndex={interactive ? 0 : undefined}
-              aria-label={interactive ? `Секция ${i + 1}, ширина ${section.section.width} мм` : undefined}
+              aria-label={interactive ? t(CF['CF-008'], locale, { N: i + 1, W: section.section.width }) : undefined}
               aria-pressed={interactive ? isActive : undefined}
               onClick={interactive ? () => onSelectSection?.(section.id) : undefined}
               onKeyDown={
@@ -112,7 +116,7 @@ export function TopShelvingPreview({ config, color, className = '', interactive 
           <line x1={rowStart} y1={bottom + TOTAL_LINE_Y_OFFSET - 3} x2={rowStart} y2={bottom + TOTAL_LINE_Y_OFFSET + 3} stroke="#B7B7B7" strokeWidth={1} />
           <line x1={rowEnd} y1={bottom + TOTAL_LINE_Y_OFFSET - 3} x2={rowEnd} y2={bottom + TOTAL_LINE_Y_OFFSET + 3} stroke="#B7B7B7" strokeWidth={1} />
           <text x={(rowStart + rowEnd) / 2} y={bottom + TOTAL_LINE_Y_OFFSET + 14} textAnchor="middle" fontFamily="IBM Plex Mono, monospace" fontSize={10} fill="#8A8A8A">
-            {Math.round(totalLengthMm)} мм
+            {t(CF['CF-023'], locale, { N: Math.round(totalLengthMm) })}
           </text>
         </g>
 

@@ -11,6 +11,10 @@ import {
   getMaxShelvesForHeight,
   MS_STANDARD_MIN_SHELVES,
 } from '@/lib/pricing/ms-standard-compatibility';
+import { t } from '@/lib/i18n/format';
+import { dimensionOptionLabel, loadCapacityOptionLabel } from '@/lib/i18n/catalog-labels';
+import { CF } from '@/lib/i18n/strings';
+import { useLocale } from '@/components/i18n/LocaleProvider';
 
 type ProductModel = PublicCatalog['models'][number];
 type WallField = 'rearWall' | 'leftWall' | 'rightWall';
@@ -37,6 +41,7 @@ export function ParametersSectionsTable({ catalog }: { catalog: PublicCatalog })
   const removeSection = useConfiguratorStore((s) => s.removeSection);
   const updateSection = useConfiguratorStore((s) => s.updateSection);
   const setField = useConfiguratorStore((s) => s.setField);
+  const locale = useLocale();
 
   const model = catalog.models.find((m) => m.slug === config.modelSlug);
   if (!model) return null;
@@ -71,7 +76,7 @@ export function ParametersSectionsTable({ catalog }: { catalog: PublicCatalog })
         style={{ gridTemplateColumns: `minmax(150px,1fr) repeat(${n}, minmax(100px,1fr)) 44px` }}
       >
         <div className="p-3 lg:border-r lg:border-line">
-          <span className="tech-label mb-2 block">Параметры ряда</span>
+          <span className="tech-label mb-2 block">{t(CF['CF-024'], locale)}</span>
           <RowParamsFields config={config} model={model} catalog={catalog} setField={setField} />
         </div>
 
@@ -83,14 +88,14 @@ export function ParametersSectionsTable({ catalog }: { catalog: PublicCatalog })
                 onClick={() => setActiveSectionId(section.id)}
                 className={`tech-label ${section.id === activeSectionId ? 'text-dimension-accent' : 'text-steel hover:text-foreground'}`}
               >
-                Секция {i + 1}
+                {t(CF['CF-025'], locale, { N: i + 1 })}
               </button>
               <button
                 type="button"
                 disabled={!canRemove}
                 onClick={() => removeSection(section.id)}
-                aria-label="Удалить секцию"
-                title="Удалить секцию"
+                aria-label={t(CF['CF-026'], locale)}
+                title={t(CF['CF-026'], locale)}
                 className="grid h-6 w-6 shrink-0 place-items-center text-steel hover:text-danger disabled:cursor-not-allowed disabled:opacity-30"
               >
                 ×
@@ -112,17 +117,17 @@ export function ParametersSectionsTable({ catalog }: { catalog: PublicCatalog })
             type="button"
             disabled={!canAdd}
             onClick={addSection}
-            aria-label="Добавить секцию"
-            title="Добавить секцию"
+            aria-label={t(CF['CF-027'], locale)}
+            title={t(CF['CF-027'], locale)}
             className="tech-label flex h-11 w-full items-center justify-center gap-1.5 border border-dimension-accent text-dimension-accent hover:bg-dimension-accent-soft disabled:cursor-not-allowed disabled:opacity-30 lg:h-8 lg:w-8 lg:rounded-full lg:p-0"
           >
-            <span className="lg:hidden">+ Секция</span>
+            <span className="lg:hidden">{t(CF['CF-028'], locale)}</span>
             <span className="hidden lg:inline">+</span>
           </button>
         </div>
       </div>
 
-      {!canAdd && <p className="tech-label px-3 py-2 text-dimension-accent">Достигнуто максимальное количество секций.</p>}
+      {!canAdd && <p className="tech-label px-3 py-2 text-dimension-accent">{t(CF['CF-029'], locale)}</p>}
     </div>
   );
 }
@@ -150,11 +155,12 @@ function RowParamsFields({
   const allowedDepths = isMsStandard ? getAllowedDepthsForSections(config.sections) : model.depths;
   const shelvesMax = isMsStandard ? (getMaxShelvesForHeight(config.height) ?? model.maxShelves) : model.maxShelves;
   const shelvesMin = isMsStandard ? MS_STANDARD_MIN_SHELVES : model.minShelves;
+  const locale = useLocale();
 
   return (
     <div className="flex flex-col gap-2.5">
       <label className="flex flex-col gap-1">
-        <span className="tech-label">Высота</span>
+        <span className="tech-label">{t(CF['CF-030'], locale)}</span>
         <select
           value={config.height}
           onChange={(e) => setField('height', Number(e.target.value))}
@@ -164,14 +170,14 @@ function RowParamsFields({
             .filter((h) => allowedHeights.includes(h.value))
             .map((h) => (
               <option key={h.id} value={h.value}>
-                {h.label}
+                {dimensionOptionLabel(h, locale)}
               </option>
             ))}
         </select>
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="tech-label">Глубина</span>
+        <span className="tech-label">{t(CF['CF-031'], locale)}</span>
         <select
           value={config.depth}
           onChange={(e) => setField('depth', Number(e.target.value))}
@@ -181,19 +187,19 @@ function RowParamsFields({
             .filter((d) => allowedDepths.includes(d.value))
             .map((d) => (
               <option key={d.id} value={d.value}>
-                {d.label}
+                {dimensionOptionLabel(d, locale)}
               </option>
             ))}
         </select>
       </label>
 
       <div className="flex flex-col gap-1">
-        <span className="tech-label">Полки</span>
+        <span className="tech-label">{t(CF['CF-032'], locale)}</span>
         <NumberStepper value={config.shelves} min={shelvesMin} max={shelvesMax} onChange={(v) => setField('shelves', v)} testId="shelf-count" />
       </div>
 
       <label className="flex flex-col gap-1">
-        <span className="tech-label">Нагрузка</span>
+        <span className="tech-label">{t(CF['CF-033'], locale)}</span>
         <select
           value={config.loadCapacity}
           onChange={(e) => setField('loadCapacity', Number(e.target.value))}
@@ -205,8 +211,8 @@ function RowParamsFields({
             const disabled = !modelCompatible || !dimensionCompatible;
             return (
               <option key={load.id} value={load.value} disabled={disabled}>
-                {load.label}
-                {disabled ? ' (недоступно)' : ''}
+                {loadCapacityOptionLabel(load, locale)}
+                {disabled ? ` ${t(CF['CF-034'], locale)}` : ''}
               </option>
             );
           })}
@@ -231,14 +237,15 @@ function SectionFields({
   onChangeWidth: (width: number) => void;
   onToggleWall: (field: WallField, checked: boolean) => void;
 }) {
+  const locale = useLocale();
   return (
     <div className="flex flex-col gap-2.5">
       <label className="flex flex-col gap-1">
-        <span className="tech-label">Ширина</span>
+        <span className="tech-label">{t(CF['CF-035'], locale)}</span>
         <select
           value={section.width}
           data-section-index={index}
-          aria-label={`Ширина секции ${index + 1}`}
+          aria-label={t(CF['CF-036'], locale, { N: index + 1 })}
           onClick={onFocus}
           onChange={(e) => onChangeWidth(Number(e.target.value))}
           className="mono h-9 w-full border border-line bg-surface px-1 text-center text-sm outline-none focus:border-blueprint"
@@ -252,9 +259,9 @@ function SectionFields({
       </label>
 
       <div className="flex flex-col gap-1">
-        <WallCheckbox label="Задняя" checked={section.rearWall} onFocus={onFocus} onChange={(checked) => onToggleWall('rearWall', checked)} />
-        <WallCheckbox label="Левая" checked={section.leftWall} onFocus={onFocus} onChange={(checked) => onToggleWall('leftWall', checked)} />
-        <WallCheckbox label="Правая" checked={section.rightWall} onFocus={onFocus} onChange={(checked) => onToggleWall('rightWall', checked)} />
+        <WallCheckbox label={t(CF['CF-037'], locale)} checked={section.rearWall} onFocus={onFocus} onChange={(checked) => onToggleWall('rearWall', checked)} />
+        <WallCheckbox label={t(CF['CF-038'], locale)} checked={section.leftWall} onFocus={onFocus} onChange={(checked) => onToggleWall('leftWall', checked)} />
+        <WallCheckbox label={t(CF['CF-039'], locale)} checked={section.rightWall} onFocus={onFocus} onChange={(checked) => onToggleWall('rightWall', checked)} />
       </div>
     </div>
   );

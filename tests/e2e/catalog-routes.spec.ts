@@ -9,7 +9,7 @@ import { test, expect } from './helpers/test';
  */
 
 test('/catalog/ms-standard is server-rendered, indexable HTML with a canonical URL', async ({ request }) => {
-  const response = await request.get('/catalog/ms-standard');
+  const response = await request.get('/ru/catalog/ms-standard');
   expect(response.status()).toBe(200);
 
   const html = await response.text();
@@ -17,11 +17,11 @@ test('/catalog/ms-standard is server-rendered, indexable HTML with a canonical U
   expect(html).toMatch(/<link rel="canonical" href="[^"]*\/catalog\/ms-standard"/);
   expect(html).toMatch(/<meta name="robots" content="index, follow"/);
   expect(html).toContain('application/ld+json');
-  expect(html).toContain('href="/configurator?model=ms-standard"');
+  expect(html).toContain('href="/ru/configurator?model=ms-standard"');
 });
 
 test('an unknown catalog model returns HTTP 404 and is not indexable', async ({ request }) => {
-  const response = await request.get('/catalog/no-such-model-e2e');
+  const response = await request.get('/ru/catalog/no-such-model-e2e');
   expect(response.status()).toBe(404);
   expect(await response.text()).toMatch(/<meta name="robots" content="noindex/);
 });
@@ -32,7 +32,7 @@ test('an unknown catalog model returns HTTP 404 and is not indexable', async ({ 
 // not an unfinished placeholder page.
 for (const hiddenSlug of ['ms-strong', 'archive-ms']) {
   test(`/catalog/${hiddenSlug} is hidden for launch and returns HTTP 404`, async ({ request }) => {
-    const response = await request.get(`/catalog/${hiddenSlug}`);
+    const response = await request.get(`/ru/catalog/${hiddenSlug}`);
     expect(response.status()).toBe(404);
     expect(await response.text()).toMatch(/<meta name="robots" content="noindex/);
   });
@@ -42,7 +42,7 @@ for (const hiddenSlug of ['ms-strong', 'archive-ms']) {
 // only read HTML (Next's htmlLimitedBots list, which includes Yandex and Bing)
 // must get it inside <head>.
 test('an HTML-only crawler gets the model title, canonical and robots tags inside <head>', async ({ request }) => {
-  const response = await request.get('/catalog/ms-standard', {
+  const response = await request.get('/ru/catalog/ms-standard', {
     headers: { 'user-agent': 'Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)' },
   });
   expect(response.status()).toBe(200);
@@ -54,7 +54,7 @@ test('an HTML-only crawler gets the model title, canonical and robots tags insid
 });
 
 test('/catalog is server-rendered', async ({ request }) => {
-  const response = await request.get('/catalog');
+  const response = await request.get('/ru/catalog');
   expect(response.status()).toBe(200);
   expect(await response.text()).toMatch(/<h1[^>]*>Каталог стеллажей MS<\/h1>/);
 });

@@ -12,10 +12,20 @@ import { quotedDeliveryPrice } from '@/lib/delivery/city-delivery';
 import { buildBom } from './bom';
 import { validateCompatibility } from './compatibility';
 import { parseConfiguration } from './schema';
+import type { Locale } from '@/lib/i18n/locales';
+import { t } from '@/lib/i18n/format';
+import { ER } from '@/lib/i18n/strings';
 
 export interface PricingContext {
   /** Discount code entered at checkout; independent of config.promoCode for convenience. */
   promoCode?: string;
+  /**
+   * Language of the customer-facing texts in the result (failure messages,
+   * warnings, discount reasons, the delivery note). Presentation only: every
+   * amount is computed identically for every locale. Defaults to Russian,
+   * which is also what orders and admin screens store.
+   */
+  locale?: Locale;
 }
 
 /**
@@ -28,12 +38,13 @@ export interface PricingContext {
  * the configuration is invalid or cannot be priced automatically.
  */
 export function calculatePrice(rawConfig: unknown, catalog: Catalog, context: PricingContext = {}): PricingOutcome {
-  const parsed = parseConfiguration(rawConfig);
+  const locale = context.locale ?? 'ru';
+  const parsed = parseConfiguration(rawConfig, locale);
   if (!parsed.success) {
     return {
       ok: false,
       code: 'VALIDATION_ERROR',
-      message: 'Некорректные данные конфигурации',
+      message: t(ER['ER-019'], locale),
       // Customer-facing: messages only. The schema paths (sections.0.width…)
       // are developer diagnostics and stay in the server-only channel.
       details: parsed.error.issues.map((issue) => issue.message),
@@ -44,10 +55,10 @@ export function calculatePrice(rawConfig: unknown, catalog: Catalog, context: Pr
 
   const model = findModel(catalog, config.modelSlug);
   if (!model) {
-    return { ok: false, code: 'UNKNOWN_MODEL', message: 'Модель не найдена' };
+    return { ok: false, code: 'UNKNOWN_MODEL', message: t(ER['ER-020'], locale) };
   }
 
-  const issues = validateCompatibility(config, catalog);
+  const issues = validateCompatibility(config, catalog, locale);
   if (issues.length > 0) {
     return {
       ok: false,
@@ -62,7 +73,7 @@ export function calculatePrice(rawConfig: unknown, catalog: Catalog, context: Pr
     return {
       ok: false,
       code: 'INDIVIDUAL_QUOTE_REQUIRED',
-      message: 'Для этой конфигурации требуется индивидуальный расчёт. Пожалуйста, свяжитесь с менеджером.',
+      message: t(ER['ER-021'], locale),
       // No customer-facing `details`: the BOM's own diagnostics name the
       // internal rules and components that failed to resolve, which tells a
       // customer nothing and exposes how the kit is assembled internally.
@@ -75,7 +86,7 @@ export function calculatePrice(rawConfig: unknown, catalog: Catalog, context: Pr
   const assembly = findAssembly(catalog, config.assemblyId);
   const delivery = findDelivery(catalog, config.deliveryId);
   if (!color || !assembly || !delivery) {
-    return { ok: false, code: 'MISSING_COMPONENT', message: 'Часть выбранных опций недоступна' };
+    return { ok: false, code: 'MISSING_COMPONENT', message: t(ER['ER-022'], locale) };
   }
 
   // Two separate channels, by audience: `warnings` is projected to the
@@ -101,7 +112,7 @@ export function calculatePrice(rawConfig: unknown, catalog: Catalog, context: Pr
   } else if (assembly.method === 'PERCENT') {
     assemblyTotal = percentOf(itemsNet, assembly.value);
   } else {
-    warnings.push('Стоимость сборки будет рассчитана индивидуально менеджером');
+    warnings.push(t(ER['ER-023'], locale));
   }
 
   // Regional delivery (anything but PICKUP / four-city CITY) is calculated
@@ -110,7 +121,7 @@ export function calculatePrice(rawConfig: unknown, catalog: Catalog, context: Pr
   let deliveryTotal: Tenge | null = null;
   let deliveryNote: string | null = null;
   if (quotedDelivery === null) {
-    deliveryNote = 'Стоимость доставки рассчитывается индивидуально.';
+    deliveryNote = t(ER['ER-024'], locale);
   } else {
     deliveryTotal = roundTenge(quotedDelivery);
   }
@@ -126,7 +137,7 @@ export function calculatePrice(rawConfig: unknown, catalog: Catalog, context: Pr
     // Deliberately without config.priceLevel: it is an internal enum value
     // (RETAIL/WHOLESALE/DEALER/CORPORATE/GOVERNMENT) and discountReasons is
     // customer-facing (PublicPriceBreakdown).
-    discountReasons.push(`Скидка по уровню цены: ${levelDiscount}%`);
+    discountReasons.push(t(ER['ER-028'], locale, { N: levelDiscount }));
   }
 
   const qtyBreak = [...settings.quantityBreaks]
@@ -134,7 +145,7 @@ export function calculatePrice(rawConfig: unknown, catalog: Catalog, context: Pr
     .find((b) => config.quantity >= b.minQuantity);
   if (qtyBreak) {
     discountPercent += qtyBreak.discountPercent;
-    discountReasons.push(`Скидка за количество (от ${qtyBreak.minQuantity} шт.): ${qtyBreak.discountPercent}%`);
+    discountReasons.push(t(ER['ER-029'], locale, { N: qtyBreak.minQuantity, P: qtyBreak.discountPercent }));
   }
 
   const promoCodeText = context.promoCode ?? config.promoCode;
@@ -142,17 +153,18 @@ export function calculatePrice(rawConfig: unknown, catalog: Catalog, context: Pr
     const promo = findPromoCode(catalog, promoCodeText);
     const preDiscountTotal = itemsNet + assemblyTotal;
     if (!promo) {
-      warnings.push(`Промокод «${promoCodeText}» не найден или недействителен`);
+      warnings.push(t(ER['ER-025'], locale, { code: promoCodeText }));
     } else if (preDiscountTotal < promo.minTotal) {
-      warnings.push(`Промокод «${promo.code}» действует от суммы ${promo.minTotal.toLocaleString('ru-RU')} ₸`);
+      // Amounts are grouped identically on every locale (ru-RU grouping).
+      warnings.push(t(ER['ER-026'], locale, { code: promo.code, amount: promo.minTotal.toLocaleString('ru-RU') }));
     } else {
       if (promo.discountPercent > 0) {
         discountPercent += promo.discountPercent;
-        discountReasons.push(`Промокод ${promo.code}: ${promo.discountPercent}%`);
+        discountReasons.push(t(ER['ER-030'], locale, { code: promo.code, N: promo.discountPercent }));
       }
       if (promo.discountFixed > 0) {
         discountFixed += promo.discountFixed;
-        discountReasons.push(`Промокод ${promo.code}: −${promo.discountFixed.toLocaleString('ru-RU')} ₸`);
+        discountReasons.push(t(ER['ER-031'], locale, { code: promo.code, amount: promo.discountFixed.toLocaleString('ru-RU') }));
       }
     }
   }

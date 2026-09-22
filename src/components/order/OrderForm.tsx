@@ -8,12 +8,25 @@ import { Button, LinkButton } from '@/components/ui/Button';
 import { PriceTag } from '@/components/ui/PriceTag';
 import { formatPrice } from '@/lib/money';
 import { trackEvent } from '@/lib/analytics';
-import { CUSTOMER_PAYMENT_METHODS, orderFormSchema, type OrderFormInput } from '@/lib/pricing/schema';
-import { PAYMENT_METHOD_DESCRIPTION, PAYMENT_METHOD_LABEL } from '@/lib/orders/payment-methods';
+import { CUSTOMER_PAYMENT_METHODS, schemasFor, type OrderFormInput } from '@/lib/pricing/schema';
+import { paymentMethodDescription, paymentMethodLabel } from '@/lib/orders/payment-methods';
 import { useCartStore } from '@/store/cart-store';
 import type { DeliveryMethod } from '@/lib/types/domain';
+import { pick, t } from '@/lib/i18n/format';
+import { localizePath } from '@/lib/i18n/locales';
+import { apiHeaders } from '@/lib/i18n/request';
+import { CF, CK, CR, ER, VL } from '@/lib/i18n/strings';
+import { useLocale } from '@/components/i18n/LocaleProvider';
 
-export function OrderForm({ deliveryMethods = [] }: { deliveryMethods?: DeliveryMethod[] }) {
+export function OrderForm({
+  deliveryMethods = [],
+  models = [],
+}: {
+  deliveryMethods?: DeliveryMethod[];
+  /** Public model names, to show each cart line in the page locale. */
+  models?: { slug: string; name: { ru: string; kk: string } }[];
+}) {
+  const locale = useLocale();
   const items = useCartStore((s) => s.items);
   const clear = useCartStore((s) => s.clear);
   const router = useRouter();
@@ -28,7 +41,7 @@ export function OrderForm({ deliveryMethods = [] }: { deliveryMethods?: Delivery
     setValue,
     formState: { errors, isSubmitting },
   } = useForm<OrderFormInput>({
-    resolver: zodResolver(orderFormSchema),
+    resolver: zodResolver(schemasFor(locale).orderFormSchema),
     defaultValues: { customerType: 'INDIVIDUAL', paymentPreference: 'BANK_TRANSFER' },
   });
 
@@ -36,8 +49,11 @@ export function OrderForm({ deliveryMethods = [] }: { deliveryMethods?: Delivery
   const paymentPreference = watch('paymentPreference');
   const phone = watch('phone');
   const total = items.reduce((sum, item) => sum + (item.priceSnapshot?.breakdown.total ?? 0), 0);
-  // Same server note as the cart: delivery calculated individually is not in the total.
-  const deliveryNotes = [...new Set(items.map((item) => item.priceSnapshot?.deliveryNote).filter(Boolean))];
+  // Same note as the cart: delivery calculated individually is not in the
+  // total. The server sets deliveryNote only for that case (ER-024); it is
+  // rendered in the page locale, so a snapshot priced on the other-language
+  // page never shows up in the wrong language.
+  const hasIndividualDelivery = items.some((item) => Boolean(item.priceSnapshot?.deliveryNote));
 
   useEffect(() => {
     if (sameAsPhone) setValue('whatsapp', phone);
@@ -50,34 +66,40 @@ export function OrderForm({ deliveryMethods = [] }: { deliveryMethods?: Delivery
   const usedDeliveryIds = new Set(items.map((item) => item.configuration.deliveryId));
   const addressRequired = deliveryMethods.some((d) => usedDeliveryIds.has(d.id) && d.requiresAddress);
 
+  /** A cart line's model name in the page locale (the stored name is a fallback). */
+  function modelNameOf(item: (typeof items)[number]): string {
+    const model = models.find((m) => m.slug === item.modelSlug);
+    return model ? pick(model.name, locale) : item.modelName;
+  }
+
   async function onSubmit(data: OrderFormInput) {
     setServerError(null);
     setServerErrorDetails([]);
     try {
       const response = await fetch('/api/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: apiHeaders(locale),
         body: JSON.stringify({ ...data, items: items.map((item) => ({ configuration: item.configuration })) }),
       });
       const result = await response.json();
       if (!result.ok) {
-        setServerError(result.message ?? 'Не удалось оформить заказ');
+        setServerError(result.message ?? t(ER['ER-017'], locale));
         setServerErrorDetails(Array.isArray(result.details) ? result.details : []);
         return;
       }
       trackEvent('order_completed', { orderNumber: result.orderNumber, total: result.grandTotal });
       clear();
-      router.push(`/order/success?number=${encodeURIComponent(result.orderNumber)}`);
+      router.push(localizePath(`/order/success?number=${encodeURIComponent(result.orderNumber)}`, locale));
     } catch {
-      setServerError('Не удалось связаться с сервером. Проверьте соединение и попробуйте снова.');
+      setServerError(t(ER['ER-018'], locale));
     }
   }
 
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center gap-4 py-16 text-center">
-        <p className="text-steel">В корзине нет ни одной конфигурации.</p>
-        <LinkButton href="/configurator">Открыть конфигуратор</LinkButton>
+        <p className="text-steel">{t(CK['CK-002'], locale)}</p>
+        <LinkButton href={localizePath('/configurator', locale)}>{t(CR['CR-003'], locale)}</LinkButton>
       </div>
     );
   }
@@ -86,29 +108,29 @@ export function OrderForm({ deliveryMethods = [] }: { deliveryMethods?: Delivery
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_340px]">
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5" noValidate>
         <div>
-          <span className="tech-label">Тип клиента</span>
+          <span className="tech-label">{t(CK['CK-003'], locale)}</span>
           <div className="mt-2 flex gap-3">
             <label className="flex items-center gap-2 text-sm">
-              <input type="radio" value="INDIVIDUAL" {...register('customerType')} /> Физическое лицо
+              <input type="radio" value="INDIVIDUAL" {...register('customerType')} /> {t(CK['CK-004'], locale)}
             </label>
             <label className="flex items-center gap-2 text-sm">
-              <input type="radio" value="LEGAL_ENTITY" {...register('customerType')} /> Юридическое лицо
+              <input type="radio" value="LEGAL_ENTITY" {...register('customerType')} /> {t(CK['CK-005'], locale)}
             </label>
           </div>
         </div>
 
-        <Field label="ФИО / Контактное лицо *" error={errors.fullName?.message}>
+        <Field label={t(CK['CK-006'], locale)} error={errors.fullName?.message}>
           <input {...register('fullName')} className="input" autoComplete="name" />
         </Field>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Телефон *" error={errors.phone?.message}>
-            <input {...register('phone')} placeholder="+7 700 000 00 00" className="input mono" autoComplete="tel" />
+          <Field label={t(CK['CK-007'], locale)} error={errors.phone?.message}>
+            <input {...register('phone')} placeholder={t(CK['CK-008'], locale)} className="input mono" autoComplete="tel" />
           </Field>
-          <Field label="WhatsApp" error={errors.whatsapp?.message}>
+          <Field label={t(CK['CK-009'], locale)} error={errors.whatsapp?.message}>
             <input
               {...register('whatsapp')}
-              placeholder="+7 700 000 00 00"
+              placeholder={t(CK['CK-008'], locale)}
               className="input mono"
               autoComplete="tel"
               disabled={sameAsPhone}
@@ -121,35 +143,35 @@ export function OrderForm({ deliveryMethods = [] }: { deliveryMethods?: Delivery
             checked={sameAsPhone}
             onChange={(e) => setSameAsPhone(e.target.checked)}
           />
-          WhatsApp совпадает с телефоном
+          {t(CK['CK-010'], locale)}
         </label>
 
-        <Field label="Email *" error={errors.email?.message}>
+        <Field label={t(CK['CK-011'], locale)} error={errors.email?.message}>
           <input {...register('email')} type="email" className="input" autoComplete="email" />
         </Field>
 
-        <Field label="Город" error={errors.city?.message}>
+        <Field label={t(CK['CK-012'], locale)} error={errors.city?.message}>
           <input {...register('city')} className="input" autoComplete="address-level2" />
         </Field>
 
         {customerType === 'LEGAL_ENTITY' && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Название компании *" error={errors.companyName?.message}>
+            <Field label={t(CK['CK-013'], locale)} error={errors.companyName?.message}>
               <input {...register('companyName')} className="input" />
             </Field>
-            <Field label="БИН *" error={errors.binIin?.message}>
+            <Field label={t(CK['CK-014'], locale)} error={errors.binIin?.message}>
               <input {...register('binIin')} className="input mono" />
             </Field>
           </div>
         )}
 
         <Field
-          label={addressRequired ? 'Адрес доставки *' : 'Адрес доставки (если нужна доставка)'}
+          label={addressRequired ? t(CK['CK-015'], locale) : t(CK['CK-016'], locale)}
           error={errors.deliveryAddress?.message}
         >
           <input
             {...register('deliveryAddress', {
-              validate: (v) => !addressRequired || Boolean(v && v.trim()) || 'Укажите адрес доставки',
+              validate: (v) => !addressRequired || Boolean(v && v.trim()) || t(VL['VL-008'], locale),
             })}
             className="input"
             autoComplete="street-address"
@@ -157,7 +179,7 @@ export function OrderForm({ deliveryMethods = [] }: { deliveryMethods?: Delivery
         </Field>
 
         <div>
-          <span className="tech-label">Способ оплаты *</span>
+          <span className="tech-label">{t(CK['CK-017'], locale)}</span>
           <select
             {...register('paymentPreference', {
               onChange: (e) => trackEvent('payment_method_selected', { method: e.target.value }),
@@ -166,19 +188,19 @@ export function OrderForm({ deliveryMethods = [] }: { deliveryMethods?: Delivery
           >
             {CUSTOMER_PAYMENT_METHODS.map((value) => (
               <option key={value} value={value}>
-                {PAYMENT_METHOD_LABEL[value]}
+                {paymentMethodLabel(value, locale)}
               </option>
             ))}
           </select>
           {paymentPreference && (
-            <p className="mt-1 text-xs text-steel">{PAYMENT_METHOD_DESCRIPTION[paymentPreference]}</p>
+            <p className="mt-1 text-xs text-steel">{paymentMethodDescription(paymentPreference, locale)}</p>
           )}
           {errors.paymentPreference?.message && (
             <span className="text-xs text-danger">{errors.paymentPreference.message}</span>
           )}
         </div>
 
-        <Field label="Комментарий к заказу" error={errors.comment?.message}>
+        <Field label={t(CK['CK-018'], locale)} error={errors.comment?.message}>
           <textarea {...register('comment')} rows={3} className="input resize-none" />
         </Field>
 
@@ -197,18 +219,18 @@ export function OrderForm({ deliveryMethods = [] }: { deliveryMethods?: Delivery
 
         <div data-fab-avoid>
           <Button type="submit" size="lg" disabled={isSubmitting}>
-            {isSubmitting ? 'Оформляем заказ…' : 'Подтвердить заказ'}
+            {isSubmitting ? t(CK['CK-019'], locale) : t(CK['CK-020'], locale)}
           </Button>
         </div>
       </form>
 
       <aside className="flex flex-col gap-3 border border-line bg-surface p-5 lg:sticky lg:top-20">
-        <h2 className="font-display text-xl">Ваш заказ</h2>
+        <h2 className="font-display text-xl">{t(CK['CK-021'], locale)}</h2>
         <ul className="space-y-2 text-sm">
           {items.map((item) => (
             <li key={item.id} className="flex justify-between gap-2">
               <span className="text-steel">
-                {item.modelName} ({item.configuration.height}×{item.configuration.sections.map((s) => s.width).join('+')}×
+                {modelNameOf(item)} ({item.configuration.height}×{item.configuration.sections.map((s) => s.width).join('+')}×
                 {item.configuration.depth})
                 {item.configuration.quantity > 1 ? ` × ${item.configuration.quantity}` : ''}
               </span>
@@ -217,12 +239,10 @@ export function OrderForm({ deliveryMethods = [] }: { deliveryMethods?: Delivery
           ))}
         </ul>
         <div className="border-t border-line pt-3">
-          <div className="tech-label">Итого</div>
+          <div className="tech-label">{t(CF['CF-064'], locale)}</div>
           <PriceTag value={total} size="lg" />
-          {deliveryNotes.map((note) => (
-            <p key={note} className="mt-1 text-xs text-steel">{note}</p>
-          ))}
-          <p className="mt-1 text-xs text-steel">Точная сумма будет пересчитана и подтверждена сервером при оформлении.</p>
+          {hasIndividualDelivery && <p className="mt-1 text-xs text-steel">{t(ER['ER-024'], locale)}</p>}
+          <p className="mt-1 text-xs text-steel">{t(CK['CK-022'], locale)}</p>
         </div>
       </aside>
     </div>

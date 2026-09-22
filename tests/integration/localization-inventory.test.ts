@@ -9,8 +9,10 @@ import { isModelSlugPubliclyVisible } from '@/lib/config/launch-visibility';
 /**
  * docs/localization/public-strings.csv is the inventory the Kazakh
  * localization is built from. It must match the CURRENT public source in
- * both directions: every row still exists in its source file, and every
- * customer-visible Cyrillic string in public source is represented by a row.
+ * both directions: every row is still consumed by public code (through the
+ * generated dictionary src/lib/i18n/strings, by id — or, for catalogue data,
+ * through seed-data's ru/kk values), and every customer-visible Cyrillic
+ * string in public source is represented by a row.
  * Owner-reviewed Kazakh text in it must survive every resync untouched.
  */
 
@@ -208,9 +210,11 @@ describe('rack vs shelf terminology', () => {
 });
 
 describe('FAQ inventory', () => {
+  // The model page moved under the public locale segment; the CSV keeps the
+  // path it was inventoried under.
   const faqFile = 'src/app/catalog/[model]/page.tsx';
-  const faqSource = readFileSync(faqFile, 'utf8');
-  const faq = [...faqSource.matchAll(/(question|answer):\s*'([^']+)'/g)].map((m) => ({ kind: m[1], text: m[2] }));
+  const faqSource = readFileSync('src/app/[locale]/catalog/[model]/page.tsx', 'utf8');
+  const faq = [...faqSource.matchAll(/(question|answer):\s*FQ\['(FQ-\d{3})'\]/g)].map((m) => ({ kind: m[1], text: row(m[2]).ru_text }));
   const faqRows = rows.filter((r) => r.section === 'FAQ' && r.id !== 'FQ-001');
 
   it('has exactly one current inventory row per FAQ question and answer (also FAQPage JSON-LD)', () => {
@@ -248,16 +252,67 @@ describe('FAQ inventory', () => {
 });
 
 describe('CSV ↔ current public source', () => {
-  /** Rows assembled at runtime from several literals / maps: only their words are checked. */
-  const ASSEMBLED_AT_RUNTIME = new Set(['G-011', 'CF-012', 'CF-013', 'CF-014', 'CF-094', 'CF-095', 'CF-096', 'VL-013']);
+  function listSourceFiles(dir: string): string[] {
+    return readdirSync(dir).flatMap((name) => {
+      const path = `${dir}/${name}`;
+      if (statSync(path).isDirectory()) return listSourceFiles(path);
+      return /\.tsx?$/.test(name) ? [path] : [];
+    });
+  }
 
-  it('every inventory row still exists in its source file (no stale rows)', () => {
+  /** The generated dictionary is the CSV itself, not a consumer of it. */
+  const DICTIONARY_DIR = /^src\/lib\/i18n\/strings\//;
+  const consumerSource = listSourceFiles('src')
+    .filter((f) => !DICTIONARY_DIR.test(f))
+    .map((f) => readFileSync(f, 'utf8'))
+    .join('\n');
+
+  /**
+   * Catalogue data: the runtime reads it from the catalog (Prisma *Kk
+   * columns / seed-data LocalizedText), not from the dictionary. Checked
+   * value by value in "public catalogue data from seed-data is in the
+   * inventory" and in the seed-data Kazakh test below.
+   */
+  const isCatalogueDataRow = (r: Row) => sourceFiles(r).every((f) => f === 'src/lib/data/seed-data.ts');
+
+  /** Rows rendered by a formatter that has no words to translate (identical in both languages). */
+  const FORMATTER_ROWS: Record<string, string> = {
+    'G-009': 'src/lib/money.ts formatKg — "кг" is the same in both languages',
+    'G-010': 'src/lib/money.ts formatPrice — the ₸ symbol is never translated',
+  };
+
+  /**
+   * Two rows inventoried for ONE usage (public-strings-summary.md §5): the
+   * not-found model page title is both PR-001 (page) and SE-040 (metadata).
+   * The code renders SE-040; both rows must stay textually identical.
+   */
+  const SAME_USAGE_AS: Record<string, string> = { 'PR-001': 'SE-040' };
+
+  it('every inventory row is consumed by public code (no stale rows)', () => {
     const stale: string[] = [];
     for (const r of rows) {
-      const src = sourceFiles(r).map(source).join('\n');
+      if (isCatalogueDataRow(r)) continue;
+      if (FORMATTER_ROWS[r.id]) {
+        expect(r.ru_text).toBe(r.kk_proposed);
+        continue;
+      }
+      if (SAME_USAGE_AS[r.id]) {
+        const twin = row(SAME_USAGE_AS[r.id]);
+        expect([r.ru_text, r.kk_proposed], r.id).toEqual([twin.ru_text, twin.kk_proposed]);
+        continue;
+      }
+      if (!consumerSource.includes(`['${r.id}']`)) stale.push(`${r.id}: ${r.ru_text}`);
+    }
+    expect(stale).toEqual([]);
+  });
+
+  it('every catalogue-data row still exists in seed-data', () => {
+    const seed = source('src/lib/data/seed-data.ts');
+    const stale: string[] = [];
+    for (const r of rows.filter(isCatalogueDataRow)) {
       const fragments = r.ru_text.split(/\{[^}]*\}|…/).map((f) => ws(f).replace(/^[\s.,:;«»"()—-]+|[\s.,:;«»"()—-]+$/g, '')).filter((f) => f.length >= 3);
-      const pieces = ASSEMBLED_AT_RUNTIME.has(r.id) ? r.ru_text.match(/[А-Яа-яЁё]{3,}/g) ?? [] : fragments;
-      for (const p of pieces) if (!src.includes(p)) stale.push(`${r.id}: "${p}"`);
+      const pieces = ['CF-094', 'CF-095', 'CF-096'].includes(r.id) ? r.ru_text.match(/[А-Яа-яЁё]{3,}/g) ?? [] : fragments;
+      for (const p of pieces) if (!seed.includes(p)) stale.push(`${r.id}: "${p}"`);
     }
     expect(stale).toEqual([]);
   });
@@ -275,6 +330,7 @@ describe('CSV ↔ current public source', () => {
     /^src\/lib\/orders\/(status-labels|customer-labels|db-store)\.ts$/, // admin status names, admin client-type labels, audit log
     /^src\/lib\/payments\/service\.ts$/, // payment audit-log actor name
     /^src\/lib\/data\/seed-data\.ts$/, // checked entry by entry below: most of it is non-public models / colours / accessories / kk
+    /^src\/lib\/i18n\/strings\//, // the generated dictionary: the CSV itself (see public-strings-dictionary.test.ts)
   ];
 
   /** Single literals inside otherwise public files that are intentionally not inventoried. */
@@ -290,17 +346,9 @@ describe('CSV ↔ current public source', () => {
     'src/lib/delivery/city-delivery.ts': ['Караганда', 'нур-султан', 'нұр-сұлтан'],
     // labelKk — already the target language.
     'src/lib/config/site.ts': ['Жеткізу және төлем', 'Байланыс'],
-    // Rendered as "₸ KZT · Казахстан" — inventoried as F-013 (Казахстан).
-    'src/components/layout/Footer.tsx': ['KZT · Казахстан'],
+    // Language switcher: each language's own short name, identical on every page — not translatable copy.
+    'src/components/layout/LanguageSwitcher.tsx': ['ҚАЗ'],
   };
-
-  function listSourceFiles(dir: string): string[] {
-    return readdirSync(dir).flatMap((name) => {
-      const path = `${dir}/${name}`;
-      if (statSync(path).isDirectory()) return listSourceFiles(path);
-      return /\.tsx?$/.test(name) ? [path] : [];
-    });
-  }
 
   function cyrillicLiterals(file: string): { line: number; text: string }[] {
     const code = readFileSync(join(process.cwd(), file), 'utf8');
@@ -353,7 +401,7 @@ describe('CSV ↔ current public source', () => {
 
   it('inventories the new public validation messages', () => {
     expect(row('VL-014').ru_text).toBe('Укажите город');
-    expect(source('src/lib/pricing/schema.ts')).toContain("'Укажите город'");
+    expect(source('src/lib/pricing/schema.ts')).toContain("VL['VL-014']");
     expect(row('ER-059').ru_text).toBe('Одна из конфигураций в корзине некорректна. Откройте её в конфигураторе и добавьте в корзину заново.');
     expect(byId.has('CF-063')).toBe(false);
   });

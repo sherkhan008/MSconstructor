@@ -5,6 +5,10 @@ import { flushSync } from 'react-dom';
 import { usePathname } from 'next/navigation';
 import { trackEvent } from '@/lib/analytics';
 import { whatsAppContactUrl } from '@/lib/whatsapp';
+import { t } from '@/lib/i18n/format';
+import { splitLocalePath } from '@/lib/i18n/locales';
+import { H } from '@/lib/i18n/strings';
+import { useLocale } from '@/components/i18n/LocaleProvider';
 
 /**
  * Persistent WhatsApp CTA. Hidden on small screens while the configurator's
@@ -80,18 +84,19 @@ function useCoversAnAction(ref: React.RefObject<HTMLElement | null>, pathname: s
 
 export function WhatsAppFloatingButton() {
   const pathname = usePathname();
-  const hideOnMobile = pathname === '/configurator';
+  const locale = useLocale();
+  const hideOnMobile = splitLocalePath(pathname ?? '/').path === '/configurator';
   const ref = useRef<HTMLAnchorElement>(null);
   const coversAnAction = useCoversAnAction(ref, pathname);
 
   return (
     <a
       ref={ref}
-      href={whatsAppContactUrl()}
+      href={whatsAppContactUrl(locale)}
       target="_blank"
       rel="noopener noreferrer"
       onClick={() => trackEvent('whatsapp_clicked', { location: 'floating_button' })}
-      aria-label="Написать в WhatsApp"
+      aria-label={t(H['H-006'], locale)}
       aria-hidden={coversAnAction}
       tabIndex={coversAnAction ? -1 : undefined}
       // Clears the iOS home indicator / Android gesture bar; the horizontal

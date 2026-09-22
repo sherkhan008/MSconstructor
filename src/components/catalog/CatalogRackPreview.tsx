@@ -3,13 +3,19 @@ import { computeSectionLayout, computeBoundaryXs } from '@/components/configurat
 import { mmToPx, DEPTH_ANGLE_DEG } from '@/components/configurator/resize/dimension-scale';
 import { computeRenderDepthVec } from '@/components/configurator/shelf-depth-projection';
 import { resolveRackFill, shade } from '@/components/configurator/rack-colors';
+import { t } from '@/lib/i18n/format';
+import type { Locale } from '@/lib/i18n/locales';
+import { CT } from '@/lib/i18n/strings';
 
 /** Server-rendered catalog illustration. Shares the configurator's geometry,
  * depth projection and paint, without loading its drag controls or hooks.
  * The caller passes this through ProductCard's existing visual slot. */
-export function CatalogRackPreview({ config, color, className = '' }: {
+export function CatalogRackPreview({ config, color, modelName, locale, className = '' }: {
   config: ShelvingConfiguration;
   color?: ColorOption;
+  /** Customer-facing model name in `locale`, for the SVG's accessible label. */
+  modelName: string;
+  locale: Locale;
   className?: string;
 }) {
   const layout = computeSectionLayout(config.sections, 300, 420, 260);
@@ -24,7 +30,13 @@ export function CatalogRackPreview({ config, color, className = '' }: {
   const fill = resolveRackFill(color);
   const dark = shade(fill, -6);
   const light = shade(fill, 4);
-  const label = `${config.modelSlug}: ${config.height}×${config.sections.map(s => s.width).join('+')}×${config.depth} мм, ${config.shelves} полки`;
+  const label = t(CT['CT-025'], locale, {
+    model: modelName,
+    height: config.height,
+    width: config.sections.map(s => s.width).join('+'),
+    depth: config.depth,
+    N: config.shelves,
+  });
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 390" role="img" aria-label={label} className={`bg-white ${className}`}>
       <rect width="500" height="390" fill="white" />

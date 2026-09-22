@@ -35,7 +35,7 @@ async function gotoConfig(
   page: Page,
   { height = 2000, depth = 400, shelves = 5, sections = '1000:false:false:false' }: { height?: number; depth?: number; shelves?: number; sections?: string } = {},
 ) {
-  await page.goto(`/configurator?model=ms-standard&height=${height}&depth=${depth}&shelves=${shelves}&sections=${sections}`);
+  await page.goto(`/ru/configurator?model=ms-standard&height=${height}&depth=${depth}&shelves=${shelves}&sections=${sections}`);
   await expect(widthSelect(page)).toBeVisible();
 }
 
@@ -169,7 +169,7 @@ test.describe('height 1000 is a real, selectable MS Standard height', () => {
     await gotoConfig(page, { height: 1000, shelves: 4, depth: 700 });
     await expect(heightSelect(page)).toHaveValue('1000');
 
-    await page.goto('/configurator');
+    await page.goto('/ru/configurator');
     await expect(widthSelect(page)).toBeVisible();
     await expect(heightSelect(page)).toHaveValue('1000');
     await expect(depthSelect(page)).toHaveValue('700');

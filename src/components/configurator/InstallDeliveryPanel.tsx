@@ -2,11 +2,15 @@
 
 import { useConfiguratorStore } from '@/store/configurator-store';
 import type { PublicCatalog } from '@/lib/data/public-catalog';
+import { pick, t } from '@/lib/i18n/format';
+import { CF } from '@/lib/i18n/strings';
+import { useLocale } from '@/components/i18n/LocaleProvider';
 
 /** Content-only — the disclosure toggle lives in AdvancedSettingsAccordion. */
 export function InstallDeliveryPanel({ catalog }: { catalog: PublicCatalog }) {
   const config = useConfiguratorStore((s) => s.config);
   const setField = useConfiguratorStore((s) => s.setField);
+  const locale = useLocale();
 
   const selectedAssembly = catalog.assemblyServices.find((s) => s.id === config.assemblyId);
   const selectedDelivery = catalog.deliveryMethods.find((d) => d.id === config.deliveryId);
@@ -14,7 +18,7 @@ export function InstallDeliveryPanel({ catalog }: { catalog: PublicCatalog }) {
   return (
     <div className="flex flex-col gap-3">
       <label className="flex flex-col gap-1">
-        <span className="tech-label">Сборка</span>
+        <span className="tech-label">{t(CF['CF-050'], locale)}</span>
         <select
           value={config.assemblyId}
           onChange={(e) => setField('assemblyId', e.target.value)}
@@ -22,15 +26,17 @@ export function InstallDeliveryPanel({ catalog }: { catalog: PublicCatalog }) {
         >
           {catalog.assemblyServices.map((service) => (
             <option key={service.id} value={service.id}>
-              {service.name.ru}
+              {pick(service.name, locale)}
             </option>
           ))}
         </select>
-        {selectedAssembly?.description.ru && <span className="text-xs text-steel">{selectedAssembly.description.ru}</span>}
+        {selectedAssembly && pick(selectedAssembly.description, locale) && (
+          <span className="text-xs text-steel">{pick(selectedAssembly.description, locale)}</span>
+        )}
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="tech-label">Доставка</span>
+        <span className="tech-label">{t(CF['CF-051'], locale)}</span>
         <select
           value={config.deliveryId}
           onChange={(e) => setField('deliveryId', e.target.value)}
@@ -38,14 +44,16 @@ export function InstallDeliveryPanel({ catalog }: { catalog: PublicCatalog }) {
         >
           {catalog.deliveryMethods.map((method) => (
             <option key={method.id} value={method.id}>
-              {method.name.ru}
+              {pick(method.name, locale)}
             </option>
           ))}
         </select>
-        {selectedDelivery?.description.ru && <span className="text-xs text-steel">{selectedDelivery.description.ru}</span>}
+        {selectedDelivery && pick(selectedDelivery.description, locale) && (
+          <span className="text-xs text-steel">{pick(selectedDelivery.description, locale)}</span>
+        )}
       </label>
 
-      <p className="text-xs text-steel">Доставка по Алматы, Астане, Караганде и Шымкенту — бесплатно, в тот же день. Доставка в другие города и регионы Казахстана — 2–3 дня. Стоимость доставки рассчитывается индивидуально.</p>
+      <p className="text-xs text-steel">{t(CF['CF-052'], locale)}</p>
     </div>
   );
 }

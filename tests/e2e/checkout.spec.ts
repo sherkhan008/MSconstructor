@@ -41,11 +41,11 @@ test.afterAll(async () => {
 });
 
 async function addRackToCart(page: import('@playwright/test').Page) {
-  await page.goto('/configurator');
+  await page.goto('/ru/configurator');
   await page.waitForSelector('text=Оформить заказ', { timeout: 10_000 });
   await page.waitForTimeout(500);
   await page.getByRole('button', { name: 'Добавить в корзину' }).click();
-  await page.goto('/order');
+  await page.goto('/ru/order');
 }
 
 test('individual customer completes checkout with bank transfer', async ({ page }, testInfo) => {

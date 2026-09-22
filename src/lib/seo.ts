@@ -1,29 +1,60 @@
 import type { Metadata } from 'next';
 import { appUrl } from '@/lib/env';
-import { site } from '@/lib/config/site';
+import { site, siteCopy } from '@/lib/config/site';
+import { LOCALES, OG_LOCALE, localizePath, type Locale } from '@/lib/i18n/locales';
 
-/** Builds page metadata with the site-wide defaults already applied. */
+/** Absolute URL of a site path. */
+export function absoluteUrl(path: string): string {
+  return new URL(path, appUrl).toString();
+}
+
+/**
+ * hreflang alternates of one public page: every locale's URL of the same
+ * locale-neutral `path`, plus x-default → the Kazakh (unprefixed) URL, which
+ * is what a visitor without a language preference gets at the root.
+ */
+export function localeAlternates(path: string): Record<string, string> {
+  const languages: Record<string, string> = {};
+  for (const locale of LOCALES) languages[locale] = absoluteUrl(localizePath(path, locale));
+  languages['x-default'] = absoluteUrl(localizePath(path, 'kk'));
+  return languages;
+}
+
+/**
+ * Builds page metadata with the site-wide defaults already applied.
+ *
+ * Public pages pass `locale` and a locale-neutral `path` ('/catalog'): the
+ * canonical is that page in its own locale (a Russian page is never
+ * canonicalized to Kazakh) and `alternates.languages` pairs it with its
+ * other-language twin. Without `locale` (the Russian-only admin panel), or on
+ * a noIndex page, no language alternates are emitted.
+ */
 export function buildMetadata(input: {
   title: string;
   description: string;
   path: string;
+  locale?: Locale;
   image?: string;
   noIndex?: boolean;
 }): Metadata {
-  const url = new URL(input.path, appUrl).toString();
+  const locale = input.locale ?? 'ru';
+  const url = absoluteUrl(input.locale ? localizePath(input.path, input.locale) : input.path);
   const image = input.image ?? '/images/models/ms-standard.svg';
 
   return {
     title: input.title,
     description: input.description,
-    alternates: { canonical: url },
+    // Non-indexable pages (cart, checkout, order success) get no hreflang: there
+    // is no indexable language pair to announce.
+    alternates: input.locale && !input.noIndex ? { canonical: url, languages: localeAlternates(input.path) } : { canonical: url },
     robots: input.noIndex ? { index: false, follow: false } : { index: true, follow: true },
     openGraph: {
       title: input.title,
       description: input.description,
       url,
-      siteName: site.name,
-      locale: 'ru_KZ',
+      siteName: siteCopy(locale).name,
+      locale: OG_LOCALE[locale],
+      alternateLocale: LOCALES.filter((l) => l !== locale).map((l) => OG_LOCALE[l]),
       type: 'website',
       images: [{ url: new URL(image, appUrl).toString() }],
     },
@@ -38,31 +69,35 @@ export function buildMetadata(input: {
 
 /**
  * The legal seller as an Organization: legal name, BIN, address and public
- * email — the same identity the public offer carries. Deliberately absent:
+ * email — the same identity the public offer carries. The legal name and BIN
+ * are never translated; the brand and address follow the page locale.
+ * Deliberately absent:
  * `telephone` (the seller publishes no voice number, and schema.org must not
  * be fed a fabricated one), `postalCode`, `geo` and `sameAs`. Banking details
  * never appear here — they are server-only and belong on invoices alone.
  */
-export function organizationJsonLd() {
+export function organizationJsonLd(locale: Locale) {
+  const copy = siteCopy(locale);
   return {
     '@context': 'https://schema.org',
     '@type': 'Organization',
     name: site.legalName,
-    alternateName: site.name,
-    url: appUrl,
+    alternateName: copy.name,
+    url: absoluteUrl(localizePath('/', locale)),
     logo: new URL('/images/models/ms-standard.svg', appUrl).toString(),
     taxID: site.bin,
     email: site.email,
     address: {
       '@type': 'PostalAddress',
-      streetAddress: site.address,
-      addressLocality: site.city,
+      streetAddress: copy.address,
+      addressLocality: copy.city,
       addressCountry: 'KZ',
     },
   };
 }
 
-export function breadcrumbJsonLd(items: { name: string; path: string }[]) {
+/** `path`s are locale-neutral; they are emitted as `locale` URLs. */
+export function breadcrumbJsonLd(items: { name: string; path: string }[], locale: Locale) {
   return {
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
@@ -70,12 +105,13 @@ export function breadcrumbJsonLd(items: { name: string; path: string }[]) {
       '@type': 'ListItem',
       position: index + 1,
       name: item.name,
-      item: new URL(item.path, appUrl).toString(),
+      item: absoluteUrl(localizePath(item.path, locale)),
     })),
   };
 }
 
 export function productJsonLd(input: {
+  locale: Locale;
   name: string;
   description: string;
   image: string;
@@ -91,10 +127,10 @@ export function productJsonLd(input: {
     description: input.description,
     image: new URL(input.image, appUrl).toString(),
     sku: input.sku,
-    brand: { '@type': 'Brand', name: site.name },
+    brand: { '@type': 'Brand', name: siteCopy(input.locale).name },
     offers: {
       '@type': 'Offer',
-      url: new URL(input.path, appUrl).toString(),
+      url: absoluteUrl(localizePath(input.path, input.locale)),
       priceCurrency: site.currency,
       price: input.price,
       availability: `https://schema.org/${input.availability ?? 'InStock'}`,

@@ -58,7 +58,7 @@ function addSectionButton(page: Page) {
 
 test('multi-section row: independent widths, single-section drag, cart and checkout persistence', async ({ page }, testInfo) => {
   await isolateOrderRequests(page, prefix, testInfo);
-  await page.goto('/configurator');
+  await page.goto('/ru/configurator');
 
   // 1–2. Starts with one section; add three more (total 4).
   await expect(widthSelects(page)).toHaveCount(1);
@@ -122,7 +122,7 @@ test('multi-section row: independent widths, single-section drag, cart and check
   await page.getByRole('button', { name: 'Добавить в корзину' }).click();
 
   // 15–16. Reload the cart and confirm every individual width persisted.
-  await page.goto('/cart');
+  await page.goto('/ru/cart');
   await page.reload();
   const cartRow = page.locator('text=/\\d+×[\\d+]+×\\d+ мм/').first();
   await expect(cartRow).toBeVisible();
@@ -148,7 +148,7 @@ test('multi-section row: independent widths, single-section drag, cart and check
 });
 
 test('adding sections is capped at 10 and removing is capped at 1', async ({ page }) => {
-  await page.goto('/configurator');
+  await page.goto('/ru/configurator');
 
   for (let i = 0; i < 12; i += 1) {
     const btn = addSectionButton(page);

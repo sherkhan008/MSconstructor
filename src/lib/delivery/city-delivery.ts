@@ -1,5 +1,8 @@
 import type { Tenge } from '@/lib/money';
 import type { DeliveryMethod, DeliveryMethodKind } from '@/lib/types/domain';
+import type { Locale } from '@/lib/i18n/locales';
+import { t } from '@/lib/i18n/format';
+import { VL } from '@/lib/i18n/strings';
 
 /**
  * Free same-day CITY delivery is offered only in the four cities that have a
@@ -81,10 +84,13 @@ export function requiresCityDeliveryCity(kind: DeliveryMethodKind): boolean {
   return kind === 'CITY';
 }
 
-/** Customer-safe explanation shown when CITY delivery is chosen for another city. */
-export const CITY_DELIVERY_UNAVAILABLE_MESSAGE =
-  'Бесплатная доставка по городу доступна только в Алматы, Астане, Караганде и Шымкенте. ' +
-  'Для других городов выберите «Доставка по Казахстану» — 2–3 дня. Стоимость доставки рассчитывается индивидуально.';
+/** Customer-safe explanation shown when CITY delivery is chosen for another city (VL-013). */
+export function cityDeliveryUnavailableMessage(locale: Locale): string {
+  return t(VL['VL-013'], locale);
+}
+
+/** The Russian message — kept for existing server callers and tests. */
+export const CITY_DELIVERY_UNAVAILABLE_MESSAGE = cityDeliveryUnavailableMessage('ru');
 
 /**
  * The delivery amount a customer is quoted, or null when it is calculated

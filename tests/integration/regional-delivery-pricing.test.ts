@@ -4,7 +4,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { NextRequest } from 'next/server';
 import { POST as ordersPost } from '@/app/api/orders/route';
 import { POST as pricingPost } from '@/app/api/pricing/calculate/route';
-import DeliveryPage from '@/app/delivery/page';
+import DeliveryPage from '@/app/[locale]/delivery/page';
+import { localeProps } from './helpers/public-page';
 import { getCatalog, type Catalog } from '@/lib/data/repository';
 import { calculatePrice } from '@/lib/pricing';
 import { clearMemoryOrders, countMemoryOrders, getOrderByNumber } from '@/lib/orders/store';
@@ -188,7 +189,7 @@ describe('POST /api/orders — regional delivery stays individually calculated',
 
 describe('/delivery page — regional methods never read as free', () => {
   it('the TRANSPORT_COMPANY card says "calculated individually", and only PICKUP/CITY say "Бесплатно"', async () => {
-    const html = renderToStaticMarkup((await DeliveryPage()) as ReactElement);
+    const html = renderToStaticMarkup((await DeliveryPage(localeProps('ru'))) as ReactElement);
     const cards = [...html.matchAll(/<h3[^>]*>(.*?)<\/h3>.*?<p class="tech-label[^"]*">(.*?)<\/p>/gs)].map((m) => ({
       name: m[1],
       label: m[2],

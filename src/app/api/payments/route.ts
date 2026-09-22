@@ -4,6 +4,9 @@ import { apiError, apiOk, internalError } from '@/lib/api/response';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { isOnlinePaymentAvailable } from '@/lib/payments/config';
 import { createPaymentIntent } from '@/lib/payments/service';
+import { requestLocale } from '@/lib/i18n/request';
+import { t } from '@/lib/i18n/format';
+import { ER } from '@/lib/i18n/strings';
 
 export const runtime = 'nodejs';
 
@@ -37,26 +40,27 @@ const createPaymentSchema = z
   .strict();
 
 export async function POST(request: NextRequest) {
+  const locale = requestLocale(request.headers);
   // Availability first — nothing below runs for a disabled build.
   if (!isOnlinePaymentAvailable()) {
-    return apiError('NOT_FOUND', 'Страница не найдена', 404);
+    return apiError('NOT_FOUND', t(ER['ER-008'], locale), 404);
   }
 
   const rate = await enforceRateLimit('payments', request.headers);
   if (!rate.allowed) {
-    return apiError('RATE_LIMITED', 'Слишком много попыток оплаты. Попробуйте через минуту.', 429);
+    return apiError('RATE_LIMITED', t(ER['ER-009'], locale), 429);
   }
 
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return apiError('VALIDATION_ERROR', 'Некорректное тело запроса', 400);
+    return apiError('VALIDATION_ERROR', t(ER['ER-004'], locale), 400);
   }
 
   const parsed = createPaymentSchema.safeParse(body);
   if (!parsed.success) {
-    return apiError('VALIDATION_ERROR', 'Некорректный запрос на оплату', 400);
+    return apiError('VALIDATION_ERROR', t(ER['ER-010'], locale), 400);
   }
 
   try {
@@ -67,16 +71,16 @@ export async function POST(request: NextRequest) {
         case 'PAYMENTS_UNAVAILABLE':
           // The flag flipped between the check above and here, or the adapter
           // vanished. Same answer as a disabled build.
-          return apiError('NOT_FOUND', 'Страница не найдена', 404);
+          return apiError('NOT_FOUND', t(ER['ER-008'], locale), 404);
         case 'ORDER_NOT_FOUND':
-          return apiError('NOT_FOUND', 'Заказ не найден', 404);
+          return apiError('NOT_FOUND', t(ER['ER-011'], locale), 404);
         case 'ORDER_NOT_PAYABLE':
           // Deliberately does not say which status the order is in: the order
           // number is the only thing identifying the caller here, so the
           // response stays as uninformative as the success page already is.
-          return apiError('CONFLICT', 'Этот заказ сейчас нельзя оплатить онлайн.', 409);
+          return apiError('CONFLICT', t(ER['ER-012'], locale), 409);
         case 'PROVIDER_ERROR':
-          return apiError('INTERNAL_ERROR', 'Платёжный сервис временно недоступен. Попробуйте позже.', 502);
+          return apiError('INTERNAL_ERROR', t(ER['ER-013'], locale), 502);
       }
     }
 
@@ -84,6 +88,6 @@ export async function POST(request: NextRequest) {
     // simply returns the same payment, which is the point of idempotency.
     return apiOk({ payment: result.payment }, 201);
   } catch (error) {
-    return internalError(error);
+    return internalError(error, locale);
   }
 }
