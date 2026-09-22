@@ -37,7 +37,7 @@ test.describe('online payment is unavailable', () => {
   });
 
   test('the /payment page lists Kaspi as upcoming and offers no way to pay', async ({ page }) => {
-    await page.goto('/payment');
+    await page.goto('/ru/payment');
 
     await expect(page.getByRole('heading', { name: 'Оплата', level: 1 })).toBeVisible();
     // Marked "Скоро", not presented as usable.
@@ -50,7 +50,7 @@ test.describe('online payment is unavailable', () => {
   });
 
   test('checkout offers only the three offline methods', async ({ page }) => {
-    await page.goto('/order');
+    await page.goto('/ru/order');
 
     const select = page.locator('select[name="paymentPreference"]');
     if ((await select.count()) === 0) {

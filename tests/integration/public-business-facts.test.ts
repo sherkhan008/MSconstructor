@@ -1,10 +1,10 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { createElement, type ReactElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { Catalog } from '@/lib/data/repository';
 import type { ShelvingConfiguration } from '@/lib/types/domain';
+import { localeProps, renderInLocale } from './helpers/public-page';
 
 /**
  * Owner-confirmed business facts (2026-09-21) that public copy must not
@@ -72,12 +72,13 @@ beforeAll(async () => {
   catalog = await getCatalog();
 });
 
-async function renderPage(modulePath: string, props: unknown = {}): Promise<string> {
+/** Renders a public page in Russian — the language these copy checks are written in. */
+async function renderPage(modulePath: string, params: Record<string, string> = {}): Promise<string> {
   const mod = await import(/* @vite-ignore */ modulePath);
-  return renderToStaticMarkup((await mod.default(props)) as ReactElement);
+  return await renderInLocale((await mod.default(localeProps('ru', params))) as ReactElement, 'ru');
 }
 
-const modelPage = () => renderPage('@/app/catalog/[model]/page', { params: Promise.resolve({ model: 'ms-standard' }) });
+const modelPage = () => renderPage('@/app/[locale]/catalog/[model]/page', { model: 'ms-standard' });
 
 /** Every FAQPage JSON-LD Question on a rendered page, as {question, answer}. */
 function faqFromJsonLd(html: string): { question: string; answer: string }[] {
@@ -111,8 +112,8 @@ describe('delivery times match the confirmed business model', () => {
   });
 
   it.each([
-    ['homepage', () => renderPage('@/app/page')],
-    ['/delivery', () => renderPage('@/app/delivery/page')],
+    ['homepage', () => renderPage('@/app/[locale]/page')],
+    ['/delivery', () => renderPage('@/app/[locale]/delivery/page')],
     ['/catalog/ms-standard', modelPage],
   ])('%s names the four cities with same-day delivery and 2–3 days elsewhere', async (_name, render) => {
     const html = await render();
@@ -157,9 +158,9 @@ describe('model page FAQ (visible and FAQPage structured data)', () => {
 
 describe('no public page or SEO text claims custom dimensions or next-day delivery', () => {
   it.each([
-    ['homepage', () => renderPage('@/app/page')],
-    ['/delivery', () => renderPage('@/app/delivery/page')],
-    ['/terms', () => renderPage('@/app/terms/page')],
+    ['homepage', () => renderPage('@/app/[locale]/page')],
+    ['/delivery', () => renderPage('@/app/[locale]/delivery/page')],
+    ['/terms', () => renderPage('@/app/[locale]/terms/page')],
     ['/catalog/ms-standard', modelPage],
   ])('%s', async (name, render) => {
     expectNoForbiddenClaim(await render(), name);
@@ -202,10 +203,14 @@ describe('configurator first-run hint', () => {
       deliveryId: 'delivery-pickup',
       quantity: 1,
     };
-    const html = renderToStaticMarkup(createElement(ShelvingPreview, { config, interactive: true }));
+    const html = await renderInLocale(createElement(ShelvingPreview, { config, interactive: true }), 'ru');
     expect(html).toContain('Нажмите на секцию, чтобы выбрать её, или перетащите точки изменения размера.');
     expect(html).not.toContain('перетащите маркеры');
     expect(html).not.toContain('Кликните секцию');
+    // Kazakh: the owner-approved hint, the same «нүктелер» (points) wording.
+    const kk = await renderInLocale(createElement(ShelvingPreview, { config, interactive: true }), 'kk');
+    expect(kk).toContain('Секцияны таңдау үшін басыңыз немесе өлшемді өзгерту нүктелерін сүйреңіз.');
+    expect(kk).not.toMatch(/маркер/i);
   });
 });
 
@@ -221,7 +226,7 @@ describe('price, dimension, warehouse and terms wording', () => {
   const SIZES_RULE = 'Доступны только размеры, представленные в конфигураторе.';
 
   it('/terms states configurator pricing, size limit, free same-day and 2–3 day delivery', async () => {
-    const html = (await renderPage('@/app/terms/page')).replace(/\s+/g, ' ');
+    const html = (await renderPage('@/app/[locale]/terms/page')).replace(/\s+/g, ' ');
     expect(html).toContain(PRICE_RULE);
     expect(html).toContain(SIZES_RULE);
     expect(html).toContain('доставка осуществляется бесплатно в тот же день');
@@ -231,7 +236,7 @@ describe('price, dimension, warehouse and terms wording', () => {
   });
 
   it('individual calculation is attached only to delivery cost, never to the shelving price', async () => {
-    for (const page of ['@/app/terms/page', '@/app/delivery/page', '@/app/page']) {
+    for (const page of ['@/app/[locale]/terms/page', '@/app/[locale]/delivery/page', '@/app/[locale]/page']) {
       const html = (await renderPage(page)).replace(/\s+/g, ' ').toLowerCase();
       expect(html).not.toMatch(/стоимость стеллажа[^.]*индивидуальн/);
       expect(html).not.toMatch(/цена[^.]*подтверждается менеджером/);
@@ -250,7 +255,7 @@ describe('price, dimension, warehouse and terms wording', () => {
   });
 
   it('/delivery labels city delivery free and other-region delivery individually priced', async () => {
-    const html = await renderPage('@/app/delivery/page');
+    const html = await renderPage('@/app/[locale]/delivery/page');
     expect(html).toContain('Бесплатно');
     expect(html).toContain('Стоимость доставки рассчитывается индивидуально');
     expect(html).not.toContain('Стоимость уточняется менеджером');
@@ -261,10 +266,10 @@ describe('localization CSV', () => {
   const buf = readFileSync('docs/localization/public-strings.csv');
   const text = buf.toString('utf8');
 
-  it('is UTF-8 with BOM, has 543 data rows and no replacement characters', () => {
+  it('is UTF-8 with BOM, has 546 data rows and no replacement characters', () => {
     expect([buf[0], buf[1], buf[2]]).toEqual([0xef, 0xbb, 0xbf]);
     expect(text).not.toContain('\ufffd');
-    expect(text.split(/\r?\n/).filter((l) => /^[A-Z]{1,3}-\d{3},/.test(l))).toHaveLength(543);
+    expect(text.split(/\r?\n/).filter((l) => /^[A-Z]{1,3}-\d{3},/.test(l))).toHaveLength(546);
   });
 
   it('keeps every Kazakh letter intact', () => {

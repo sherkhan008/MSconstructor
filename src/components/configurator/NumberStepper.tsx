@@ -1,3 +1,7 @@
+import { t } from '@/lib/i18n/format';
+import { CF } from '@/lib/i18n/strings';
+import { useLocale } from '@/components/i18n/LocaleProvider';
+
 export function NumberStepper({
   value,
   min,
@@ -15,11 +19,12 @@ export function NumberStepper({
    * has no other reliable, style-independent way to query in a test. */
   testId?: string;
 }) {
+  const locale = useLocale();
   return (
     <div className="inline-flex h-9 items-stretch border border-line">
       <button
         type="button"
-        aria-label="Уменьшить"
+        aria-label={t(CF['CF-040'], locale)}
         onClick={() => onChange(Math.max(min, value - 1))}
         disabled={value <= min}
         className="grid w-9 place-items-center text-sm text-foreground hover:bg-surface-muted disabled:opacity-30"
@@ -35,7 +40,7 @@ export function NumberStepper({
       </div>
       <button
         type="button"
-        aria-label="Увеличить"
+        aria-label={t(CF['CF-041'], locale)}
         onClick={() => onChange(Math.min(max, value + 1))}
         disabled={value >= max}
         className="grid w-9 place-items-center text-sm text-foreground hover:bg-surface-muted disabled:opacity-30"

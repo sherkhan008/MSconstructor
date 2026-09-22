@@ -3,68 +3,77 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { NAV_LINKS, site } from '@/lib/config/site';
+import { NAV_LINKS, linkLabel, site, siteCopy } from '@/lib/config/site';
 import { trackEvent } from '@/lib/analytics';
 import { whatsAppContactUrl } from '@/lib/whatsapp';
+import { t } from '@/lib/i18n/format';
+import { localizePath } from '@/lib/i18n/locales';
+import { H } from '@/lib/i18n/strings';
 import { LinkButton } from '@/components/ui/Button';
+import { useLocale } from '@/components/i18n/LocaleProvider';
 import { CartBadge } from './CartBadge';
+import { LanguageSwitcher } from './LanguageSwitcher';
 
 export function Header() {
   const pathname = usePathname();
+  const locale = useLocale();
   const [menuOpen, setMenuOpen] = useState(false);
+  const href = (path: string) => localizePath(path, locale);
 
   return (
     <header className="sticky top-0 z-40 hairline border-t-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-        <Link href="/" className="flex shrink-0 items-center gap-2" onClick={() => setMenuOpen(false)}>
+        <Link href={href('/')} className="flex shrink-0 items-center gap-2" onClick={() => setMenuOpen(false)}>
           <span className="grid h-9 w-9 place-items-center border border-foreground bg-foreground text-background">
             <span className="font-display text-lg leading-none">MS</span>
           </span>
-          <span className="hidden font-display text-xl leading-none tracking-wide sm:inline">{site.name}</span>
+          <span className="hidden font-display text-xl leading-none tracking-wide sm:inline">{siteCopy(locale).name}</span>
         </Link>
 
-        <nav className="hidden items-center gap-6 lg:flex" aria-label="Основная навигация">
+        <nav className="hidden items-center gap-6 lg:flex" aria-label={t(H['H-001'], locale)}>
           {NAV_LINKS.map((link) => (
             <Link
               key={link.href}
-              href={link.href}
+              href={href(link.href)}
               className={`text-sm font-medium transition-colors hover:text-blueprint ${
-                pathname === link.href ? 'text-blueprint' : 'text-foreground'
+                pathname === href(link.href) ? 'text-blueprint' : 'text-foreground'
               }`}
             >
-              {link.labelRu}
+              {linkLabel(link, locale)}
             </Link>
           ))}
         </nav>
 
         <div className="flex items-center gap-2 sm:gap-3">
+          <LanguageSwitcher />
+
           <a
-            href={whatsAppContactUrl()}
+            href={whatsAppContactUrl(locale)}
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => trackEvent('whatsapp_clicked', { location: 'header' })}
-            aria-label="Написать в WhatsApp"
+            aria-label={t(H['H-006'], locale)}
             className="grid h-9 w-9 place-items-center border border-success text-success transition-colors hover:bg-success hover:text-white"
           >
             <WhatsAppIcon />
           </a>
 
           <Link
-            href="/cart"
-            aria-label="Корзина"
+            href={href('/cart')}
+            aria-label={t(H['H-007'], locale)}
             className="relative grid h-9 w-9 place-items-center border border-line text-foreground transition-colors hover:border-foreground"
           >
             <CartIcon />
             <CartBadge />
           </Link>
 
-          <LinkButton href="/configurator" size="sm" className="!hidden sm:!inline-flex">
-            Конфигурировать
+          <LinkButton href={href('/configurator')} size="sm" className="!hidden sm:!inline-flex">
+            {t(H['H-008'], locale)}
           </LinkButton>
 
           <button
             type="button"
-            aria-label={menuOpen ? 'Закрыть меню' : 'Открыть меню'}
+            aria-label={menuOpen ? t(H['H-010'], locale) : t(H['H-009'], locale)}
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((open) => !open)}
             className="grid h-9 w-9 place-items-center border border-line text-foreground lg:hidden"
@@ -75,22 +84,22 @@ export function Header() {
       </div>
 
       {menuOpen && (
-        <nav className="hairline border-t bg-background lg:hidden" aria-label="Мобильная навигация">
+        <nav className="hairline border-t bg-background lg:hidden" aria-label={t(H['H-011'], locale)}>
           <div className="flex flex-col gap-1 px-4 py-3 sm:px-6">
             {NAV_LINKS.map((link) => (
               <Link
                 key={link.href}
-                href={link.href}
+                href={href(link.href)}
                 onClick={() => setMenuOpen(false)}
                 className={`rounded-sm px-2 py-2.5 text-sm font-medium ${
-                  pathname === link.href ? 'bg-blueprint-soft text-blueprint' : 'text-foreground'
+                  pathname === href(link.href) ? 'bg-blueprint-soft text-blueprint' : 'text-foreground'
                 }`}
               >
-                {link.labelRu}
+                {linkLabel(link, locale)}
               </Link>
             ))}
             <a
-              href={whatsAppContactUrl()}
+              href={whatsAppContactUrl(locale)}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => trackEvent('whatsapp_clicked', { location: 'header' })}
@@ -98,8 +107,8 @@ export function Header() {
             >
               WhatsApp {site.whatsappDisplay}
             </a>
-            <LinkButton href="/configurator" className="mt-2" onClick={() => setMenuOpen(false)}>
-              Конфигурировать стеллаж
+            <LinkButton href={href('/configurator')} className="mt-2" onClick={() => setMenuOpen(false)}>
+              {t(H['H-012'], locale)}
             </LinkButton>
           </div>
         </nav>

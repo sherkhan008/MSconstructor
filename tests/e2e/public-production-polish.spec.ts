@@ -2,26 +2,29 @@ import { test, expect } from './helpers/test';
 import { parseConfigurationFromSearchParams } from '../../src/lib/configurator/url';
 
 const popular = 'section:has(h2:text("Популярные конфигурации"))';
-const cardSelector = `${popular} >> div:has(> a[href^="/catalog/"]):has(h3)`;
+const cardSelector = `${popular} >> div:has(> a[href*="/catalog/"]):has(h3)`;
 
 for (const model of ['ms-strong', 'archive-ms']) {
   test(`hidden configurator ${model} returns 404`, async ({ request }) => {
-    const response = await request.get(`/configurator?model=${model}`);
+    const response = await request.get(`/ru/configurator?model=${model}`);
     expect(response.status()).toBe(404);
     expect(await response.text()).toContain('noindex');
   });
 }
 
-for (const route of ['/', '/catalog', '/catalog/ms-standard', '/configurator', '/contacts', '/delivery', '/payment', '/privacy', '/terms']) {
+// Both public languages: Kazakh copy is longer and must not overflow either.
+const PAGES = ['/', '/catalog', '/catalog/ms-standard', '/configurator', '/contacts', '/delivery', '/payment', '/privacy', '/terms'];
+for (const [pagePath, route] of PAGES.flatMap((p) => [[p, p], [p, p === '/' ? '/ru' : `/ru${p}`]])) {
   test(`${route} has no public sample imagery or responsive overflow`, async ({ page, request }) => {
     await page.goto(route);
     await expect(page.locator('main')).toBeVisible();
-    if (route === '/configurator') await expect(page.getByRole('button', { name: 'Добавить в корзину' })).toBeVisible();
+    const addToCart = route.startsWith('/ru') ? 'Добавить в корзину' : 'Себетке қосу';
+    if (pagePath === '/configurator') await expect(page.getByRole('button', { name: addToCart })).toBeVisible();
     expect(await page.locator('body').innerText()).not.toMatch(/SAMPLE IMAGE/i);
     for (const src of await page.locator('img').evaluateAll(images => images.map(image => (image as HTMLImageElement).src))) {
       if (new URL(src).pathname.endsWith('.svg')) expect(await (await request.get(src)).text()).not.toMatch(/SAMPLE IMAGE/i);
     }
-    if (['/', '/catalog', '/catalog/ms-standard'].includes(route)) await expect(page.locator('main svg[role="img"]').first()).toBeVisible();
+    if (['/', '/catalog', '/catalog/ms-standard'].includes(pagePath)) await expect(page.locator('main svg[role="img"]').first()).toBeVisible();
     for (const width of [320, 375, 768, 1024, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), `${route} at ${width}`).toBeLessThanOrEqual(0);
@@ -30,7 +33,7 @@ for (const route of ['/', '/catalog', '/catalog/ms-standard', '/configurator', '
 }
 
 test('each popular price and cart item matches its exact four-shelf server configuration', async ({ page, request }) => {
-  await page.goto('/');
+  await page.goto('/ru');
   const totals = [];
   for (const [index, depth] of [300, 400, 600].entries()) {
     const card = page.locator(cardSelector).nth(index);
@@ -53,9 +56,9 @@ test('each popular price and cart item matches its exact four-shelf server confi
   const items = await page.evaluate(() => JSON.parse(localStorage.getItem('ms-shelving-cart')!).state.items);
   expect(items).toHaveLength(3);
   expect(items.map((item: { configuration: { depth: number; shelves: number } }) => [item.configuration.depth, item.configuration.shelves])).toEqual([[300, 4], [400, 4], [600, 4]]);
-  for (const route of ['/cart', '/order']) {
+  for (const route of ['/ru/cart', '/ru/order']) {
     await page.goto(route);
-    if (route === '/cart') await expect(page.locator('main').getByText('4 полки').first()).toBeVisible();
+    if (route === '/ru/cart') await expect(page.locator('main').getByText('4 полки').first()).toBeVisible();
     else await expect(page.getByRole('heading', { name: 'Ваш заказ' })).toBeVisible();
     for (const width of [320, 375, 768, 1024, 1440]) {
       await page.setViewportSize({ width, height: 900 });
@@ -79,7 +82,7 @@ test('each popular price and cart item matches its exact four-shelf server confi
 });
 
 test('WhatsApp is idle after layout settles and reacts to a new protected action', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/ru');
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(1000);
   await page.evaluate(() => {

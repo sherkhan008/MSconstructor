@@ -3,13 +3,14 @@ import { isValidElement, type ReactElement } from 'react';
 import { NextRequest } from 'next/server';
 import { POST as pricingPost } from '@/app/api/pricing/calculate/route';
 import { POST as ordersPost } from '@/app/api/orders/route';
-import ConfiguratorPage from '@/app/configurator/page';
-import CartPage from '@/app/cart/page';
-import OrderPage from '@/app/order/page';
-import HomePage from '@/app/page';
-import CatalogPage from '@/app/catalog/page';
-import ModelPage from '@/app/catalog/[model]/page';
-import DeliveryPage from '@/app/delivery/page';
+import ConfiguratorPage from '@/app/[locale]/configurator/page';
+import CartPage from '@/app/[locale]/cart/page';
+import OrderPage from '@/app/[locale]/order/page';
+import HomePage from '@/app/[locale]/page';
+import CatalogPage from '@/app/[locale]/catalog/page';
+import ModelPage from '@/app/[locale]/catalog/[model]/page';
+import DeliveryPage from '@/app/[locale]/delivery/page';
+import { localeProps } from './helpers/public-page';
 import { getCatalog, resetCatalogCache, type Catalog } from '@/lib/data/repository';
 import { toPublicCatalog } from '@/lib/data/public-catalog';
 import { calculatePrice } from '@/lib/pricing';
@@ -306,13 +307,20 @@ function collectElementProps(node: unknown, out: Record<string, unknown>[] = [],
 
 describe('public pages: props passed into components', () => {
   const pages: [string, () => Promise<unknown>][] = [
-    ['/', () => HomePage()],
-    ['/catalog', () => CatalogPage({ searchParams: Promise.resolve({}) })],
-    ['/catalog/ms-standard', () => ModelPage({ params: Promise.resolve({ model: 'ms-standard' }) })],
-    ['/configurator', () => ConfiguratorPage({ searchParams: Promise.resolve({}) })],
-    ['/cart', () => CartPage()],
-    ['/order', () => OrderPage()],
-    ['/delivery', () => DeliveryPage()],
+    ['/', () => HomePage(localeProps('kk'))],
+    ['/catalog', () => CatalogPage(localeProps('kk'))],
+    ['/catalog/ms-standard', () => ModelPage(localeProps('kk', { model: 'ms-standard' }))],
+    ['/configurator', () => ConfiguratorPage(localeProps('kk'))],
+    ['/cart', () => CartPage(localeProps('kk'))],
+    ['/order', () => OrderPage(localeProps('kk'))],
+    ['/delivery', () => DeliveryPage(localeProps('kk'))],
+    ['/ru', () => HomePage(localeProps('ru'))],
+    ['/ru/catalog', () => CatalogPage(localeProps('ru'))],
+    ['/ru/catalog/ms-standard', () => ModelPage(localeProps('ru', { model: 'ms-standard' }))],
+    ['/ru/configurator', () => ConfiguratorPage(localeProps('ru'))],
+    ['/ru/cart', () => CartPage(localeProps('ru'))],
+    ['/ru/order', () => OrderPage(localeProps('ru'))],
+    ['/ru/delivery', () => DeliveryPage(localeProps('ru'))],
   ];
 
   it.each(pages)('%s passes no internal commercial field to any component', async (_path, render) => {

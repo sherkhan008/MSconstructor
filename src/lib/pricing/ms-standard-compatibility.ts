@@ -1,4 +1,7 @@
 import type { ShelvingSection } from '@/lib/types/domain';
+import type { Locale } from '@/lib/i18n/locales';
+import { t } from '@/lib/i18n/format';
+import { ER } from '@/lib/i18n/strings';
 
 /**
  * The single authoritative MS Standard configuration matrix. Every place
@@ -137,22 +140,26 @@ export interface MsStandardCompatibilityIssue {
  * which calls this for the ms-standard-specific rules and keeps running its
  * own checks for everything else.
  */
-export function isValidMsStandardConfiguration(config: {
-  height: number;
-  depth: number;
-  shelves: number;
-  sections: readonly Pick<ShelvingSection, 'width'>[];
-}): MsStandardCompatibilityIssue[] {
+export function isValidMsStandardConfiguration(
+  config: {
+    height: number;
+    depth: number;
+    shelves: number;
+    sections: readonly Pick<ShelvingSection, 'width'>[];
+  },
+  /** Language of the customer-facing messages; the rules never depend on it. */
+  locale: Locale = 'ru',
+): MsStandardCompatibilityIssue[] {
   const issues: MsStandardCompatibilityIssue[] = [];
 
   if (!isMsStandardHeight(config.height)) {
-    issues.push({ field: 'height', message: `Высота ${config.height} мм недоступна для MS Стандарт` });
+    issues.push({ field: 'height', message: t(ER['ER-054'], locale, { H: config.height }) });
   } else {
     const maxShelves = HEIGHT_MAX_SHELVES[config.height];
     if (config.shelves > maxShelves) {
       issues.push({
         field: 'shelves',
-        message: `При высоте ${config.height} мм максимум ${maxShelves} полок`,
+        message: t(ER['ER-055'], locale, { H: config.height, N: maxShelves }),
       });
     }
   }
@@ -160,19 +167,19 @@ export function isValidMsStandardConfiguration(config: {
   if (config.shelves < MS_STANDARD_MIN_SHELVES || config.shelves > MS_STANDARD_ABSOLUTE_MAX_SHELVES) {
     issues.push({
       field: 'shelves',
-      message: `Число полок должно быть от ${MS_STANDARD_MIN_SHELVES} до ${MS_STANDARD_ABSOLUTE_MAX_SHELVES}`,
+      message: t(ER['ER-042'], locale, { min: MS_STANDARD_MIN_SHELVES, max: MS_STANDARD_ABSOLUTE_MAX_SHELVES }),
     });
   }
 
   for (const section of config.sections) {
     if (!isMsStandardWidth(section.width)) {
-      issues.push({ field: 'sections', message: `Ширина ${section.width} мм недоступна для MS Стандарт` });
+      issues.push({ field: 'sections', message: t(ER['ER-056'], locale, { W: section.width }) });
       continue;
     }
     if (!isValidMsStandardWidthDepth(section.width, config.depth)) {
       issues.push({
         field: 'depth',
-        message: `Глубина ${config.depth} мм недоступна при ширине секции ${section.width} мм`,
+        message: t(ER['ER-057'], locale, { D: config.depth, W: section.width }),
       });
     }
   }

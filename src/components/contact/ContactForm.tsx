@@ -3,24 +3,29 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
-import { contactRequestSchema, type ContactRequestInput } from '@/lib/contact-schema';
+import { contactRequestSchemaFor, type ContactRequestInput } from '@/lib/contact-schema';
 import { Button } from '@/components/ui/Button';
+import { t } from '@/lib/i18n/format';
+import { apiHeaders } from '@/lib/i18n/request';
+import { CK, CN } from '@/lib/i18n/strings';
+import { useLocale } from '@/components/i18n/LocaleProvider';
 
 export function ContactForm() {
+  const locale = useLocale();
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const {
     register,
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<ContactRequestInput>({ resolver: zodResolver(contactRequestSchema) });
+  } = useForm<ContactRequestInput>({ resolver: zodResolver(contactRequestSchemaFor(locale)) });
 
   async function onSubmit(data: ContactRequestInput) {
     setStatus('idle');
     try {
       const response = await fetch('/api/contact', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: apiHeaders(locale),
         body: JSON.stringify(data),
       });
       const result = await response.json();
@@ -39,7 +44,7 @@ export function ContactForm() {
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-3" noValidate>
       <div>
         <label htmlFor="contact-name" className="tech-label mb-1 block">
-          Имя
+          {t(CN['CN-006'], locale)}
         </label>
         <input
           id="contact-name"
@@ -52,12 +57,12 @@ export function ContactForm() {
 
       <div>
         <label htmlFor="contact-phone" className="tech-label mb-1 block">
-          Телефон
+          {t(CN['CN-007'], locale)}
         </label>
         <input
           id="contact-phone"
           {...register('phone')}
-          placeholder="+7 700 000 00 00"
+          placeholder={t(CK['CK-008'], locale)}
           className="mono h-11 w-full border border-line bg-surface px-3 text-sm outline-none focus:border-blueprint"
           autoComplete="tel"
         />
@@ -66,7 +71,7 @@ export function ContactForm() {
 
       <div>
         <label htmlFor="contact-message" className="tech-label mb-1 block">
-          Сообщение
+          {t(CN['CN-008'], locale)}
         </label>
         <textarea
           id="contact-message"
@@ -78,11 +83,11 @@ export function ContactForm() {
       </div>
 
       <Button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? 'Отправка…' : 'Отправить'}
+        {isSubmitting ? t(CN['CN-009'], locale) : t(CN['CN-010'], locale)}
       </Button>
 
-      {status === 'success' && <p className="text-sm text-success">Спасибо! Мы свяжемся с вами в ближайшее время.</p>}
-      {status === 'error' && <p className="text-sm text-danger">Не удалось отправить. Попробуйте позже или напишите в WhatsApp.</p>}
+      {status === 'success' && <p className="text-sm text-success">{t(CN['CN-011'], locale)}</p>}
+      {status === 'error' && <p className="text-sm text-danger">{t(CN['CN-012'], locale)}</p>}
     </form>
   );
 }

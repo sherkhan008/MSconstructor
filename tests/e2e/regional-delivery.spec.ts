@@ -33,7 +33,7 @@ const configuration = (deliveryId: string) => ({
 
 /** Opens the configurator on a persisted configuration with the given delivery. */
 async function openConfiguratorWithDelivery(page: Page, deliveryId: string) {
-  await page.goto('/configurator');
+  await page.goto('/ru/configurator');
   await page.evaluate((config) => {
     localStorage.setItem(
       'ms-shelving-configurator',
@@ -55,19 +55,19 @@ test('transport-company delivery is shown as individually calculated in configur
 
   await page.getByRole('button', { name: 'Добавить в корзину' }).click();
 
-  await page.goto('/cart');
+  await page.goto('/ru/cart');
   const cartSummary = page.locator('aside').filter({ hasText: 'Итого по корзине' });
   await expect(cartSummary.getByText(REGIONAL_NOTE)).toBeVisible();
   await expect(cartSummary).not.toContainText(/бесплатно/i);
 
-  await page.goto('/order');
+  await page.goto('/ru/order');
   const orderSummary = page.locator('aside').filter({ hasText: 'Ваш заказ' });
   await expect(orderSummary.getByText(REGIONAL_NOTE)).toBeVisible();
   await expect(orderSummary).not.toContainText(/бесплатно/i);
 });
 
 test('/delivery never labels the transport-company method as free', async ({ page }) => {
-  await page.goto('/delivery');
+  await page.goto('/ru/delivery');
   const card = page.locator('div.border').filter({ has: page.getByRole('heading', { name: 'Передача транспортной компании' }) });
   await expect(card).toContainText('Стоимость доставки рассчитывается индивидуально');
   await expect(card).not.toContainText('Бесплатно');
@@ -76,7 +76,7 @@ test('/delivery never labels the transport-company method as free', async ({ pag
 test('checkout shows the city-eligibility error without a raw "city:" prefix', async ({ page }) => {
   await openConfiguratorWithDelivery(page, 'delivery-city');
   await page.getByRole('button', { name: 'Добавить в корзину' }).click();
-  await page.goto('/order');
+  await page.goto('/ru/order');
 
   await page.getByLabel('ФИО / Контактное лицо').fill('Тест Регион');
   await page.getByLabel('Телефон *', { exact: true }).fill('+77001234567');

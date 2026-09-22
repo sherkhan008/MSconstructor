@@ -6,12 +6,12 @@ import type { Tenge } from '@/lib/money';
    in-memory development catalog and the database return identical shapes.
    ========================================================================== */
 
-export type Locale = 'ru' | 'kk' | 'en';
+/** Public locales — the single definition lives in src/lib/i18n/locales.ts. */
+export type { Locale } from '@/lib/i18n/locales';
 
 export interface LocalizedText {
   ru: string;
   kk: string;
-  en?: string;
 }
 
 /** Every physically orderable part belongs to one of these families. */

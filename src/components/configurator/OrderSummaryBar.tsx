@@ -11,6 +11,10 @@ import { whatsAppConfiguratorUrl } from '@/lib/whatsapp';
 import { useConfiguratorStore } from '@/store/configurator-store';
 import { useCartStore } from '@/store/cart-store';
 import type { PublicCatalog } from '@/lib/data/public-catalog';
+import { pick, t } from '@/lib/i18n/format';
+import { localizePath } from '@/lib/i18n/locales';
+import { CF } from '@/lib/i18n/strings';
+import { useLocale } from '@/components/i18n/LocaleProvider';
 
 /**
  * One compact bar fixed to the bottom of the viewport at every breakpoint —
@@ -33,13 +37,15 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
   const router = useRouter();
   const [feedback, setFeedback] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const locale = useLocale();
 
   const model = catalog.models.find((m) => m.slug === config.modelSlug);
-  const modelName = model?.name.ru ?? config.modelSlug;
+  const modelName = model ? pick(model.name, locale) : config.modelSlug;
 
+  /** Share link to this configuration in the page's own language. */
   function shareUrl(): string {
     if (typeof window === 'undefined') return '';
-    return `${window.location.origin}/configurator?${configurationToShareQuery(config)}`;
+    return `${window.location.origin}${localizePath(`/configurator?${configurationToShareQuery(config)}`, locale)}`;
   }
 
   function handleAddToCart(redirectToOrder: boolean) {
@@ -47,9 +53,9 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
     addItem({ modelSlug: config.modelSlug, modelName, configuration: priceResult.configuration, priceSnapshot: priceResult });
     trackEvent('product_added_to_cart', { model: config.modelSlug, redirectToOrder });
     if (redirectToOrder) {
-      router.push('/order');
+      router.push(localizePath('/order', locale));
     } else {
-      setFeedback('Добавлено в корзину');
+      setFeedback(t(CF['CF-069'], locale));
       setTimeout(() => setFeedback(null), 2500);
     }
   }
@@ -59,7 +65,7 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
     trackEvent('configuration_shared', { model: config.modelSlug });
     if (typeof navigator !== 'undefined' && navigator.share) {
       try {
-        await navigator.share({ title: `Конфигурация ${modelName}`, url });
+        await navigator.share({ title: t(CF['CF-072'], locale, { model: modelName }), url });
         return;
       } catch {
         // user cancelled — fall through to clipboard copy
@@ -67,7 +73,7 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
     }
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
       await navigator.clipboard.writeText(url);
-      setFeedback('Ссылка скопирована');
+      setFeedback(t(CF['CF-070'], locale));
       setTimeout(() => setFeedback(null), 2500);
     }
   }
@@ -75,7 +81,7 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
   function handleWhatsApp() {
     if (!priceResult) return;
     trackEvent('whatsapp_clicked', { location: 'configurator' });
-    window.open(whatsAppConfiguratorUrl(priceResult, catalog.accessories, shareUrl()), '_blank', 'noopener,noreferrer');
+    window.open(whatsAppConfiguratorUrl(priceResult, catalog.accessories, shareUrl(), locale), '_blank', 'noopener,noreferrer');
   }
 
   const actionsDisabled = !priceResult || isPricing;
@@ -85,11 +91,11 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
       {detailsOpen && priceResult && (
         <div className="mx-auto max-w-7xl border-b border-line px-4 py-3 sm:px-6 lg:px-8">
           <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-4">
-            <Row label="Комплектующие" value={priceResult.breakdown.unitNet} />
-            {priceResult.breakdown.quantity > 1 && <Row label={`Полки × ${priceResult.breakdown.quantity} компл.`} value={priceResult.breakdown.itemsNet} />}
-            {priceResult.breakdown.assembly > 0 && <Row label="Сборка" value={priceResult.breakdown.assembly} />}
-            {priceResult.breakdown.delivery !== null && priceResult.breakdown.delivery > 0 && <Row label="Доставка" value={priceResult.breakdown.delivery} />}
-            {priceResult.breakdown.discount > 0 && <Row label="Скидка" value={-priceResult.breakdown.discount} tone="success" />}
+            <Row label={t(CF['CF-058'], locale)} value={priceResult.breakdown.unitNet} />
+            {priceResult.breakdown.quantity > 1 && <Row label={t(CF['CF-059'], locale, { N: priceResult.breakdown.quantity })} value={priceResult.breakdown.itemsNet} />}
+            {priceResult.breakdown.assembly > 0 && <Row label={t(CF['CF-060'], locale)} value={priceResult.breakdown.assembly} />}
+            {priceResult.breakdown.delivery !== null && priceResult.breakdown.delivery > 0 && <Row label={t(CF['CF-061'], locale)} value={priceResult.breakdown.delivery} />}
+            {priceResult.breakdown.discount > 0 && <Row label={t(CF['CF-062'], locale)} value={-priceResult.breakdown.discount} tone="success" />}
           </dl>
           {priceResult.deliveryNote && <p className="mt-2 text-xs text-blueprint">{priceResult.deliveryNote}</p>}
         </div>
@@ -106,7 +112,7 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
           aria-expanded={detailsOpen}
           className="tech-label border border-line px-2 py-1.5 hover:border-foreground disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Детали стоимости {detailsOpen ? '▲' : '▼'}
+          {t(CF['CF-057'], locale)} {detailsOpen ? '▲' : '▼'}
         </button>
 
         {/* Both rows wrap: at narrow widths the total + four actions need more
@@ -116,14 +122,14 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
             desktop widths, where the row already fits on one line. */}
         <div className="flex flex-wrap items-center gap-3">
           <div>
-            <div className="tech-label">Итого</div>
+            <div className="tech-label">{t(CF['CF-064'], locale)}</div>
             {priceResult ? (
               <PriceTag value={priceResult.breakdown.total} size="lg" className={isPricing ? 'opacity-60' : 'price-flash'} />
             ) : pricingError ? (
               <div className="flex items-center gap-2">
                 <p className="text-xs text-danger">{pricingError.message}</p>
                 <button type="button" onClick={retryPricing} className="tech-label border border-danger px-2 py-1 text-danger hover:bg-danger-soft">
-                  Повторить
+                  {t(CF['CF-065'], locale)}
                 </button>
               </div>
             ) : (
@@ -133,22 +139,22 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
 
           <div className="flex flex-wrap items-center gap-2">
             <Button onClick={() => handleAddToCart(false)} disabled={actionsDisabled} variant="outline" size="sm" className="font-display uppercase tracking-wide">
-              Добавить в корзину
+              {t(CF['CF-066'], locale)}
             </Button>
             <Button onClick={() => handleAddToCart(true)} disabled={actionsDisabled} size="sm" className="font-display uppercase tracking-wide">
-              Оформить заказ
+              {t(CF['CF-067'], locale)}
             </Button>
             <Button onClick={handleWhatsApp} disabled={actionsDisabled} variant="whatsapp" size="sm" type="button" aria-label="WhatsApp">
               WhatsApp
             </Button>
-            <Button onClick={handleShare} variant="ghost" size="sm" type="button" aria-label="Поделиться конфигурацией">
+            <Button onClick={handleShare} variant="ghost" size="sm" type="button" aria-label={t(CF['CF-068'], locale)}>
               ↗
             </Button>
           </div>
         </div>
       </div>
       {feedback && <p className="tech-label pb-2 text-center text-success">{feedback}</p>}
-      {isPricing && <p className="tech-label pb-2 text-center">Пересчёт стоимости…</p>}
+      {isPricing && <p className="tech-label pb-2 text-center">{t(CF['CF-071'], locale)}</p>}
     </div>
   );
 }

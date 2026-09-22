@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { isValidElement, type ReactElement } from 'react';
 import { getCatalog, resetCatalogCache, type Catalog } from '@/lib/data/repository';
 import { calculatePrice } from '@/lib/pricing';
@@ -8,7 +7,8 @@ import { isModelSlugPubliclyVisible } from '@/lib/config/launch-visibility';
 import { shelvesLabel } from '@/lib/plural';
 import { ProductCard } from '@/components/catalog/ProductCard';
 import { ShelvingPreview } from '@/components/configurator/ShelvingPreview';
-import HomePage from '@/app/page';
+import HomePage from '@/app/[locale]/page';
+import { localeProps, renderInLocale } from './helpers/public-page';
 import type { CatalogProduct, ShelvingConfiguration } from '@/lib/types/domain';
 
 /**
@@ -52,8 +52,9 @@ let cards: CardProps[];
 beforeAll(async () => {
   resetCatalogCache();
   catalog = await getCatalog();
-  element = (await HomePage()) as ReactElement;
-  html = renderToStaticMarkup(element);
+  // The Russian homepage: the section assertions below are written in Russian.
+  element = (await HomePage(localeProps('ru'))) as ReactElement;
+  html = await renderInLocale(element, 'ru');
   cards = collectElements(element, ProductCard).map((el) => el.props as CardProps);
 });
 
@@ -210,8 +211,8 @@ describe('"Категории стеллажей" feature panel', () => {
 
   it('both CTAs point at live public routes for that model', () => {
     const model = publicModels()[0];
-    expect(html).toContain(`href="/configurator?model=${model.slug}"`);
-    expect(html).toContain(`href="/catalog/${model.slug}"`);
+    expect(html).toContain(`href="/ru/configurator?model=${model.slug}"`);
+    expect(html).toContain(`href="/ru/catalog/${model.slug}"`);
     expect(html).toContain('Настроить стеллаж');
     expect(html).toContain('Смотреть модели');
     expect(isModelSlugPubliclyVisible(model.slug)).toBe(true);

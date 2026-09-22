@@ -15,6 +15,9 @@ import { ResizeHandle } from './resize/ResizeHandle';
 import { MAX_SECTIONS, MIN_SECTIONS } from '@/store/configurator-store';
 import { resolveRackFill, shade } from './rack-colors';
 import { computeRenderDepthVec, SHELF_LIP_HEIGHT_PX } from './shelf-depth-projection';
+import { t } from '@/lib/i18n/format';
+import { CF, CT, G } from '@/lib/i18n/strings';
+import { useLocale } from '@/components/i18n/LocaleProvider';
 
 /**
  * Dynamic, formula-free CAD-style SVG preview of the current configuration.
@@ -155,6 +158,7 @@ export function ShelvingPreview({
   onReset,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const locale = useLocale();
   const [announcement, setAnnouncement] = useState('');
   const [hasInteracted, setHasInteracted] = useState(false);
   // Hover-only UI state — purely visual, never touches config/store, so it
@@ -349,7 +353,7 @@ export function ShelvingPreview({
 
   return (
     <div ref={containerRef} className={`relative w-full overflow-hidden border border-line bg-surface ${className}`}>
-      <svg viewBox={presentation && !interactive ? `0 ${Math.min(0, top + depthVec.dy - 30)} ${rowEnd + depthVec.dx + 50} ${FLOOR_Y + 110 - Math.min(0, top + depthVec.dy - 30)}` : `0 0 ${VIEWBOX_W} ${VIEWBOX_H}`} className="h-full w-full" role="img" aria-label="Схема стеллажа спереди">
+      <svg viewBox={presentation && !interactive ? `0 ${Math.min(0, top + depthVec.dy - 30)} ${rowEnd + depthVec.dx + 50} ${FLOOR_Y + 110 - Math.min(0, top + depthVec.dy - 30)}` : `0 0 ${VIEWBOX_W} ${VIEWBOX_H}`} className="h-full w-full" role="img" aria-label={t(CF['CF-006'], locale)}>
         {/* 1. Rear posts — the physical steel frame, always visible regardless
              of any wall selection (a rear post is not the same thing as the
              optional rearWall panel). Perforated the same way as the front
@@ -498,7 +502,7 @@ export function ShelvingPreview({
               key={`hit-${section.id}`}
               role={interactive ? 'button' : undefined}
               tabIndex={interactive ? 0 : undefined}
-              aria-label={interactive ? `Секция ${i + 1}, ширина ${section.section.width} мм` : undefined}
+              aria-label={interactive ? t(CF['CF-008'], locale, { N: i + 1, W: section.section.width }) : undefined}
               aria-pressed={interactive ? isActive : undefined}
               onClick={interactive ? () => onSelectSection?.(section.id) : undefined}
               onKeyDown={
@@ -633,7 +637,7 @@ export function ShelvingPreview({
         <>
           <ResizeHandle
             axis="height"
-            ariaLabel={`Изменить высоту стеллажа. Текущая высота: ${config.height} миллиметров.`}
+            ariaLabel={t(CF['CF-009'], locale, { H: config.height })}
             value={config.height}
             min={heightDrag.min}
             max={heightDrag.max}
@@ -652,7 +656,7 @@ export function ShelvingPreview({
           />
           <ResizeHandle
             axis="width"
-            ariaLabel={`Изменить ширину активной секции. Текущая ширина: ${activeSection.width} миллиметров.`}
+            ariaLabel={t(CF['CF-010'], locale, { W: activeSection.width })}
             value={activeSection.width}
             min={widthDrag.min}
             max={widthDrag.max}
@@ -693,8 +697,8 @@ export function ShelvingPreview({
                   type="button"
                   disabled={!canAdd}
                   onClick={() => onAddSectionAfter?.(section.id)}
-                  title={`Добавить секцию после «Секция ${i + 1}»`}
-                  aria-label={`Добавить секцию после секции ${i + 1}`}
+                  title={t(CF['CF-015'], locale, { N: i + 1 })}
+                  aria-label={t(CF['CF-016'], locale, { N: i + 1 })}
                   className={`${CIRCLE_CONTROL} h-10 w-10 text-base hover:border-dimension-accent hover:text-dimension-accent`}
                 >
                   +
@@ -715,8 +719,8 @@ export function ShelvingPreview({
                   type="button"
                   disabled={!canRemove}
                   onClick={() => onRemoveSectionAt?.(section.id)}
-                  title={`Удалить «Секция ${i + 1}»`}
-                  aria-label={`Удалить секцию ${i + 1}`}
+                  title={t(CF['CF-017'], locale, { N: i + 1 })}
+                  aria-label={t(CF['CF-018'], locale, { N: i + 1 })}
                   className={`${CIRCLE_CONTROL} h-8 w-8 text-sm hover:border-danger hover:text-danger`}
                 >
                   −
@@ -737,7 +741,7 @@ export function ShelvingPreview({
           >
             <button
               type="button"
-              aria-label="Увеличить количество полок"
+              aria-label={t(CF['CF-019'], locale)}
               onClick={onIncreaseShelves}
               disabled={config.shelves >= maxShelves}
               className={`${CIRCLE_CONTROL} h-8 w-8 text-sm hover:border-dimension-accent hover:text-dimension-accent`}
@@ -747,7 +751,7 @@ export function ShelvingPreview({
             <span className="mono text-[11px] font-semibold text-steel">{config.shelves}</span>
             <button
               type="button"
-              aria-label="Уменьшить количество полок"
+              aria-label={t(CF['CF-020'], locale)}
               onClick={onDecreaseShelves}
               disabled={config.shelves <= minShelves}
               className={`${CIRCLE_CONTROL} h-8 w-8 text-sm hover:border-danger hover:text-danger`}
@@ -761,7 +765,7 @@ export function ShelvingPreview({
               share this bottom strip. */}
           {!hasInteracted && (
             <p className="tech-label pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 px-2 py-1 text-center text-steel drop-shadow-[0_1px_1px_rgba(255,255,255,0.9)]">
-              Нажмите на секцию, чтобы выбрать её, или перетащите точки изменения размера.
+              {t(CF['CF-021'], locale)}
             </p>
           )}
           <div role="status" aria-live="polite" className="sr-only">
@@ -774,13 +778,13 @@ export function ShelvingPreview({
               onClick={onReset}
               className="tech-label absolute right-3 top-3 text-steel underline-offset-2 hover:text-dimension-accent hover:underline"
             >
-              Сброс настроек
+              {t(CF['CF-022'], locale)}
             </button>
           )}
         </>
       )}
 
-      <div className="tech-label pointer-events-none absolute bottom-2 right-3">{config.loadCapacity} кг/полка</div>
+      <div className="tech-label pointer-events-none absolute bottom-2 right-3">{t(CT['CT-024'], locale, { N: config.loadCapacity })}</div>
     </div>
   );
 }
@@ -889,12 +893,13 @@ function TotalWidthLine({ x1, x2, y, label, active }: { x1: number; x2: number; 
   // Always the red dimension accent — thin idle, no colour switch to grey —
   // matching the reference's simple red measurement lines.
   const color = 'var(--color-dimension-accent)';
+  const locale = useLocale();
   return (
     <g opacity={active ? 1 : 0.7}>
       <line x1={x1} y1={y} x2={x2} y2={y} stroke={color} strokeWidth={1} />
       <line x1={x1} y1={y - 3} x2={x1} y2={y + 3} stroke={color} strokeWidth={1} />
       <line x1={x2} y1={y - 3} x2={x2} y2={y + 3} stroke={color} strokeWidth={1} />
-      <DimensionTag x={(x1 + x2) / 2} y={y + 15} label={`${label} мм`} active={active} orientation="horizontal" />
+      <DimensionTag x={(x1 + x2) / 2} y={y + 15} label={`${label} ${t(G['G-008'], locale)}`} active={active} orientation="horizontal" />
     </g>
   );
 }

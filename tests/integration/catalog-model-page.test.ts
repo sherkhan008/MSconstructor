@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderInLocale } from './helpers/public-page';
 import { isValidElement, type ReactElement } from 'react';
 import type { Catalog } from '@/lib/data/repository';
 
@@ -38,12 +38,13 @@ async function loadPage() {
   delete process.env.NEXT_PHASE;
   vi.resetModules();
   vi.doMock('@/lib/data/db-repository', () => ({ buildDbCatalog: vi.fn(async () => structuredClone(dbRows)) }));
-  const pageModule = await import('@/app/catalog/[model]/page');
+  const pageModule = await import('@/app/[locale]/catalog/[model]/page');
   return { pageModule };
 }
 
+/** Russian model page — the content assertions below are written in Russian. */
 function params(model: string) {
-  return { params: Promise.resolve({ model }) };
+  return { params: Promise.resolve({ locale: 'ru', model }) };
 }
 
 /** Every object key reachable from the page's element tree, descending into
@@ -93,7 +94,7 @@ describe('/catalog/[model] against the runtime catalog', () => {
     const { pageModule } = await loadPage();
     const model = dbRows.models.find((m) => m.slug === 'ms-standard')!;
 
-    const html = renderToStaticMarkup((await pageModule.default(params('ms-standard'))) as ReactElement);
+    const html = await renderInLocale((await pageModule.default(params('ms-standard'))) as ReactElement, 'ru');
     expect(html).toContain(`<h1 class="font-display text-4xl">${model.name.ru}</h1>`);
     expect(html).toContain('application/ld+json');
 
@@ -134,7 +135,7 @@ describe('/catalog/[model] against the runtime catalog', () => {
     });
     vi.setSystemTime(Date.now() + CATALOG_CACHE_TTL_MS + 1);
 
-    const html = renderToStaticMarkup((await pageModule.default(params('ms-new-model'))) as ReactElement);
+    const html = await renderInLocale((await pageModule.default(params('ms-new-model'))) as ReactElement, 'ru');
     expect(html).toContain('MS Новая модель');
   });
 
@@ -150,7 +151,7 @@ describe('/catalog/[model] against the runtime catalog', () => {
     for (const forbidden of FORBIDDEN_KEYS) {
       expect(keys.has(forbidden), `page props leak "${forbidden}"`).toBe(false);
     }
-    const html = renderToStaticMarkup(element as ReactElement);
+    const html = await renderInLocale(element as ReactElement, 'ru');
     for (const forbidden of FORBIDDEN_KEYS) expect(html).not.toContain(forbidden);
   });
 });

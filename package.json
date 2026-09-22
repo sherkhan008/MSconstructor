@@ -25,7 +25,9 @@
     "db:sync-ms-standard-fasteners": "tsx scripts/sync-ms-standard-fasteners.ts",
     "db:sync-catalog-products": "tsx scripts/sync-catalog-products.ts",
     "db:sync-public-copy": "tsx scripts/sync-public-copy.ts",
-    "db:import-supplier-prices": "tsx scripts/import-supplier-prices.ts"
+    "db:sync-kazakh-copy": "tsx scripts/sync-kazakh-copy.ts",
+    "db:import-supplier-prices": "tsx scripts/import-supplier-prices.ts",
+    "i18n:generate": "tsx scripts/generate-public-strings.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

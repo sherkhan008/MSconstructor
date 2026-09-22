@@ -60,7 +60,7 @@ async function findClearPointInZone(
 }
 
 test('drag-to-resize: width handle updates the active section, recalculates price, and survives reload', async ({ page }) => {
-  await page.goto('/configurator');
+  await page.goto('/ru/configurator');
 
   const widthSelect = firstSectionWidthSelect(page);
   await expect(widthSelect).toBeVisible();
@@ -135,7 +135,7 @@ test('width resize can start from near the top or near the bottom of the right u
     // re-seeds the store on every load regardless of what's persisted, so
     // every iteration starts from the same known 1000mm baseline.
     await page.goto(
-      '/configurator?model=ms-standard&height=2000&depth=400&shelves=3&sections=1000:false:false:false,1000:false:false:false',
+      '/ru/configurator?model=ms-standard&height=2000&depth=400&shelves=3&sections=1000:false:false:false,1000:false:false:false',
     );
     await expect(widthSelects).toHaveCount(2);
     await expect(widthSelects.first()).toHaveValue('1000');
@@ -163,7 +163,7 @@ test('width resize can start from near the top or near the bottom of the right u
 });
 
 test('width resize started from the upright hit-zone still clamps correctly at the 700 and 1500 boundaries', async ({ page }) => {
-  await page.goto('/configurator');
+  await page.goto('/ru/configurator');
 
   const widthSelect = firstSectionWidthSelect(page);
   const zone = page.getByTestId('width-resize-zone');
@@ -212,7 +212,7 @@ test('height resize can start from multiple points across the top rack edge — 
     // default. An explicit share-link URL (see url.ts) deterministically
     // re-seeds the store on every load regardless of what's persisted, so
     // every iteration starts from the same known baseline height.
-    await page.goto('/configurator?model=ms-standard&height=2000&depth=400&shelves=3&sections=1000:false:false:false');
+    await page.goto('/ru/configurator?model=ms-standard&height=2000&depth=400&shelves=3&sections=1000:false:false:false');
     const heightHandle = page.locator('button[data-axis="height"]');
     // The persisted store renders first and the share link is applied one
     // commit later, so an immediate read can still see the previous
@@ -240,7 +240,7 @@ test('height resize can start from multiple points across the top rack edge — 
 });
 
 test('drag-to-resize: keyboard stepping is a fully usable alternative to dragging', async ({ page }) => {
-  await page.goto('/configurator');
+  await page.goto('/ru/configurator');
 
   const widthHandle = page.locator('button[data-axis="width"]');
   await expect(widthHandle).toBeVisible();
@@ -255,7 +255,7 @@ test('drag-to-resize: keyboard stepping is a fully usable alternative to draggin
 });
 
 test('drag-to-resize: the height handle changes the whole row, not just one section', async ({ page }) => {
-  await page.goto('/configurator');
+  await page.goto('/ru/configurator');
 
   const heightHandle = page.locator('button[data-axis="height"]');
   await heightHandle.focus();
@@ -282,7 +282,7 @@ test('resize markers stay hidden until the pointer is over their own part of the
   // alternative"). Nothing to assert on a coarse-pointer project.
   test.skip(isMobile, 'markers are always visible on touch/coarse pointers by design, not hover-gated');
 
-  await page.goto('/configurator');
+  await page.goto('/ru/configurator');
   const rack = page.getByRole('img', { name: 'Схема стеллажа спереди' });
   await expect(rack).toBeVisible();
 
@@ -324,7 +324,7 @@ test('resize markers stay hidden until the pointer is over their own part of the
 });
 
 test('resize markers stay visible mid-drag even after the pointer leaves the original hover zone', async ({ page }) => {
-  await page.goto('/configurator');
+  await page.goto('/ru/configurator');
 
   const heightHandle = page.locator('button[data-axis="height"]');
   const box = await heightHandle.boundingBox();
@@ -341,7 +341,7 @@ test('resize markers stay visible mid-drag even after the pointer leaves the ori
 });
 
 test('the depth dimension tag is read-only: no depth resize handle or hit-area exists in the preview', async ({ page }) => {
-  await page.goto('/configurator');
+  await page.goto('/ru/configurator');
 
   // The depth number is still shown as a plain informational tag...
   const depthTag = page.getByTestId('depth-dimension-tag');
@@ -359,7 +359,7 @@ test('the depth dimension tag is read-only: no depth resize handle or hit-area e
 test('depth is still driven by the parameter controls: changing it updates the read-only preview geometry and recalculates price', async ({
   page,
 }) => {
-  await page.goto('/configurator');
+  await page.goto('/ru/configurator');
 
   const depthSelect = page.getByLabel('Глубина');
   await expect(depthSelect).toBeVisible();
@@ -385,7 +385,7 @@ test('depth is still driven by the parameter controls: changing it updates the r
 test('hovering a section\'s right upright targets that section for width resizing, including a newly added one', async ({
   page,
 }) => {
-  await page.goto('/configurator');
+  await page.goto('/ru/configurator');
 
   const addButton = page.getByRole('button', { name: /Добавить секцию после/ }).first();
   await addButton.click();
@@ -451,7 +451,7 @@ test('hovering a section\'s right upright targets that section for width resizin
  * a label-only check while still visibly jumping on release.
  */
 test('geometry regression: the active section\'s right upright does not jump when a drag releases at the legal minimum', async ({ page }) => {
-  await page.goto('/configurator');
+  await page.goto('/ru/configurator');
 
   const widthHandle = page.locator('button[data-axis="width"]');
   await expect(widthHandle).toBeVisible();
@@ -481,7 +481,7 @@ test('geometry regression: the active section\'s right upright does not jump whe
 });
 
 test('geometry regression: the active section\'s right upright does not jump when a drag releases at the legal maximum', async ({ page }) => {
-  await page.goto('/configurator');
+  await page.goto('/ru/configurator');
 
   const widthHandle = page.locator('button[data-axis="width"]');
   await expect(widthHandle).toBeVisible();
@@ -508,7 +508,7 @@ test('geometry regression: the active section\'s right upright does not jump whe
 });
 
 test('the height handle sits on the top rack edge (not to the side), and every handle shows a directional icon', async ({ page }) => {
-  await page.goto('/configurator');
+  await page.goto('/ru/configurator');
 
   const heightHandle = page.locator('button[data-axis="height"]');
   const rack = page.getByRole('img', { name: 'Схема стеллажа спереди' });

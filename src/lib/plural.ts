@@ -1,15 +1,27 @@
+import type { Locale } from '@/lib/i18n/locales';
+import { t } from '@/lib/i18n/format';
+import { G } from '@/lib/i18n/strings';
+
 /**
- * Russian count agreement: 1 полка, 2–4 полки, 5–20 полок, 21 полка…
- * Shelf counts are customer-facing in several places (catalog cards, cart
- * lines), so the rule lives here once instead of a hardcoded "полок" next to
- * every number.
+ * Shelf count as customer-facing text. Shelf counts appear in several places
+ * (catalog cards, cart lines), so the rule lives here once instead of a
+ * hardcoded "полок" next to every number.
+ *
+ *   ru — Russian count agreement: 1 полка, 2–4 полки, 5–20 полок, 21 полка…
+ *        (the three forms of CSV G-011, "{N} полка / {N} полки / {N} полок")
+ *   kk — Kazakh does not inflect a noun after a numeral: "{N} сөре" for every
+ *        N (CSV G-011). Russian plural rules are never applied to Kazakh.
  */
-export function shelvesLabel(count: number): string {
+export function shelvesLabel(count: number, locale: Locale = 'ru'): string {
+  if (locale === 'kk') return t(G['G-011'], 'kk', { N: count });
+
+  const [one, few, many] = G['G-011'].ru.split(' / ');
   const abs = Math.abs(count) % 100;
   const last = abs % 10;
 
-  if (abs > 10 && abs < 20) return `${count} полок`;
-  if (last === 1) return `${count} полка`;
-  if (last >= 2 && last <= 4) return `${count} полки`;
-  return `${count} полок`;
+  let form = many;
+  if (abs > 10 && abs < 20) form = many;
+  else if (last === 1) form = one;
+  else if (last >= 2 && last <= 4) form = few;
+  return form.replace('{N}', String(count));
 }

@@ -2,7 +2,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import type { ReactElement } from 'react';
 import { getCatalog, resetCatalogCache, type Catalog } from '@/lib/data/repository';
 import { FilterForm } from '@/components/catalog/FilterForm';
-import CatalogPage from '@/app/catalog/page';
+import CatalogPage from '@/app/[locale]/catalog/page';
+import { localeProps } from './helpers/public-page';
 import type { PublicProductModel } from '@/lib/types/domain';
 
 /**
@@ -68,7 +69,7 @@ describe('/catalog: props crossing into the FilterForm Client Component', () => 
   });
 
   it('never receives markupPercent/markupFixed or any other forbidden key', async () => {
-    const element = await CatalogPage({ searchParams: Promise.resolve({}) });
+    const element = await CatalogPage(localeProps('kk'));
     const filterFormElement = findElement(element, FilterForm);
     expect(filterFormElement, 'FilterForm was not found in the page tree').toBeDefined();
 
@@ -85,7 +86,7 @@ describe('/catalog: props crossing into the FilterForm Client Component', () => 
   });
 
   it('still receives the correct models with a filter query param applied', async () => {
-    const element = await CatalogPage({ searchParams: Promise.resolve({ model: 'ms-standard' }) });
+    const element = await CatalogPage(localeProps('ru', {}, { model: 'ms-standard' }));
     const filterFormElement = findElement(element, FilterForm);
     const props = filterFormElement!.props as Record<string, unknown>;
     const keys = collectKeys(props);

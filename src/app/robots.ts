@@ -7,7 +7,8 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: '*',
         allow: '/',
-        disallow: ['/admin', '/api', '/cart', '/order', '/order/success'],
+        // The cart/checkout flow exists in both public locales (/… and /ru/…).
+        disallow: ['/admin', '/api', '/cart', '/order', '/order/success', '/ru/cart', '/ru/order', '/ru/order/success'],
       },
     ],
     sitemap: `${appUrl}/sitemap.xml`,

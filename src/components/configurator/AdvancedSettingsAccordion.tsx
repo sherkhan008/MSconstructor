@@ -5,7 +5,10 @@ import { useConfiguratorStore } from '@/store/configurator-store';
 import { InstallDeliveryPanel } from './InstallDeliveryPanel';
 import type { PublicCatalog } from '@/lib/data/public-catalog';
 import type { ConfigurationAccessorySelection } from '@/lib/types/domain';
-import { METAL_FOOT_PAD_LABEL, SHELF_CORNER_BRACKETS_LABEL } from '@/lib/configurator/additional-options';
+import { METAL_FOOT_PAD_OPTION, SHELF_CORNER_BRACKETS_OPTION } from '@/lib/configurator/additional-options';
+import { t } from '@/lib/i18n/format';
+import { CF } from '@/lib/i18n/strings';
+import { useLocale } from '@/components/i18n/LocaleProvider';
 
 /**
  * Accessory ids the *customer* configurator may select — a small curated
@@ -43,6 +46,7 @@ export function isStaleCrossBrace(selection: ConfigurationAccessorySelection, se
  */
 export function AdvancedSettingsAccordion({ catalog }: { catalog: PublicCatalog }) {
   const [open, setOpen] = useState(false);
+  const locale = useLocale();
   const config = useConfiguratorStore((s) => s.config);
   const activeSectionId = useConfiguratorStore((s) => s.activeSectionId);
   const setField = useConfiguratorStore((s) => s.setField);
@@ -108,7 +112,7 @@ export function AdvancedSettingsAccordion({ catalog }: { catalog: PublicCatalog 
         aria-expanded={open}
         className="flex w-full items-center justify-between px-3 py-2 text-left"
       >
-        <span className="tech-label">Дополнительные параметры</span>
+        <span className="tech-label">{t(CF['CF-042'], locale)}</span>
         <span aria-hidden="true" className="text-steel">
           {open ? '▴' : '▾'}
         </span>
@@ -118,25 +122,25 @@ export function AdvancedSettingsAccordion({ catalog }: { catalog: PublicCatalog 
         <div className="flex flex-col gap-4 border-t border-line p-3">
           <div className="flex flex-col gap-2.5">
             <OptionCheckbox
-              label="Регулируемая по высоте опора"
-              note="+ металлический подпятник"
+              label={t(CF['CF-043'], locale)}
+              note={t(CF['CF-044'], locale)}
               checked={adjustableFeetSelected}
               onChange={toggleAdjustableFeet}
             />
-            <OptionCheckbox label={METAL_FOOT_PAD_LABEL} checked={!!config.metalFootPad} onChange={toggleMetalFootPad} />
+            <OptionCheckbox label={t(METAL_FOOT_PAD_OPTION, locale)} checked={!!config.metalFootPad} onChange={toggleMetalFootPad} />
             <OptionCheckbox
-              label={SHELF_CORNER_BRACKETS_LABEL}
+              label={t(SHELF_CORNER_BRACKETS_OPTION, locale)}
               checked={!!config.shelfCornerBrackets}
               onChange={(checked) => setField('shelfCornerBrackets', checked)}
             />
             <OptionCheckbox
-              label="Ребро жесткости в каждую полку"
+              label={t(CF['CF-047'], locale)}
               checked={shelfReinforcementSelected}
               onChange={toggleShelfReinforcement}
             />
             <OptionCheckbox
-              label="Крестовина жесткости"
-              note="Только для секции шириной 1000 мм"
+              label={t(CF['CF-048'], locale)}
+              note={t(CF['CF-049'], locale)}
               checked={crossBraceSelectedHere}
               disabled={!crossBraceEligible}
               onChange={toggleCrossBrace}

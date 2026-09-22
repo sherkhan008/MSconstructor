@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { NextRequest } from 'next/server';
 import { POST as paymentsPost } from '@/app/api/payments/route';
 import { POST as ordersPost } from '@/app/api/orders/route';
-import PaymentPage from '@/app/payment/page';
+import PaymentPage from '@/app/[locale]/payment/page';
+import { localeProps } from './helpers/public-page';
 import { clearMemoryOrders, countMemoryOrders, getOrderByNumber } from '@/lib/orders/store';
 import { clearMemoryPayments, countMemoryPayments } from '@/lib/payments/store';
 import { isOnlinePaymentAvailable } from '@/lib/payments/config';
@@ -227,8 +228,8 @@ describe('existing checkout is unchanged', () => {
 /* -------------------------------------------------------------------------- */
 
 describe('no fake payment availability in the UI', () => {
-  it('the /payment page offers no online payment action', () => {
-    const rendered = JSON.stringify(PaymentPage());
+  it('the /payment page offers no online payment action (both locales)', async () => {
+    const rendered = JSON.stringify([await PaymentPage(localeProps('ru')), await PaymentPage(localeProps('kk'))]);
     // Kaspi may be named as "coming soon" — but nothing may invite a click.
     expect(rendered).not.toContain('/api/payments');
     expect(rendered).not.toContain('Оплатить');

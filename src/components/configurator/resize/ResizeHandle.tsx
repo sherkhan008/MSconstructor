@@ -2,6 +2,9 @@
 
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import type { DimensionAxis } from './dimension-scale';
+import { t } from '@/lib/i18n/format';
+import { CF } from '@/lib/i18n/strings';
+import { useLocale } from '@/components/i18n/LocaleProvider';
 
 export interface ResizeHandleProps {
   axis: DimensionAxis;
@@ -75,6 +78,7 @@ export function ResizeHandle({
   onPointerCancel,
   onKeyDown,
 }: ResizeHandleProps) {
+  const locale = useLocale();
   return (
     <button
       type="button"
@@ -84,7 +88,7 @@ export function ResizeHandle({
       aria-valuemin={min}
       aria-valuemax={max}
       aria-valuenow={value}
-      aria-valuetext={`${value} мм`}
+      aria-valuetext={t(CF['CF-011'], locale, { V: value })}
       aria-orientation={axis === 'height' ? 'vertical' : 'horizontal'}
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}

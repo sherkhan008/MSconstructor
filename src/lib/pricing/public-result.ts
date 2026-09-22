@@ -1,5 +1,7 @@
 import { toPublicBom } from './bom';
 import type { PriceBreakdown, PriceFailure, PriceResult } from '@/lib/types/domain';
+import type { Locale } from '@/lib/i18n/locales';
+import { pick } from '@/lib/i18n/format';
 
 /**
  * The customer-safe shape of a price calculation — what /api/pricing/calculate
@@ -76,7 +78,32 @@ export function toPublicPriceBreakdown(b: PriceBreakdown): PublicPriceBreakdown 
   };
 }
 
-export function toPublicPriceResult(result: PriceResult): PublicPriceResult {
+/**
+ * Where to find the Kazakh name of a kit line: the catalog rows the BOM line
+ * was built from (ShelvingComponent / Accessory, their *Kk columns).
+ */
+export interface KitNameSource {
+  components: readonly { id: string; name: { ru: string; kk: string } }[];
+  accessories: readonly { id: string; name: { ru: string; kk: string } }[];
+}
+
+/**
+ * `locale` + `names` only change the language of each kit line's name
+ * (looked up by componentId; the BOM's own Russian name is the fallback).
+ * Quantities, grouping and every amount are exactly the engine's.
+ */
+export function toPublicPriceResult(
+  result: PriceResult,
+  options: { locale: Locale; names: KitNameSource } | undefined = undefined,
+): PublicPriceResult {
+  const localizedName = (componentId: string, fallback: string): string => {
+    if (!options || options.locale === 'ru') return fallback;
+    const source =
+      options.names.components.find((c) => c.id === componentId) ??
+      options.names.accessories.find((a) => a.id === componentId);
+    return source ? pick(source.name, options.locale) : fallback;
+  };
+
   return {
     ok: true,
     configuration: result.configuration,
@@ -86,7 +113,7 @@ export function toPublicPriceResult(result: PriceResult): PublicPriceResult {
       componentId: line.componentId,
       sku: line.sku,
       type: line.type,
-      name: line.name,
+      name: localizedName(line.componentId, line.name),
       quantity: line.quantity,
       weightKg: line.weightKg,
     })),

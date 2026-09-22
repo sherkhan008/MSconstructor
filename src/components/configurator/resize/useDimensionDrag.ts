@@ -15,6 +15,9 @@ import {
   stepAllowed,
   type DimensionAxis,
 } from './dimension-scale';
+import { t, type Entry } from '@/lib/i18n/format';
+import { CF } from '@/lib/i18n/strings';
+import { useLocale } from '@/components/i18n/LocaleProvider';
 
 /**
  * Pointer- and keyboard-driven dimension resizing for one axis of the
@@ -59,10 +62,11 @@ export interface UseDimensionDragResult {
   onKeyDown: (e: ReactKeyboardEvent<Element>) => void;
 }
 
-const AXIS_LABEL_RU: Record<DimensionAxis, string> = {
-  height: 'Высота',
-  width: 'Ширина',
-  depth: 'Глубина',
+/** Screen-reader announcement after a committed resize, per axis (CF-012…CF-014). */
+const RESIZED_ANNOUNCEMENT: Record<DimensionAxis, Entry> = {
+  height: CF['CF-012'],
+  width: CF['CF-013'],
+  depth: CF['CF-014'],
 };
 
 function projectDelta(axis: DimensionAxis, dxViewBox: number, dyViewBox: number): number {
@@ -88,6 +92,7 @@ export function useDimensionDrag({
   onCommit,
   onAnnounce,
 }: UseDimensionDragOptions): UseDimensionDragResult {
+  const locale = useLocale();
   const [isDragging, setIsDragging] = useState(false);
   const [tempValue, setTempValue] = useState(committedValue);
   const [snapTarget, setSnapTarget] = useState<number | null>(null);
@@ -200,10 +205,10 @@ export function useDimensionDrag({
       setSnapTarget(null);
       if (finalValue !== committedRef.current) {
         onCommit(axis, finalValue);
-        onAnnounce?.(`${AXIS_LABEL_RU[axis]} изменена на ${finalValue} миллиметров`);
+        onAnnounce?.(t(RESIZED_ANNOUNCEMENT[axis], locale, { V: finalValue }));
       }
     },
-    [axis, onAnnounce, onCommit],
+    [axis, locale, onAnnounce, onCommit],
   );
 
   const onKeyDown = useCallback(
@@ -226,10 +231,10 @@ export function useDimensionDrag({
       e.preventDefault();
       if (next !== undefined && next !== committedRef.current) {
         onCommit(axis, next);
-        onAnnounce?.(`${AXIS_LABEL_RU[axis]} изменена на ${next} миллиметров`);
+        onAnnounce?.(t(RESIZED_ANNOUNCEMENT[axis], locale, { V: next }));
       }
     },
-    [axis, onAnnounce, onCommit],
+    [axis, locale, onAnnounce, onCommit],
   );
 
   return {

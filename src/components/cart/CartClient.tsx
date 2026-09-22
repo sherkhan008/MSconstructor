@@ -14,6 +14,11 @@ import { shelvesLabel } from '@/lib/plural';
 import { useCartStore, type CartItem } from '@/store/cart-store';
 import type { ColorOption } from '@/lib/types/domain';
 import type { PublicCatalog } from '@/lib/data/public-catalog';
+import { pick, t } from '@/lib/i18n/format';
+import { localizePath, type Locale } from '@/lib/i18n/locales';
+import { apiHeaders } from '@/lib/i18n/request';
+import { CF, CR, CT, ER, G } from '@/lib/i18n/strings';
+import { useLocale } from '@/components/i18n/LocaleProvider';
 
 /**
  * Every price shown here is either a fresh server response or explicitly
@@ -32,6 +37,13 @@ export function CartClient({ catalog }: { catalog: PublicCatalog }) {
   const [reconcileNotice, setReconcileNotice] = useState<string | null>(null);
   const [priceErrors, setPriceErrors] = useState<Record<string, string>>({});
   const router = useRouter();
+  const locale = useLocale();
+
+  /** A cart line's model name in the page locale (the stored name is a fallback). */
+  function modelNameOf(item: CartItem): string {
+    const model = catalog.models.find((m) => m.slug === item.modelSlug);
+    return model ? pick(model.name, locale) : item.modelName;
+  }
 
   useEffect(() => setMounted(true), []);
 
@@ -51,14 +63,14 @@ export function CartClient({ catalog }: { catalog: PublicCatalog }) {
       if (!result.changed) continue;
       setConfiguration(item.id, result.config);
       if (result.removedAccessoryIds.length > 0) {
-        notices.push(`из «${item.modelName}» удалён более недоступный аксессуар`);
+        notices.push(t(CR['CR-016'], locale, { model: modelNameOf(item) }));
       }
       if (result.colorReset || result.assemblyReset || result.deliveryReset) {
-        notices.push(`в «${item.modelName}» обновлены недоступные параметры (цвет/сборка/доставка) на значения по умолчанию`);
+        notices.push(t(CR['CR-017'], locale, { model: modelNameOf(item) }));
       }
     }
     if (notices.length > 0) {
-      setReconcileNotice(`Конфигурация в корзине была обновлена: ${notices.join('; ')}.`);
+      setReconcileNotice(t(CR['CR-015'], locale, { list: notices.join('; ') }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted]);
@@ -68,7 +80,7 @@ export function CartClient({ catalog }: { catalog: PublicCatalog }) {
     stale.forEach((item) => {
       fetch('/api/pricing/calculate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: apiHeaders(locale),
         body: JSON.stringify(item.configuration),
       })
         .then((res) => res.json())
@@ -86,10 +98,10 @@ export function CartClient({ catalog }: { catalog: PublicCatalog }) {
             // what it safely could; a failure past that point is a real,
             // server-validated reason (shown verbatim) the customer can
             // act on (edit or remove the item).
-            setPriceErrors((prev) => ({ ...prev, [item.id]: data.message ?? 'Не удалось рассчитать цену' }));
+            setPriceErrors((prev) => ({ ...prev, [item.id]: data.message ?? t(ER['ER-015'], locale) }));
           }
         })
-        .catch(() => setPriceErrors((prev) => ({ ...prev, [item.id]: 'Не удалось связаться с сервером' })));
+        .catch(() => setPriceErrors((prev) => ({ ...prev, [item.id]: t(ER['ER-016'], locale) })));
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items.map((i) => `${i.id}:${i.priceSnapshot === null}`).join(',')]);
@@ -99,22 +111,24 @@ export function CartClient({ catalog }: { catalog: PublicCatalog }) {
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center gap-4 py-20 text-center">
-        <p className="text-lg text-steel">Ваша корзина пуста</p>
-        <LinkButton href="/configurator">Открыть конфигуратор</LinkButton>
+        <p className="text-lg text-steel">{t(CR['CR-002'], locale)}</p>
+        <LinkButton href={localizePath('/configurator', locale)}>{t(CR['CR-003'], locale)}</LinkButton>
       </div>
     );
   }
 
   const total = items.reduce((sum, item) => sum + (item.priceSnapshot?.breakdown.total ?? 0), 0);
   const allPriced = items.every((item) => item.priceSnapshot !== null);
-  // The server's own note for delivery that is not in the total (regional
+  // The server's note for delivery that is not in the total (regional
   // delivery is calculated individually) — shown so the total never reads as
-  // delivery-included.
-  const deliveryNotes = [...new Set(items.map((item) => item.priceSnapshot?.deliveryNote).filter(Boolean))];
+  // delivery-included. The server sets deliveryNote only for that case
+  // (ER-024); it is rendered in the page locale, so a snapshot priced on the
+  // other-language page never shows up in the wrong language.
+  const hasIndividualDelivery = items.some((item) => Boolean(item.priceSnapshot?.deliveryNote));
 
   function handleCheckout() {
     trackEvent('order_submitted', { stage: 'cart_to_checkout', items: items.length });
-    router.push('/order');
+    router.push(localizePath('/order', locale));
   }
 
   return (
@@ -127,6 +141,8 @@ export function CartClient({ catalog }: { catalog: PublicCatalog }) {
           <CartRow
             key={item.id}
             item={item}
+            modelName={modelNameOf(item)}
+            locale={locale}
             color={catalog.colors.find((c) => c.id === item.configuration.colorId)}
             error={priceErrors[item.id]}
             onRemove={() => removeItem(item.id)}
@@ -138,17 +154,15 @@ export function CartClient({ catalog }: { catalog: PublicCatalog }) {
 
       <aside className="flex flex-col gap-4 border border-line bg-surface p-5 lg:sticky lg:top-20" data-fab-avoid>
         <div>
-          <div className="tech-label">Итого по корзине</div>
+          <div className="tech-label">{t(CR['CR-004'], locale)}</div>
           <PriceTag value={total} size="xl" />
-          {deliveryNotes.map((note) => (
-            <p key={note} className="mt-1 text-xs text-steel">{note}</p>
-          ))}
+          {hasIndividualDelivery && <p className="mt-1 text-xs text-steel">{t(ER['ER-024'], locale)}</p>}
         </div>
         <Button onClick={handleCheckout} disabled={!allPriced} size="lg">
-          Оформить заказ
+          {t(CF['CF-067'], locale)}
         </Button>
-        <LinkButton href="/configurator" variant="outline">
-          Добавить ещё стеллаж
+        <LinkButton href={localizePath('/configurator', locale)} variant="outline">
+          {t(CR['CR-005'], locale)}
         </LinkButton>
       </aside>
     </div>
@@ -157,6 +171,8 @@ export function CartClient({ catalog }: { catalog: PublicCatalog }) {
 
 function CartRow({
   item,
+  modelName,
+  locale,
   color,
   error,
   onRemove,
@@ -164,46 +180,48 @@ function CartRow({
   onQuantityChange,
 }: {
   item: CartItem;
+  modelName: string;
+  locale: Locale;
   color?: ColorOption;
   error?: string;
   onRemove: () => void;
   onDuplicate: () => void;
   onQuantityChange: (quantity: number) => void;
 }) {
-  const editHref = `/configurator?${configurationToShareQuery(item.configuration)}`;
+  const editHref = localizePath(`/configurator?${configurationToShareQuery(item.configuration)}`, locale);
 
   return (
     <div className="flex flex-col gap-4 border border-line p-4 sm:flex-row">
       <ShelvingPreview config={item.configuration} color={color} className="aspect-[4/3] w-full sm:w-56 shrink-0" />
       <div className="flex flex-1 flex-col gap-2">
         <div className="flex items-start justify-between gap-2">
-          <h3 className="font-display text-xl">{item.modelName}</h3>
+          <h3 className="font-display text-xl">{modelName}</h3>
           {item.priceSnapshot ? (
             <PriceTag value={item.priceSnapshot.breakdown.total} size="md" />
           ) : error ? (
-            <span className="tech-label text-danger">Ошибка</span>
+            <span className="tech-label text-danger">{t(CR['CR-006'], locale)}</span>
           ) : (
-            <span className="tech-label">Пересчёт…</span>
+            <span className="tech-label">{t(CR['CR-007'], locale)}</span>
           )}
         </div>
         {error && (
           <p className="border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
-            {error} Измените или удалите эту позицию.
+            {error} {t(CR['CR-008'], locale)}
           </p>
         )}
         <div className="tech-label flex flex-wrap gap-x-3 gap-y-1">
           <span>
             {item.configuration.height}×{item.configuration.sections.map((s) => s.width).join('+')}×
-            {item.configuration.depth} мм
+            {item.configuration.depth} {t(G['G-008'], locale)}
           </span>
-          <span>{shelvesLabel(item.configuration.shelves)}</span>
-          <span>{item.configuration.sections.length} секц.</span>
-          <span>{item.configuration.loadCapacity} кг/полка</span>
+          <span>{shelvesLabel(item.configuration.shelves, locale)}</span>
+          <span>{t(CR['CR-009'], locale, { N: item.configuration.sections.length })}</span>
+          <span>{t(CT['CT-024'], locale, { N: item.configuration.loadCapacity })}</span>
         </div>
 
         <div className="mt-auto flex flex-wrap items-center gap-3 pt-2">
           <label className="flex items-center gap-2 text-sm">
-            Кол-во:
+            {t(CR['CR-010'], locale)}
             <input
               type="number"
               min={1}
@@ -214,17 +232,17 @@ function CartRow({
             />
           </label>
           <Link href={editHref} className="text-sm text-blueprint hover:underline">
-            Изменить
+            {t(CR['CR-011'], locale)}
           </Link>
           <button type="button" onClick={onDuplicate} className="text-sm text-steel hover:text-foreground">
-            Дублировать
+            {t(CR['CR-012'], locale)}
           </button>
           <button type="button" onClick={onRemove} className="text-sm text-danger hover:underline">
-            Удалить
+            {t(CR['CR-013'], locale)}
           </button>
         </div>
         {item.priceSnapshot && (
-          <p className="mono text-xs text-steel">{formatPrice(item.priceSnapshot.breakdown.unitTotal)} / шт.</p>
+          <p className="mono text-xs text-steel">{t(CR['CR-014'], locale, { price: formatPrice(item.priceSnapshot.breakdown.unitTotal) })}</p>
         )}
       </div>
     </div>

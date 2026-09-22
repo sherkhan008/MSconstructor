@@ -10,7 +10,7 @@ import { test, expect } from './helpers/test';
  * against whatever the catalog currently advertises.
  */
 
-const CARD = 'section:has(h2:text("Популярные конфигурации")) >> div:has(> a[href^="/catalog/"]):has(h3)';
+const CARD = 'section:has(h2:text("Популярные конфигурации")) >> div:has(> a[href*="/catalog/"]):has(h3)';
 
 function parseDimensions(title: string) {
   const match = title.match(/(\d+)×(\d+)×(\d+),\s*(\d+)\s*(?:полки|полок|полка)/);
@@ -19,7 +19,7 @@ function parseDimensions(title: string) {
 }
 
 test('shows exactly three MS Standard configurations at depths 300, 400 and 600', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/ru');
   const titles = await page
     .locator('section:has(h2:text("Популярные конфигурации")) h3')
     .allTextContents();
@@ -36,14 +36,14 @@ test('shows exactly three MS Standard configurations at depths 300, 400 and 600'
 });
 
 test('every card states "4 полки" in its specification line', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/ru');
   const specs = page.locator('section:has(h2:text("Популярные конфигурации")) .tech-label').filter({ hasText: 'полки' });
   await expect(specs).toHaveCount(3);
   for (const text of await specs.allTextContents()) expect(text).toContain('4 полки');
 });
 
 test('every card shows a drawing of its own rack, not the sample-image placeholder', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/ru');
   const section = page.locator('section:has(h2:text("Популярные конфигурации"))');
 
   // One inline SVG drawing per card, and no catalog placeholder image left.
@@ -59,7 +59,7 @@ test('every card shows a drawing of its own rack, not the sample-image placehold
 });
 
 test('every card shows a real price from the server pricing engine', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/ru');
   const prices = await page
     .locator('section:has(h2:text("Популярные конфигурации")) .mono')
     .filter({ hasText: '₸' })
@@ -75,7 +75,7 @@ test('every card shows a real price from the server pricing engine', async ({ pa
 
 for (const [index, depth] of [300, 400, 600].entries()) {
   test(`"Настроить" on the ${depth}mm card opens the configurator with that exact configuration`, async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/ru');
     const card = page.locator(CARD).nth(index);
     const dims = parseDimensions((await card.locator('h3').textContent()) ?? '');
     expect(dims.depth).toBe(String(depth));
@@ -95,7 +95,7 @@ for (const [index, depth] of [300, 400, 600].entries()) {
 test('the homepage never scrolls horizontally, from 320px to 1920px', async ({ page }) => {
   for (const width of [320, 375, 768, 1024, 1440, 1920]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.goto('/');
+    await page.goto('/ru');
     const { scrollWidth, clientWidth } = await page.evaluate(() => ({
       scrollWidth: document.documentElement.scrollWidth,
       clientWidth: document.documentElement.clientWidth,
@@ -112,7 +112,7 @@ test('the homepage never scrolls horizontally, from 320px to 1920px', async ({ p
 for (const width of [320, 375, 390, 430, 768, 1440]) {
   test(`the WhatsApp button never covers an action at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 800 });
-    await page.goto('/');
+    await page.goto('/ru');
 
     const pageHeight = await page.evaluate(() => document.body.scrollHeight);
     for (let offset = 0; offset < pageHeight; offset += 200) {
@@ -142,7 +142,7 @@ for (const width of [320, 375, 390, 430, 768, 1440]) {
 
 test('the WhatsApp button stays reachable where it covers nothing', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 800 });
-  await page.goto('/');
+  await page.goto('/ru');
   // The contacts section has a link with the same accessible name, so the
   // floating button is addressed by its own attribute.
   const fab = page.locator('a[aria-label="Написать в WhatsApp"].fixed');
@@ -152,7 +152,7 @@ test('the WhatsApp button stays reachable where it covers nothing', async ({ pag
 });
 
 test('the MS Standard feature panel shows its range specs and both CTAs', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/ru');
   const panel = page.locator('section:has(h2:text("Категории стеллажей"))');
 
   await expect(panel.getByRole('heading', { name: 'MS Стандарт', exact: true })).toBeVisible();
@@ -161,15 +161,15 @@ test('the MS Standard feature panel shows its range specs and both CTAs', async 
   }
   await expect(panel.getByRole('link', { name: 'Настроить стеллаж' })).toHaveAttribute(
     'href',
-    '/configurator?model=ms-standard',
+    '/ru/configurator?model=ms-standard',
   );
-  await expect(panel.getByRole('link', { name: 'Смотреть модели' })).toHaveAttribute('href', '/catalog/ms-standard');
+  await expect(panel.getByRole('link', { name: 'Смотреть модели' })).toHaveAttribute('href', '/ru/catalog/ms-standard');
   // The panel draws a real configuration instead of a placeholder photo.
   await expect(panel.locator('svg').first()).toBeVisible();
 });
 
 test('"В корзину" adds that card\'s exact configuration to the cart', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/ru');
   const card = page.locator(CARD).nth(2);
   const dims = parseDimensions((await card.locator('h3').textContent()) ?? '');
   expect(dims.depth).toBe('600');
@@ -177,7 +177,7 @@ test('"В корзину" adds that card\'s exact configuration to the cart', as
   await card.getByRole('button', { name: 'В корзину' }).click();
   await expect(card.getByRole('button', { name: 'Добавлено ✓' })).toBeVisible({ timeout: 15_000 });
 
-  await page.goto('/cart');
+  await page.goto('/ru/cart');
   const line = page.locator('main').getByText(
     `${dims.height}×${dims.width}×${dims.depth} мм`,
     { exact: false },

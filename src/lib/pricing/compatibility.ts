@@ -2,41 +2,49 @@ import type { Catalog } from '@/lib/data/repository';
 import { findAccessory, findAssembly, findColor, findDelivery, findModel } from '@/lib/data/repository';
 import type { CompatibilityIssue, ShelvingConfiguration } from '@/lib/types/domain';
 import { isValidMsStandardConfiguration } from './ms-standard-compatibility';
+import type { Locale } from '@/lib/i18n/locales';
+import { pick, t } from '@/lib/i18n/format';
+import { ER } from '@/lib/i18n/strings';
 
 /**
  * Server-side compatibility validation. The configurator UI disables
  * incompatible options proactively, but this is the authoritative check —
  * every price calculation, cart addition and order submission runs through
  * it again, because client state can never be trusted.
+ *
+ * `locale` only selects the language of the customer-facing messages
+ * (owner-reviewed CSV rows ER-035…ER-057); every rule is locale-independent.
  */
 export function validateCompatibility(
   config: ShelvingConfiguration,
   catalog: Catalog,
+  locale: Locale = 'ru',
 ): CompatibilityIssue[] {
   const issues: CompatibilityIssue[] = [];
 
   const model = findModel(catalog, config.modelSlug);
   if (!model) {
-    issues.push({ field: 'modelSlug', message: 'Выбранная модель недоступна' });
+    issues.push({ field: 'modelSlug', message: t(ER['ER-035'], locale) });
     return issues;
   }
+  const modelName = pick(model.name, locale);
 
   // The GLOBAL dimension row must exist and be active regardless of model —
   // an admin deactivating a HeightOption/WidthOption/DepthOption row blocks
   // it everywhere, independent of whichever model-specific rules run below.
   const heightOption = catalog.heights.find((h) => h.value === config.height && h.active);
   if (!heightOption) {
-    issues.push({ field: 'height', message: `Высота ${config.height} мм недоступна` });
+    issues.push({ field: 'height', message: t(ER['ER-036'], locale, { H: config.height }) });
   }
   for (const section of config.sections) {
     const widthOption = catalog.widths.find((w) => w.value === section.width && w.active);
     if (!widthOption) {
-      issues.push({ field: 'sections', message: `Ширина ${section.width} мм недоступна` });
+      issues.push({ field: 'sections', message: t(ER['ER-037'], locale, { W: section.width }) });
     }
   }
   const depthOption = catalog.depths.find((d) => d.value === config.depth && d.active);
   if (!depthOption) {
-    issues.push({ field: 'depth', message: `Глубина ${config.depth} мм недоступна` });
+    issues.push({ field: 'depth', message: t(ER['ER-038'], locale, { D: config.depth }) });
   }
 
   if (model.slug === 'ms-standard') {
@@ -46,84 +54,84 @@ export function validateCompatibility(
     // express. Single source of truth shared with the customer UI's
     // dimension selects, width/height drag allowedValues, and editable-state
     // normalization — see ms-standard-compatibility.ts.
-    for (const issue of isValidMsStandardConfiguration(config)) {
+    for (const issue of isValidMsStandardConfiguration(config, locale)) {
       issues.push({ field: issue.field, message: issue.message });
     }
   } else {
     // Every other model still uses its own flat per-model lists — no
     // cross-dimensional rules exist for them today.
     if (!model.heights.includes(config.height)) {
-      issues.push({ field: 'height', message: `Высота ${config.height} мм недоступна для модели «${model.name.ru}»` });
+      issues.push({ field: 'height', message: t(ER['ER-039'], locale, { H: config.height, model: modelName }) });
     }
     for (const section of config.sections) {
       if (!model.widths.includes(section.width)) {
         issues.push({
           field: 'sections',
-          message: `Ширина ${section.width} мм недоступна для модели «${model.name.ru}»`,
+          message: t(ER['ER-040'], locale, { W: section.width, model: modelName }),
         });
       }
     }
     if (!model.depths.includes(config.depth)) {
-      issues.push({ field: 'depth', message: `Глубина ${config.depth} мм недоступна для модели «${model.name.ru}»` });
+      issues.push({ field: 'depth', message: t(ER['ER-041'], locale, { D: config.depth, model: modelName }) });
     }
     if (config.shelves < model.minShelves || config.shelves > model.maxShelves) {
       issues.push({
         field: 'shelves',
-        message: `Число полок должно быть от ${model.minShelves} до ${model.maxShelves}`,
+        message: t(ER['ER-042'], locale, { min: model.minShelves, max: model.maxShelves }),
       });
     }
   }
 
   if (!model.shelfTypes.includes(config.shelfType)) {
-    issues.push({ field: 'shelfType', message: `Тип полки недоступен для модели «${model.name.ru}»` });
+    issues.push({ field: 'shelfType', message: t(ER['ER-043'], locale, { model: modelName }) });
   }
 
   const loadOption = catalog.loadCapacities.find((l) => l.value === config.loadCapacity && l.active);
   if (!loadOption || !model.loadCapacities.includes(config.loadCapacity)) {
-    issues.push({ field: 'loadCapacity', message: `Нагрузка ${config.loadCapacity} кг недоступна для модели «${model.name.ru}»` });
+    issues.push({ field: 'loadCapacity', message: t(ER['ER-044'], locale, { N: config.loadCapacity, model: modelName }) });
   } else {
     if (loadOption.models.length > 0 && !loadOption.models.includes(model.slug)) {
-      issues.push({ field: 'loadCapacity', message: `Нагрузка ${config.loadCapacity} кг недоступна для модели «${model.name.ru}»` });
+      issues.push({ field: 'loadCapacity', message: t(ER['ER-044'], locale, { N: config.loadCapacity, model: modelName }) });
     }
     if (config.sections.some((s) => s.width > loadOption.maxWidth)) {
       issues.push({
         field: 'loadCapacity',
-        message: `Нагрузка ${config.loadCapacity} кг доступна только при ширине секции до ${loadOption.maxWidth} мм`,
+        message: t(ER['ER-045'], locale, { N: config.loadCapacity, W: loadOption.maxWidth }),
       });
     }
     if (config.depth > loadOption.maxDepth) {
       issues.push({
         field: 'loadCapacity',
-        message: `Нагрузка ${config.loadCapacity} кг доступна только при глубине до ${loadOption.maxDepth} мм`,
+        message: t(ER['ER-046'], locale, { N: config.loadCapacity, D: loadOption.maxDepth }),
       });
     }
   }
 
   const color = findColor(catalog, config.colorId);
   if (!color) {
-    issues.push({ field: 'colorId', message: 'Выбранный цвет недоступен' });
+    issues.push({ field: 'colorId', message: t(ER['ER-047'], locale) });
   }
 
   const assembly = findAssembly(catalog, config.assemblyId);
   if (!assembly) {
-    issues.push({ field: 'assemblyId', message: 'Выбранный вариант сборки недоступен' });
+    issues.push({ field: 'assemblyId', message: t(ER['ER-048'], locale) });
   }
 
   const delivery = findDelivery(catalog, config.deliveryId);
   if (!delivery) {
-    issues.push({ field: 'deliveryId', message: 'Выбранный способ доставки недоступен' });
+    issues.push({ field: 'deliveryId', message: t(ER['ER-049'], locale) });
   }
 
   for (const selection of config.accessories) {
     const accessory = findAccessory(catalog, selection.accessoryId);
     if (!accessory) {
-      issues.push({ field: 'accessories', message: 'Один из выбранных аксессуаров недоступен' });
+      issues.push({ field: 'accessories', message: t(ER['ER-050'], locale) });
       continue;
     }
     if (accessory.models.length > 0 && !accessory.models.includes(model.slug)) {
       issues.push({
         field: 'accessories',
-        message: `Аксессуар «${accessory.name.ru}» недоступен для модели «${model.name.ru}»`,
+        message: t(ER['ER-051'], locale, { accessory: pick(accessory.name, locale), model: modelName }),
       });
     }
     if (
@@ -132,7 +140,7 @@ export function validateCompatibility(
     ) {
       issues.push({
         field: 'accessories',
-        message: `Максимальное количество «${accessory.name.ru}» — ${accessory.maxQuantityPerSection} на секцию`,
+        message: t(ER['ER-052'], locale, { accessory: pick(accessory.name, locale), N: accessory.maxQuantityPerSection }),
       });
     }
     // The real product's cross brace only fits a 1000mm section — this is a
@@ -145,7 +153,7 @@ export function validateCompatibility(
       if (!section || section.width !== 1000) {
         issues.push({
           field: 'accessories',
-          message: 'Крестовина жёсткости доступна только для секции шириной 1000 мм',
+          message: t(ER['ER-053'], locale),
         });
       }
     }

@@ -1,19 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import HomePage from '@/app/page';
-import CatalogPage from '@/app/catalog/page';
-import ModelPage from '@/app/catalog/[model]/page';
-import ConfiguratorPage from '@/app/configurator/page';
+import HomePage from '@/app/[locale]/page';
+import CatalogPage from '@/app/[locale]/catalog/page';
+import ModelPage from '@/app/[locale]/catalog/[model]/page';
+import ConfiguratorPage from '@/app/[locale]/configurator/page';
+import { LOCALES } from '@/lib/i18n/locales';
+import { localeProps, renderInLocale } from './helpers/public-page';
 
-describe('public production visuals', () => {
+describe.each(LOCALES)('public production visuals (%s)', (locale) => {
   it.each([
-    ['homepage', () => HomePage()],
-    ['catalog', () => CatalogPage({ searchParams: Promise.resolve({}) })],
-    ['model', () => ModelPage({ params: Promise.resolve({ model: 'ms-standard' }) })],
+    ['homepage', () => HomePage(localeProps(locale))],
+    ['catalog', () => CatalogPage(localeProps(locale))],
+    ['model', () => ModelPage(localeProps(locale, { model: 'ms-standard' }))],
   ] as const)('%s renders real racks and no embedded sample image', async (_, render) => {
-    const html = renderToStaticMarkup(await render());
+    const html = await renderInLocale(await render(), locale);
     expect(html).toContain('<svg');
     expect(html).not.toMatch(/SAMPLE IMAGE/i);
     // Text checks alone miss labels embedded inside external SVGs.
@@ -39,9 +40,11 @@ describe('public production visuals', () => {
 
 describe('configurator launch visibility', () => {
   it.each(['ms-strong', 'archive-ms', 'unknown'])('rejects %s before rendering a configurator', async model => {
-    await expect(ConfiguratorPage({ searchParams: Promise.resolve({ model }) })).rejects.toMatchObject({ digest: 'NEXT_HTTP_ERROR_FALLBACK;404' });
+    await expect(ConfiguratorPage(localeProps('kk', {}, { model }))).rejects.toMatchObject({ digest: 'NEXT_HTTP_ERROR_FALLBACK;404' });
+    await expect(ConfiguratorPage(localeProps('ru', {}, { model }))).rejects.toMatchObject({ digest: 'NEXT_HTTP_ERROR_FALLBACK;404' });
   });
   it.each([{}, { model: 'ms-standard' }])('accepts the public entry %j', async params => {
-    expect(await ConfiguratorPage({ searchParams: Promise.resolve(params) })).toBeDefined();
+    expect(await ConfiguratorPage(localeProps('kk', {}, params))).toBeDefined();
+    expect(await ConfiguratorPage(localeProps('ru', {}, params))).toBeDefined();
   });
 });

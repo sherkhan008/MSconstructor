@@ -18,7 +18,7 @@ async function openAdvancedSettings(page: import('@playwright/test').Page) {
 }
 
 test('the customer configurator has no shelf-type selector', async ({ page }) => {
-  await page.goto('/configurator');
+  await page.goto('/ru/configurator');
   await openAdvancedSettings(page);
   const bodyText = await page.textContent('body');
   expect(bodyText).not.toContain('Тип полки');
@@ -27,7 +27,7 @@ test('the customer configurator has no shelf-type selector', async ({ page }) =>
 });
 
 test('the five additional rack options are visible, real, and survive a reload', async ({ page }) => {
-  await page.goto('/configurator');
+  await page.goto('/ru/configurator');
   await openAdvancedSettings(page);
 
   await expect(page.getByText('Регулируемая по высоте опора')).toBeVisible();
@@ -64,7 +64,7 @@ test('the five additional rack options are visible, real, and survive a reload',
 });
 
 test('cross brace is only selectable for a 1000mm section, and enforced server-side too', async ({ page }) => {
-  await page.goto('/configurator');
+  await page.goto('/ru/configurator');
   await openAdvancedSettings(page);
 
   const crossBraceCheckbox = page.getByRole('checkbox', { name: /^Крестовина жесткости\./ });
@@ -107,7 +107,7 @@ test('cross brace is only selectable for a 1000mm section, and enforced server-s
 });
 
 test('a legacy persisted non-STANDARD shelf type normalizes to STANDARD without a pricing error', async ({ page }) => {
-  await page.goto('/configurator');
+  await page.goto('/ru/configurator');
   await page.evaluate(() => {
     localStorage.setItem(
       'ms-shelving-configurator',

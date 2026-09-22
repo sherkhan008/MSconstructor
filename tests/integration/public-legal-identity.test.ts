@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { localeProps, renderInLocale } from './helpers/public-page';
 import type { site as Site } from '@/lib/config/site';
 
 /**
@@ -44,32 +45,33 @@ const CONFIDENTIAL = ['KZ31722S000011028184', 'CASPKZKA', 'Kaspi Bank', 'SELLER_
  * developer's own .env.
  */
 const PAGE_MODULES = {
-  homepage: '@/app/page',
-  contacts: '@/app/contacts/page',
-  privacy: '@/app/privacy/page',
-  terms: '@/app/terms/page',
+  homepage: '@/app/[locale]/page',
+  contacts: '@/app/[locale]/contacts/page',
+  privacy: '@/app/[locale]/privacy/page',
+  terms: '@/app/[locale]/terms/page',
 } as const;
 
 type PageName = keyof typeof PAGE_MODULES | 'footer';
 const PAGES: readonly PageName[] = ['homepage', 'contacts', 'privacy', 'terms', 'footer'];
 
 let site: typeof Site;
-let organizationJsonLd: () => Record<string, unknown>;
+let organizationJsonLd: (locale: 'kk' | 'ru') => Record<string, unknown>;
 
 beforeAll(async () => {
   vi.resetModules();
   vi.stubEnv('NEXT_PUBLIC_WHATSAPP_NUMBER', '+7 707 107 8235');
   site = (await import('@/lib/config/site')).site;
-  organizationJsonLd = (await import('@/lib/seo')).organizationJsonLd as typeof organizationJsonLd;
+  organizationJsonLd = (await import('@/lib/seo')).organizationJsonLd as unknown as typeof organizationJsonLd;
 });
 
 async function markup(page: PageName): Promise<string> {
   if (page === 'footer') {
     const { Footer } = await import('@/components/layout/Footer');
-    return renderToStaticMarkup(Footer());
+    return renderToStaticMarkup(Footer({ locale: 'ru' }));
   }
   const mod = await import(/* @vite-ignore */ PAGE_MODULES[page]);
-  return renderToStaticMarkup((await mod.default({})) as React.ReactElement);
+  // Russian pages: the legal-identity assertions below are written in Russian.
+  return await renderInLocale((await mod.default(localeProps('ru'))) as React.ReactElement, 'ru');
 }
 
 describe('no placeholder seller identity survives on a public page', () => {
@@ -156,7 +158,7 @@ describe('banking details never reach a public page', () => {
 
 describe('Organization structured data', () => {
   it('identifies the legal seller, keeps the brand as alternateName', () => {
-    const ld = organizationJsonLd();
+    const ld = organizationJsonLd('ru');
     expect(ld.name).toBe('ИП "ГИДРОПРОЕКТ"');
     expect(ld.alternateName).toBe('MS Стеллажи');
     expect(ld.taxID).toBe('970115300155');
@@ -169,7 +171,7 @@ describe('Organization structured data', () => {
   });
 
   it('asserts nothing the seller never supplied, and no banking data', () => {
-    const json = JSON.stringify(organizationJsonLd());
+    const json = JSON.stringify([organizationJsonLd('ru'), organizationJsonLd('kk')]);
     for (const placeholder of [...PLACEHOLDERS, ...CONFIDENTIAL, '000000000000']) expect(json).not.toContain(placeholder);
     // No fabricated telephone, postal code, coordinates or social profiles.
     for (const key of ['telephone', 'postalCode', 'geo', 'sameAs']) expect(json).not.toContain(key);

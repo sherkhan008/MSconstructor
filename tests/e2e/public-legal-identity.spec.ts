@@ -12,7 +12,8 @@ import { test, expect } from './helpers/test';
  * must never leave the server.
  */
 
-const ROUTES = ['/', '/contacts', '/privacy', '/terms', '/catalog', '/delivery'];
+// Both public languages carry the same legal identity.
+const ROUTES = ['/', '/contacts', '/privacy', '/terms', '/catalog', '/delivery'].flatMap((r) => [r, r === '/' ? '/ru' : `/ru${r}`]);
 
 const PLACEHOLDERS = [
   'ТОО «MS Стеллаж Казахстан»',
@@ -40,7 +41,7 @@ for (const route of ROUTES) {
 }
 
 test('the public offer identifies the real legal seller', async ({ page }) => {
-  await page.goto('/terms');
+  await page.goto('/ru/terms');
   const text = await page.locator('main').innerText();
   expect(text).toContain('ИП "ГИДРОПРОЕКТ"');
   expect(text).toContain('970115300155');
@@ -49,7 +50,7 @@ test('the public offer identifies the real legal seller', async ({ page }) => {
 });
 
 test('the footer separates the brand from the legal seller', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/ru');
   const footer = page.locator('footer');
   await expect(footer).toContainText('MS Стеллажи');
   await expect(footer).toContainText('ИП "ГИДРОПРОЕКТ"');
@@ -57,7 +58,7 @@ test('the footer separates the brand from the legal seller', async ({ page }) =>
 });
 
 test('WhatsApp remains the public contact channel, on the real number', async ({ page }) => {
-  await page.goto('/contacts');
+  await page.goto('/ru/contacts');
   // The header's WhatsApp action is an icon with an aria-label only; the
   // contact details in `main` are where the number itself is readable.
   const link = page.locator('main a[href^="https://wa.me/77071078235"]').first();
@@ -71,7 +72,7 @@ test('WhatsApp remains the public contact channel, on the real number', async ({
 });
 
 test('Organization structured data names the legal seller and asserts nothing invented', async ({ page }) => {
-  await page.goto('/contacts');
+  await page.goto('/ru/contacts');
   const raw = await page.locator('script[type="application/ld+json"]').first().textContent();
   const ld = JSON.parse(raw!);
   expect(ld).toMatchObject({
@@ -86,7 +87,7 @@ test('Organization structured data names the legal seller and asserts nothing in
 });
 
 test('the client bundle carries no seller bank details', async ({ page, request }) => {
-  await page.goto('/');
+  await page.goto('/ru');
   const scripts = await page.locator('script[src]').evaluateAll(nodes => nodes.map(n => (n as HTMLScriptElement).src));
   expect(scripts.length).toBeGreaterThan(0);
   for (const src of scripts) {

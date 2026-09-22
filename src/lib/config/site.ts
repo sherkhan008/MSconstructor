@@ -1,4 +1,6 @@
 import { publicEnv } from '@/lib/env';
+import type { Locale } from '@/lib/i18n/locales';
+import { F, G, H } from '@/lib/i18n/strings';
 
 /**
  * Company / site level configuration.
@@ -47,15 +49,19 @@ function formatKzNumber(digits: string): string {
   return m ? `+7 ${m[1]} ${m[2]} ${m[3]}${m[4]}` : `+${digits}`;
 }
 
+/**
+ * Site identity. The text fields hold the Russian copy (the admin panel and
+ * order documents are Russian-only); public pages read the per-locale copy
+ * through siteCopy() below. Both come from the owner-reviewed CSV
+ * (docs/localization/public-strings.csv, G-001…G-007).
+ */
 export const site = {
   /** Brand, not the seller — see the note above. */
-  name: 'MS Стеллажи',
-  /** Legal seller. Appears only in legal/реквизиты blocks. */
-  legalName: 'ИП "ГИДРОПРОЕКТ"',
-  tagline: 'Модульные металлические стеллажи',
-  shortDescription:
-    'Модульные металлические стеллажи MS для склада, архива, гаража и офиса. Конфигуратор с мгновенным расчётом цены. Доставка по Казахстану.',
-  locale: 'ru_KZ',
+  name: G['G-001'].ru,
+  /** Legal seller. Appears only in legal/реквизиты blocks. Never translated. */
+  legalName: G['G-002'].ru,
+  tagline: G['G-003'].ru,
+  shortDescription: G['G-004'].ru,
   country: 'KZ',
   currency: 'KZT',
   currencySymbol: '₸',
@@ -63,9 +69,9 @@ export const site = {
   whatsapp: whatsappNumber,
   whatsappDisplay: formatKzNumber(whatsappNumber),
   email: 'serdalybakrambek2@gmail.com',
-  address: 'г. Астана, ул. А. Иманова, 19',
-  city: 'Астана',
-  workingHours: 'Пн–Пт 09:00–18:00',
+  address: G['G-005'].ru,
+  city: G['G-006'].ru,
+  workingHours: G['G-007'].ru,
   bin: '970115300155',
 
   // No map is rendered anywhere today: /, /contacts show the verified
@@ -80,19 +86,36 @@ export const site = {
   mapEmbedUrl: '',
 } as const;
 
+/** Customer-facing site copy in `locale` (brand, slogan, address, hours). */
+export function siteCopy(locale: Locale) {
+  return {
+    name: G['G-001'][locale],
+    tagline: G['G-003'][locale],
+    shortDescription: G['G-004'][locale],
+    address: G['G-005'][locale],
+    city: G['G-006'][locale],
+    workingHours: G['G-007'][locale],
+  };
+}
+
 export const NAV_LINKS = [
-  { href: '/catalog', labelRu: 'Каталог', labelKk: 'Каталог' },
-  { href: '/configurator', labelRu: 'Конфигуратор', labelKk: 'Конфигуратор' },
-  { href: '/delivery', labelRu: 'Доставка и оплата', labelKk: 'Жеткізу және төлем' },
-  { href: '/contacts', labelRu: 'Контакты', labelKk: 'Байланыс' },
+  { href: '/catalog', labelRu: H['H-002'].ru, labelKk: H['H-002'].kk },
+  { href: '/configurator', labelRu: H['H-003'].ru, labelKk: H['H-003'].kk },
+  { href: '/delivery', labelRu: H['H-004'].ru, labelKk: H['H-004'].kk },
+  { href: '/contacts', labelRu: H['H-005'].ru, labelKk: H['H-005'].kk },
 ] as const;
 
 export const FOOTER_LINKS = [
-  { href: '/catalog', labelRu: 'Каталог стеллажей' },
-  { href: '/configurator', labelRu: 'Конфигуратор' },
-  { href: '/delivery', labelRu: 'Доставка' },
-  { href: '/payment', labelRu: 'Оплата' },
-  { href: '/contacts', labelRu: 'Контакты' },
-  { href: '/privacy', labelRu: 'Политика конфиденциальности' },
-  { href: '/terms', labelRu: 'Публичная оферта' },
+  { href: '/catalog', labelRu: F['F-004'].ru, labelKk: F['F-004'].kk },
+  { href: '/configurator', labelRu: H['H-003'].ru, labelKk: H['H-003'].kk },
+  { href: '/delivery', labelRu: F['F-005'].ru, labelKk: F['F-005'].kk },
+  { href: '/payment', labelRu: F['F-006'].ru, labelKk: F['F-006'].kk },
+  { href: '/contacts', labelRu: H['H-005'].ru, labelKk: H['H-005'].kk },
+  { href: '/privacy', labelRu: F['F-007'].ru, labelKk: F['F-007'].kk },
+  { href: '/terms', labelRu: F['F-008'].ru, labelKk: F['F-008'].kk },
 ] as const;
+
+/** A NAV_LINKS / FOOTER_LINKS label in `locale`. */
+export function linkLabel(link: { labelRu: string; labelKk: string }, locale: Locale): string {
+  return locale === 'kk' ? link.labelKk : link.labelRu;
+}

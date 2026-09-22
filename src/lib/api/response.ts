@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { ZodIssue } from 'zod';
+import type { Locale } from '@/lib/i18n/locales';
+import { t } from '@/lib/i18n/format';
+import { ER } from '@/lib/i18n/strings';
 
 /**
  * Consistent API response envelope (spec §48). Every route returns either
@@ -88,12 +91,12 @@ export function describeErrorForLog(error: unknown): string {
   return `${name}${safeCode}`;
 }
 
-export function internalError(error: unknown) {
+export function internalError(error: unknown, locale: Locale = 'ru') {
   if (process.env.NODE_ENV !== 'production') {
 
     console.error(error);
   } else {
     console.error(`[api] internal error: ${describeErrorForLog(error)}`);
   }
-  return apiError('INTERNAL_ERROR', 'Внутренняя ошибка сервера. Попробуйте позже.', 500);
+  return apiError('INTERNAL_ERROR', t(ER['ER-007'], locale), 500);
 }

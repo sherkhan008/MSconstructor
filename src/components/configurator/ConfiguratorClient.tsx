@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { trackEvent } from '@/lib/analytics';
-import { parseConfigurationFromSearchParams } from '@/lib/configurator/url';
+import { configurationToShareQuery, parseConfigurationFromSearchParams } from '@/lib/configurator/url';
 import { DEFAULT_CONFIGURATION, useConfiguratorStore } from '@/store/configurator-store';
 import type { PublicCatalog } from '@/lib/data/public-catalog';
 import {
@@ -22,6 +22,10 @@ import { OrderSummaryBar } from './OrderSummaryBar';
 import { BomTable } from './BomTable';
 import { useLivePrice } from './useLivePrice';
 import type { DimensionAxis } from './resize/dimension-scale';
+import { t } from '@/lib/i18n/format';
+import { CF } from '@/lib/i18n/strings';
+import { useLocale } from '@/components/i18n/LocaleProvider';
+import { registerSwitchQuery } from '@/components/i18n/switch-query';
 
 type PreviewMode = 'front' | 'top';
 
@@ -40,6 +44,7 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
   const pricingError = useConfiguratorStore((s) => s.pricingError);
   const hydrated = useConfiguratorStore((s) => s.hydrated);
   const searchParams = useSearchParams();
+  const locale = useLocale();
   const appliedShareLink = useRef(false);
   const openedTracked = useRef(false);
 
@@ -49,6 +54,18 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
   const [previewMode, setPreviewMode] = useState<PreviewMode>('front');
 
   useLivePrice(config);
+
+  // A language switch carries the CURRENT configuration (share-link format),
+  // not this page's original query — edits are never written back to the URL.
+  const latestConfig = useRef(config);
+  latestConfig.current = config;
+  useEffect(
+    () =>
+      registerSwitchQuery(() =>
+        useConfiguratorStore.getState().hydrated ? `?${configurationToShareQuery(latestConfig.current)}` : window.location.search,
+      ),
+    [],
+  );
 
   useEffect(() => {
     if (appliedShareLink.current) return;
@@ -199,15 +216,15 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
     <div className="pb-56 lg:pb-28">
       <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-4 px-4 py-6 sm:px-6 lg:px-8">
         <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="font-display text-xl uppercase tracking-wide sm:text-2xl">Конфигуратор стеллажей МС Стандарт</h1>
-          <div className="inline-flex self-start border border-line" role="group" aria-label="Режим просмотра">
+          <h1 className="font-display text-xl uppercase tracking-wide sm:text-2xl">{t(CF['CF-002'], locale)}</h1>
+          <div className="inline-flex self-start border border-line" role="group" aria-label={t(CF['CF-003'], locale)}>
             <button
               type="button"
               aria-pressed={previewMode === 'front'}
               onClick={() => setPreviewMode('front')}
               className={`font-display px-3 py-1.5 text-xs uppercase tracking-wide transition-colors ${previewMode === 'front' ? 'bg-foreground text-background' : 'hover:bg-surface-muted'}`}
             >
-              Вид спереди
+              {t(CF['CF-004'], locale)}
             </button>
             <button
               type="button"
@@ -215,7 +232,7 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
               onClick={() => setPreviewMode('top')}
               className={`font-display border-l border-line px-3 py-1.5 text-xs uppercase tracking-wide transition-colors ${previewMode === 'top' ? 'bg-foreground text-background' : 'hover:bg-surface-muted'}`}
             >
-              Вид сверху
+              {t(CF['CF-005'], locale)}
             </button>
           </div>
         </header>

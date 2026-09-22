@@ -12,7 +12,7 @@ test('switching between front and top view causes zero pricing requests and pres
     if (req.url().includes('/api/pricing/calculate')) pricingRequests.push(req.url());
   });
 
-  await page.goto('/configurator');
+  await page.goto('/ru/configurator');
 
   // Default is front view: front-view drag handles are present.
   await expect(page.locator('button[data-axis="height"]')).toBeVisible();
