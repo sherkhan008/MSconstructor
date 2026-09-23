@@ -38,51 +38,70 @@ export default async function OrderSuccessPage({
   const order = number ? await getOrderByNumber(number) : undefined;
 
   return (
-    <Container className="flex flex-col items-center gap-6 py-16 text-center">
-      <div className="grid h-16 w-16 place-items-center border-2 border-success text-3xl text-success">✓</div>
-      <h1 className="font-display text-4xl text-success">{t(OS['OS-001'], locale)}</h1>
+    <div className="border-b border-line bg-surface">
+      <Container className="pb-10 pt-12 sm:pb-14 sm:pt-16">
+        <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
+          <div className="grid h-14 w-14 place-items-center border-2 border-success text-2xl text-success sm:h-16 sm:w-16 sm:text-3xl">✓</div>
+          <h1 className="mt-6 font-display text-[2rem] text-success sm:text-4xl lg:text-5xl">{t(OS['OS-001'], locale)}</h1>
 
-      {number ? (
-        <p className="text-steel">
-          {t(OS['OS-002'], locale)} <span className="mono font-semibold text-foreground">{number}</span>
-        </p>
-      ) : (
-        <p className="text-steel">{t(OS['OS-003'], locale)}</p>
-      )}
+          {number ? (
+            <p className="mt-4 text-steel">
+              {t(OS['OS-002'], locale)}{' '}
+              <span className="mono inline-block whitespace-nowrap font-semibold text-foreground">{number}</span>
+            </p>
+          ) : (
+            <p className="mt-4 text-steel">{t(OS['OS-003'], locale)}</p>
+          )}
 
-      {order && (
-        <div className="w-full max-w-md border border-line p-5 text-left">
-          <div className="tech-label">{t(OS['OS-004'], locale)}</div>
-          <p className="mono text-2xl font-semibold">{formatPrice(order.grandTotal)}</p>
-          <div className="tech-label mt-3">{t(OS['OS-005'], locale)}</div>
-          <p>{t(ORDER_STATUS_LABEL[order.status] ?? OS['OS-007'], locale)}</p>
-          <div className="tech-label mt-3">{t(OS['OS-008'], locale)}</div>
-          <p>{paymentMethodLabel(order.paymentPreference, locale)}</p>
-          <div className="tech-label mt-3">{t(OS['OS-009'], locale)}</div>
-          <p>{order.items.length}</p>
+          {order && (
+            <dl className="mt-8 grid w-full grid-cols-1 border border-line border-t-2 border-t-success text-left sm:grid-cols-2">
+              <div className="border-b border-line p-4 sm:col-span-2 sm:p-5">
+                <dt className="text-sm text-steel">{t(OS['OS-004'], locale)}</dt>
+                <dd className="mono mt-1 text-2xl font-semibold sm:text-3xl">{formatPrice(order.grandTotal)}</dd>
+              </div>
+              <div className="border-b border-line p-4 sm:border-r sm:p-5">
+                <dt className="text-sm text-steel">{t(OS['OS-005'], locale)}</dt>
+                <dd className="mt-1 font-medium">{t(ORDER_STATUS_LABEL[order.status] ?? OS['OS-007'], locale)}</dd>
+              </div>
+              <div className="border-b border-line p-4 sm:p-5">
+                <dt className="text-sm text-steel">{t(OS['OS-009'], locale)}</dt>
+                <dd className="mono mt-1 font-medium">{order.items.length}</dd>
+              </div>
+              <div className="p-4 sm:col-span-2 sm:p-5">
+                <dt className="text-sm text-steel">{t(OS['OS-008'], locale)}</dt>
+                <dd className="mt-1 font-medium">{paymentMethodLabel(order.paymentPreference, locale)}</dd>
+              </div>
+            </dl>
+          )}
+
+          {/* Closing block: what happens next and every way onward. The
+              floating WhatsApp button steps aside for all of it, so it never
+              crowds the text above the actions. */}
+          <div className="flex w-full flex-col items-center pb-6" data-fab-avoid>
+            <p className="mt-6 max-w-md text-sm leading-relaxed text-steel">{t(OS['OS-010'], locale)}</p>
+
+            <div className="mt-8 flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-center sm:gap-3">
+              {number && (
+                <LinkButton
+                  href={whatsAppOrderUrl(number, order?.grandTotal, locale)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  variant="whatsapp"
+                  className="min-h-12 px-6"
+                >
+                  {t(OS['OS-011'], locale)}
+                </LinkButton>
+              )}
+              <LinkButton href={localizePath('/catalog', locale)} variant="outline" className="min-h-12 bg-surface px-6">
+                {t(OS['OS-012'], locale)}
+              </LinkButton>
+              <LinkButton href={localizePath('/', locale)} variant="ghost" className="min-h-12 px-6">
+                {t(OS['OS-013'], locale)}
+              </LinkButton>
+            </div>
+          </div>
         </div>
-      )}
-
-      <p className="max-w-md text-sm text-steel">{t(OS['OS-010'], locale)}</p>
-
-      <div className="flex flex-wrap justify-center gap-3">
-        {number && (
-          <LinkButton
-            href={whatsAppOrderUrl(number, order?.grandTotal, locale)}
-            target="_blank"
-            rel="noopener noreferrer"
-            variant="whatsapp"
-          >
-            {t(OS['OS-011'], locale)}
-          </LinkButton>
-        )}
-        <LinkButton href={localizePath('/catalog', locale)} variant="outline">
-          {t(OS['OS-012'], locale)}
-        </LinkButton>
-        <LinkButton href={localizePath('/', locale)} variant="ghost">
-          {t(OS['OS-013'], locale)}
-        </LinkButton>
-      </div>
-    </Container>
+      </Container>
+    </div>
   );
 }
