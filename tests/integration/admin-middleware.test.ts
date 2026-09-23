@@ -46,6 +46,27 @@ describe('admin route middleware', () => {
     expect(response.headers.get('location')).toBe('http://localhost/admin/orders');
   });
 
+  it('does not bounce a revoked-session visitor back to /admin/orders, which would loop forever', async () => {
+    // The Edge middleware cannot see revocation (src/lib/auth/revocation.ts
+    // needs the database), so the protected layout is what catches it and
+    // sends the visitor to LOGIN_PATH_SESSION_ENDED. If the middleware then
+    // redirected that cookie back to /admin/orders, the layout would redirect
+    // here again, and so on.
+    const { createSessionToken, LOGIN_PATH_SESSION_ENDED } = await import('@/lib/auth/session');
+    const token = await createSessionToken({ id: 'u1', email: 'a@b.com', name: 'A', role: 'ADMIN' });
+    const { middleware } = await import('@/middleware');
+    const response = await middleware(requestFor(LOGIN_PATH_SESSION_ENDED, token));
+    expect(response.headers.get('location')).toBeNull();
+  });
+
+  it('still redirects a live session away from /admin/login when the marker is not the expected one', async () => {
+    const { createSessionToken } = await import('@/lib/auth/session');
+    const token = await createSessionToken({ id: 'u1', email: 'a@b.com', name: 'A', role: 'ADMIN' });
+    const { middleware } = await import('@/middleware');
+    const response = await middleware(requestFor('/admin/login?session=whatever', token));
+    expect(response.headers.get('location')).toBe('http://localhost/admin/orders');
+  });
+
   it('rejects a tampered session cookie the same as no session at all', async () => {
     const { middleware } = await import('@/middleware');
     const response = await middleware(requestFor('/admin/orders', 'garbage.notarealtoken'));

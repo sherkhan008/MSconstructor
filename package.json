@@ -20,6 +20,7 @@
     "prisma:seed": "tsx prisma/seed.ts",
     "prisma:studio": "prisma studio",
     "db:reset": "prisma migrate reset --force",
+    "admin:revoke-sessions": "tsx scripts/revoke-admin-sessions.ts",
     "db:repair-canonical-ids": "tsx scripts/repair-canonical-catalog-ids.ts",
     "db:sync-ms-standard-constraints": "tsx scripts/sync-ms-standard-constraints.ts",
     "db:sync-ms-standard-fasteners": "tsx scripts/sync-ms-standard-fasteners.ts",

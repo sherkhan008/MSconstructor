@@ -37,6 +37,13 @@ model User {
   passwordHash  String
   role          AdminRole @default(MANAGER)
   active        Boolean   @default(true)
+  // Server-side revocation boundary for this admin's stateless session
+  // cookies (src/lib/auth/revocation.ts). Every issued token carries the
+  // value this column had at login; incrementing it invalidates all of that
+  // admin's sessions on their next authenticated request, without storing a
+  // row per session. Bump it on password change, on a suspected leak, and
+  // whenever an account is deactivated.
+  sessionVersion Int      @default(0)
   lastLoginAt   DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
