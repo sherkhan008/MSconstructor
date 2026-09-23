@@ -65,7 +65,16 @@ export async function POST(request: NextRequest) {
 
     await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
-    const token = await createSessionToken({ id: user.id, email: user.email, name: user.name, role: user.role as AdminRole });
+    // sessionVersion is stamped into the token so that incrementing the
+    // column later (src/lib/auth/revocation.ts) kills this session and every
+    // other one this admin holds, without a session table.
+    const token = await createSessionToken({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role as AdminRole,
+      sessionVersion: user.sessionVersion,
+    });
 
     const store = await cookies();
     store.set({ name: SESSION_COOKIE_NAME, value: token, maxAge: SESSION_TTL_SECONDS, ...sessionCookieOptions() });

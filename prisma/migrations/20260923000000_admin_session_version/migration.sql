@@ -1,0 +1,15 @@
+-- Server-side revocation boundary for admin sessions.
+--
+-- Admin sessions are signed, stateless cookies (src/lib/auth/session.ts): until
+-- now nothing could invalidate one before its 8h expiry, so a password change
+-- or a revoked account left every already-issued cookie usable. This column is
+-- the boundary: a token carries the version it was issued at, and
+-- src/lib/auth/revocation.ts rejects any token whose version is behind the
+-- user's current one.
+--
+-- Additive and backward-safe: one NOT NULL column with a default, on "User"
+-- only. Existing rows get 0, and tokens issued before this migration carry no
+-- version at all — those are read as 0 (src/lib/auth/revocation.ts), so
+-- deploying this does NOT sign anybody out. An older app image simply ignores
+-- the column (expand-only), so an application rollback stays safe.
+ALTER TABLE "User" ADD COLUMN "sessionVersion" INTEGER NOT NULL DEFAULT 0;

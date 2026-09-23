@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { adminUserLookupFor } from './helpers/admin-session-user';
 /** vi.fn() mocks declared without argument types give `.mock.calls` an empty
  * tuple type; this reads the first argument of the first call with the shape
  * the assertion actually needs. */
@@ -125,7 +126,7 @@ async function setupRoutes(opts: { token?: string; state?: Partial<OrderState> }
   };
   const fake = buildTx(state);
   const transaction = vi.fn(async (callback: (tx: unknown) => unknown) => callback(fake.tx));
-  vi.doMock('@/lib/db/client', () => ({ prisma: { $transaction: transaction } }));
+  vi.doMock('@/lib/db/client', () => ({ prisma: { $transaction: transaction, user: adminUserLookupFor(opts.token) } }));
 
   const { PATCH: assignManager } = await import('@/app/api/admin/orders/[id]/manager/route');
   const { PATCH: saveNotes } = await import('@/app/api/admin/orders/[id]/notes/route');

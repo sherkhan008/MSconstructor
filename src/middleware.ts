@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { SESSION_COOKIE_NAME, verifySessionToken } from '@/lib/auth/session';
+import { SESSION_COOKIE_NAME, SESSION_ENDED_PARAM, SESSION_ENDED_VALUE, verifySessionToken } from '@/lib/auth/session';
 import { DEFAULT_LOCALE, LOCALES, localizePath, type Locale } from '@/lib/i18n/locales';
 
 /**
@@ -8,8 +8,9 @@ import { DEFAULT_LOCALE, LOCALES, localizePath, type Locale } from '@/lib/i18n/l
  * verification here only ever does an HMAC check (see src/lib/auth/session.ts)
  * — never a database lookup, never Node's `crypto` module. Every admin page
  * and mutation API route also re-checks the session itself server-side
- * (src/lib/auth/current-admin.ts) — this redirect is a fast first line of
- * defense, not the only one.
+ * (src/lib/auth/current-admin.ts), and THAT check is the one that can see a
+ * revoked session (src/lib/auth/revocation.ts). This redirect is a fast first
+ * line of defense, not the thing that grants access.
  */
 async function adminMiddleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -18,7 +19,13 @@ async function adminMiddleware(request: NextRequest) {
   const session = await verifySessionToken(token);
 
   if (pathname === '/admin/login') {
-    if (session) return NextResponse.redirect(new URL('/admin/orders', request.url));
+    // A cookie that verifies HERE may still have been revoked server-side
+    // (src/lib/auth/revocation.ts) — only the Node runtime can tell, so the
+    // protected layout is what discovers it and sends the visitor back with
+    // this marker. Without honouring it, the two would redirect at each
+    // other forever.
+    const sessionEnded = request.nextUrl.searchParams.get(SESSION_ENDED_PARAM) === SESSION_ENDED_VALUE;
+    if (session && !sessionEnded) return NextResponse.redirect(new URL('/admin/orders', request.url));
     return NextResponse.next();
   }
 

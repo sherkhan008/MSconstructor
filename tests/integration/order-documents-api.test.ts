@@ -5,6 +5,7 @@ import type { Catalog } from '@/lib/data/repository';
 import type { ShelvingConfiguration } from '@/lib/types/domain';
 import { decimal, item, orderSource } from './helpers/order-document-fixtures';
 import { readPdfText } from './helpers/pdf-text';
+import { adminUserLookupFor } from './helpers/admin-session-user';
 
 /**
  * GET /api/admin/orders/:id/documents/:kind (render, read-only)
@@ -166,7 +167,7 @@ async function setup(opts: SetupOptions = {}) {
   const $transaction = vi.fn();
   const table = opts.table ?? documentTable();
   vi.doMock('@/lib/db/client', () => ({
-    prisma: { order, orderItem, customer, auditLog, $transaction, orderDocument: table.orderDocument },
+    prisma: { order, orderItem, customer, auditLog, $transaction, orderDocument: table.orderDocument, user: adminUserLookupFor(token) },
   }));
 
   // Documents must not consult today's catalog at all; a spy proves it.

@@ -373,9 +373,33 @@ postponed|retry abandoned event=… channel=… order=… error=… attempt=…`
 | Restart app | `docker compose --env-file .env.production restart app` |
 | Stop everything (data kept) | `docker compose --env-file .env.production down` (never add `-v`: it deletes the database volume) |
 | Rotate `AUTH_SECRET` | edit the file, `docker compose --env-file .env.production up -d --no-deps app` (signs out all admins) |
+| Revoke one admin's sessions | `docker compose --env-file .env.production run --rm --no-deps migrate npm run admin:revoke-sessions -- --email <address>` |
+| Revoke every admin's sessions | same command with `-- --all` (keeps `AUTH_SECRET` intact) |
 | Rotate `REDIS_PASSWORD` | edit the file, `docker compose --env-file .env.production up -d --no-deps redis app` |
 | Rotate `POSTGRES_PASSWORD` | `ALTER USER ms_shelving PASSWORD '<new>'` via `exec postgres psql -U ms_shelving -d ms_shelving`, then edit the file, then `up -d --no-deps app` |
 | Disk usage | `docker system df`; prune only unused images older than your rollback window |
+
+### Revoking admin sessions
+
+Admin sessions are signed, stateless cookies with an 8-hour lifetime
+(`src/lib/auth/session.ts`), so there is no session row to delete. Each admin
+instead carries a `User.sessionVersion`, stamped into every token issued to
+them; `src/lib/auth/revocation.ts` refuses any token whose version is behind
+the current one, on the very next request. Bumping that counter therefore
+kills every cookie that admin holds — on every device — at once:
+
+```sh
+docker compose --env-file .env.production run --rm --no-deps migrate   npm run admin:revoke-sessions -- --email manager@example.kz
+```
+
+Do this after a password change, a departure, or any suspected cookie leak.
+Rotating `AUTH_SECRET` (table above) is the bigger hammer: it invalidates
+every admin's sessions at once, and is the right response only when the
+signing key itself may have leaked.
+
+Deactivating an admin (`User.active = false`) has the same immediate effect,
+and so does changing their role: a token whose role no longer matches the
+database is refused rather than carrying stale privileges until it expires.
 
 ## 12. Before renting the real server — remaining decisions
 

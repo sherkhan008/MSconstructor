@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { adminUserLookupFor } from './helpers/admin-session-user';
 
 /**
  * POST /api/admin/orders/[id]/status — the only route that can move an order
@@ -61,7 +62,7 @@ async function setupStatusRoute(
 
   const tx = txMock(opts.currentStatus ?? 'NEW', { casMatches: opts.casMatches });
   const transaction = vi.fn(async (callback: (tx: unknown) => unknown) => callback(tx));
-  vi.doMock('@/lib/db/client', () => ({ prisma: { $transaction: transaction } }));
+  vi.doMock('@/lib/db/client', () => ({ prisma: { $transaction: transaction, user: adminUserLookupFor(opts.token) } }));
 
   const { POST } = await import('@/app/api/admin/orders/[id]/status/route');
   return { POST, tx, transaction };

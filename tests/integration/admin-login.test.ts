@@ -26,6 +26,7 @@ function activeUser(overrides: Record<string, unknown> = {}) {
     passwordHash: hashPassword(REAL_PASSWORD),
     role: 'SUPER_ADMIN',
     active: true,
+    sessionVersion: 2,
     lastLoginAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -78,6 +79,19 @@ describe('POST /api/admin/login', () => {
     expect(auditLogCreate).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ action: 'ADMIN_LOGIN_SUCCESS' }) }),
     );
+  });
+
+  it('stamps the current sessionVersion of the user into the issued token', async () => {
+    // Without this, revocation (src/lib/auth/revocation.ts) has nothing to
+    // compare against and every new login would be issued at version 0 — i.e.
+    // already revoked for any admin whose sessions were ever rotated.
+    const { POST, cookieStore } = await setupLoginRoute(activeUser({ sessionVersion: 7 }));
+    await POST(loginRequest({ email: 'admin@ms-stellazh.kz', password: REAL_PASSWORD }));
+
+    const [{ value: token }] = cookieStore.set.mock.calls[0] as [{ value: string }];
+    const payload = JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString());
+    expect(payload.ver).toBe(7);
+    expect(payload.role).toBe('SUPER_ADMIN');
   });
 
   it('rejects an incorrect password without revealing the reason, and records the failure', async () => {

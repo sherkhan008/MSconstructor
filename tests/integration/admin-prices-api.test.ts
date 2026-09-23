@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { Prisma } from '@prisma/client';
+import { adminUserLookupFor } from './helpers/admin-session-user';
 
 /**
  * /api/admin/prices — authorization matrix, money validation, transactional
@@ -151,7 +152,7 @@ async function setup(options: FakeOptions & { token?: string } = {}) {
   vi.doMock('next/headers', () => ({ cookies: vi.fn(async () => cookieStore) }));
 
   const fake = buildPrismaFake(options);
-  vi.doMock('@/lib/db/client', () => ({ prisma: fake.prisma }));
+  vi.doMock('@/lib/db/client', () => ({ prisma: { ...fake.prisma, user: adminUserLookupFor(options.token) } }));
   vi.doMock('@/lib/data/repository', () => ({ invalidateCatalogCache }));
 
   const listRoute = await import('@/app/api/admin/prices/route');
