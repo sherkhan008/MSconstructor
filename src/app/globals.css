@@ -209,6 +209,9 @@
   .input:focus {
     border-color: var(--color-blueprint);
   }
+  .input[aria-invalid='true'] {
+    border-color: var(--color-danger);
+  }
   textarea.input {
     height: auto;
     padding-block: 0.5rem;

@@ -22,14 +22,18 @@ export default async function OrderPage({ params }: { params: LocaleParams }) {
   const catalog = await getCatalog();
 
   return (
-    <Container className="py-10">
-      <h1 className="font-display text-4xl">{t(CK['CK-001'], locale)}</h1>
-      <div className="mt-8">
+    <>
+      <div className="border-b border-line bg-surface">
+        <Container className="py-6 sm:py-8 lg:py-10">
+          <h1 className="font-display text-[2rem] sm:text-4xl lg:text-5xl">{t(CK['CK-001'], locale)}</h1>
+        </Container>
+      </div>
+      <Container className="pb-12 pt-6 sm:pb-10 sm:pt-8 lg:pb-12 lg:pt-10">
         <OrderForm
           deliveryMethods={catalog.deliveryMethods}
           models={filterPubliclyVisibleModels(catalog.models).map((m) => ({ slug: m.slug, name: m.name }))}
         />
-      </div>
-    </Container>
+      </Container>
+    </>
   );
 }

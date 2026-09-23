@@ -169,6 +169,9 @@ interface Props {
    * `frameClassName` the 4:3 frame itself. */
   framed?: boolean;
   frameClassName?: string;
+  /** Unframed only: false omits the overlaid load caption — for a thumbnail
+   * whose surrounding text already states the load. */
+  showLoadCaption?: boolean;
 }
 
 const NO_ALLOWED: number[] = [];
@@ -194,6 +197,7 @@ export function ShelvingPreview({
   onReset,
   framed = false,
   frameClassName = '',
+  showLoadCaption = true,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const locale = useLocale();
@@ -861,7 +865,7 @@ export function ShelvingPreview({
         </button>
       )}
 
-      <div className="tech-label pointer-events-none absolute bottom-2 right-3">{loadCaption}</div>
+      {showLoadCaption && <div className="tech-label pointer-events-none absolute bottom-2 right-3">{loadCaption}</div>}
     </div>
   );
 }

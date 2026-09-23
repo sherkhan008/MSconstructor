@@ -12,13 +12,17 @@ import { reconcileConfiguration } from '@/lib/configurator/reconcile';
 import { trackEvent } from '@/lib/analytics';
 import { shelvesLabel } from '@/lib/plural';
 import { useCartStore, type CartItem } from '@/store/cart-store';
-import type { ColorOption } from '@/lib/types/domain';
+import type { ColorOption, DeliveryMethod } from '@/lib/types/domain';
 import type { PublicCatalog } from '@/lib/data/public-catalog';
 import { pick, t } from '@/lib/i18n/format';
 import { localizePath, type Locale } from '@/lib/i18n/locales';
 import { apiHeaders } from '@/lib/i18n/request';
-import { CF, CR, CT, ER, G } from '@/lib/i18n/strings';
+import { CF, CR, CT, ER, G, H } from '@/lib/i18n/strings';
 import { useLocale } from '@/components/i18n/LocaleProvider';
+
+/** Store bounds for a line quantity (see cart-store.setQuantity). */
+const MIN_QUANTITY = 1;
+const MAX_QUANTITY = 200;
 
 /**
  * Every price shown here is either a fresh server response or explicitly
@@ -78,6 +82,11 @@ export function CartClient({ catalog }: { catalog: PublicCatalog }) {
   useEffect(() => {
     const stale = items.filter((item) => item.priceSnapshot === null);
     stale.forEach((item) => {
+      // Only an answer for the configuration the line still has may land:
+      // a quantity stepped again while this request was in flight has its own
+      // request (the effect key below includes the unpriced configuration),
+      // and this older answer must never be shown as that line's price.
+      const isCurrent = () => useCartStore.getState().items.find((i) => i.id === item.id)?.configuration === item.configuration;
       fetch('/api/pricing/calculate', {
         method: 'POST',
         headers: apiHeaders(locale),
@@ -85,6 +94,7 @@ export function CartClient({ catalog }: { catalog: PublicCatalog }) {
       })
         .then((res) => res.json())
         .then((data) => {
+          if (!isCurrent()) return;
           if (data.ok) {
             setPriceSnapshot(item.id, data);
             setPriceErrors((prev) => {
@@ -101,24 +111,24 @@ export function CartClient({ catalog }: { catalog: PublicCatalog }) {
             setPriceErrors((prev) => ({ ...prev, [item.id]: data.message ?? t(ER['ER-015'], locale) }));
           }
         })
-        .catch(() => setPriceErrors((prev) => ({ ...prev, [item.id]: t(ER['ER-016'], locale) })));
+        .catch(() => {
+          if (isCurrent()) setPriceErrors((prev) => ({ ...prev, [item.id]: t(ER['ER-016'], locale) }));
+        });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items.map((i) => `${i.id}:${i.priceSnapshot === null}`).join(',')]);
+  }, [items.map((i) => `${i.id}:${i.priceSnapshot === null ? JSON.stringify(i.configuration) : 'priced'}`).join(',')]);
 
   if (!mounted) return null;
 
   if (items.length === 0) {
-    return (
-      <div className="flex flex-col items-center gap-4 py-20 text-center">
-        <p className="text-lg text-steel">{t(CR['CR-002'], locale)}</p>
-        <LinkButton href={localizePath('/configurator', locale)}>{t(CR['CR-003'], locale)}</LinkButton>
-      </div>
-    );
+    return <EmptyCart message={t(CR['CR-002'], locale)} locale={locale} />;
   }
 
   const total = items.reduce((sum, item) => sum + (item.priceSnapshot?.breakdown.total ?? 0), 0);
   const allPriced = items.every((item) => item.priceSnapshot !== null);
+  // A line still waiting for its server price (not one that failed) —
+  // the total is then marked as recalculating, never shown as current.
+  const recalculating = items.some((item) => item.priceSnapshot === null && !priceErrors[item.id]);
   // The server's note for delivery that is not in the total (regional
   // delivery is calculated individually) — shown so the total never reads as
   // delivery-included. The server sets deliveryNote only for that case
@@ -132,48 +142,110 @@ export function CartClient({ catalog }: { catalog: PublicCatalog }) {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_340px]">
-      <div className="flex flex-col gap-4">
+    <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_21rem] lg:gap-8 xl:grid-cols-[minmax(0,1fr)_23rem] xl:gap-10">
+      <div className="flex min-w-0 flex-col gap-4">
         {reconcileNotice && (
-          <p className="border border-line bg-surface-muted px-4 py-3 text-sm text-steel">{reconcileNotice}</p>
+          <p role="status" className="border border-line border-l-2 border-l-accent bg-surface px-4 py-3 text-sm text-steel">
+            {reconcileNotice}
+          </p>
         )}
-        {items.map((item) => (
-          <CartRow
-            key={item.id}
-            item={item}
-            modelName={modelNameOf(item)}
-            locale={locale}
-            color={catalog.colors.find((c) => c.id === item.configuration.colorId)}
-            error={priceErrors[item.id]}
-            onRemove={() => removeItem(item.id)}
-            onDuplicate={() => duplicateItem(item.id)}
-            onQuantityChange={(q) => setQuantity(item.id, q)}
-          />
-        ))}
+        {/* Same rule as the summary beside it and the checkout form: the
+            floating WhatsApp button steps aside rather than sitting over a
+            line's quantity and edit controls. */}
+        <ul className="divide-y divide-line border border-line bg-surface" data-fab-avoid>
+          {items.map((item) => (
+            <CartRow
+              key={item.id}
+              item={item}
+              modelName={modelNameOf(item)}
+              locale={locale}
+              color={catalog.colors.find((c) => c.id === item.configuration.colorId)}
+              delivery={catalog.deliveryMethods.find((d) => d.id === item.configuration.deliveryId)}
+              error={priceErrors[item.id]}
+              onRemove={() => removeItem(item.id)}
+              onDuplicate={() => duplicateItem(item.id)}
+              onQuantityChange={(q) => setQuantity(item.id, q)}
+            />
+          ))}
+        </ul>
       </div>
 
-      <aside className="flex flex-col gap-4 border border-line bg-surface p-5 lg:sticky lg:top-20" data-fab-avoid>
-        <div>
-          <div className="tech-label">{t(CR['CR-004'], locale)}</div>
-          <PriceTag value={total} size="xl" />
-          {hasIndividualDelivery && <p className="mt-1 text-xs text-steel">{t(ER['ER-024'], locale)}</p>}
+      <aside
+        aria-labelledby="cart-summary-title"
+        className="border border-line border-t-2 border-t-foreground bg-surface p-5 sm:p-6 lg:sticky lg:top-[calc(var(--header-height)+1.5rem)]"
+        data-fab-avoid
+      >
+        <h2 id="cart-summary-title" className="font-sans text-sm font-medium tracking-normal text-steel">
+          {t(CR['CR-004'], locale)}
+        </h2>
+        <div className="mt-2" aria-live="polite" aria-busy={recalculating}>
+          <PriceTag value={total} size="xl" className={`block leading-tight ${recalculating ? 'opacity-50' : ''}`} />
+          {recalculating && <p className="mt-1 text-[13px] text-steel">{t(CR['CR-007'], locale)}</p>}
         </div>
-        <Button onClick={handleCheckout} disabled={!allPriced} size="lg">
-          {t(CF['CF-067'], locale)}
-        </Button>
-        <LinkButton href={localizePath('/configurator', locale)} variant="outline">
-          {t(CR['CR-005'], locale)}
-        </LinkButton>
+        {hasIndividualDelivery && <p className="mt-3 text-[13px] leading-snug text-blueprint">{t(ER['ER-024'], locale)}</p>}
+        <div className="mt-5 flex flex-col gap-2">
+          <Button onClick={handleCheckout} disabled={!allPriced} variant="accent" size="lg" className="min-h-12 w-full !whitespace-normal text-center">
+            {t(CF['CF-067'], locale)}
+          </Button>
+          <LinkButton
+            href={localizePath('/configurator', locale)}
+            variant="outline"
+            className="min-h-12 w-full bg-surface !whitespace-normal text-center"
+          >
+            {t(CR['CR-005'], locale)}
+          </LinkButton>
+        </div>
       </aside>
     </div>
   );
 }
+
+/** Empty cart (and empty checkout): what happened, and the two ways back into the catalogue. */
+export function EmptyCart({ message, locale }: { message: string; locale: Locale }) {
+  return (
+    <div className="flex flex-col items-center border border-line bg-surface px-5 py-12 text-center sm:py-16">
+      <h2 className="font-display text-2xl sm:text-3xl">{message}</h2>
+      <div className="mt-6 flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:gap-3" data-fab-avoid>
+        <LinkButton href={localizePath('/configurator', locale)} variant="accent" className="min-h-12 px-6">
+          {t(CR['CR-003'], locale)}
+        </LinkButton>
+        <LinkButton href={localizePath('/catalog', locale)} variant="outline" className="min-h-12 bg-surface px-6">
+          {t(H['H-002'], locale)}
+        </LinkButton>
+      </div>
+    </div>
+  );
+}
+
+/** H×W+W×D mm on one line where it fits; on a narrow screen it wraps only
+ * after a separator, never inside a number. Text content is unchanged. */
+export function Dimensions({ configuration, unit }: { configuration: CartItem['configuration']; unit: string }) {
+  const parts = [String(configuration.height), ...configuration.sections.map((s) => String(s.width)), String(configuration.depth)];
+  const last = parts.length - 1;
+  return (
+    <>
+      {parts.map((part, i) => (
+        <span key={i}>
+          {part}
+          {i < last && (i === 0 || i === last - 1 ? '×' : '+')}
+          {i < last && <wbr />}
+        </span>
+      ))}{' '}
+      {unit}
+    </>
+  );
+}
+
+/** Secondary line action: compact text, full 44px touch target. */
+const LINE_ACTION =
+  'inline-flex min-h-11 items-center px-2 text-sm text-steel underline-offset-4 transition-colors hover:text-foreground hover:underline';
 
 function CartRow({
   item,
   modelName,
   locale,
   color,
+  delivery,
   error,
   onRemove,
   onDuplicate,
@@ -183,68 +255,116 @@ function CartRow({
   modelName: string;
   locale: Locale;
   color?: ColorOption;
+  delivery?: DeliveryMethod;
   error?: string;
   onRemove: () => void;
   onDuplicate: () => void;
   onQuantityChange: (quantity: number) => void;
 }) {
   const editHref = localizePath(`/configurator?${configurationToShareQuery(item.configuration)}`, locale);
+  const { configuration, priceSnapshot } = item;
+  const quantityId = `cart-qty-${item.id}`;
+  const specs = [
+    shelvesLabel(configuration.shelves, locale),
+    t(CR['CR-009'], locale, { N: configuration.sections.length }),
+    t(CT['CT-024'], locale, { N: configuration.loadCapacity }),
+    color ? pick(color.name, locale) : null,
+  ].filter(Boolean);
 
   return (
-    <div className="flex flex-col gap-4 border border-line p-4 sm:flex-row">
-      <ShelvingPreview config={item.configuration} color={color} className="aspect-[4/3] w-full sm:w-56 shrink-0" />
-      <div className="flex flex-1 flex-col gap-2">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="font-display text-xl">{modelName}</h3>
-          {item.priceSnapshot ? (
-            <PriceTag value={item.priceSnapshot.breakdown.total} size="md" />
-          ) : error ? (
-            <span className="tech-label text-danger">{t(CR['CR-006'], locale)}</span>
-          ) : (
-            <span className="tech-label">{t(CR['CR-007'], locale)}</span>
-          )}
-        </div>
-        {error && (
-          <p className="border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
-            {error} {t(CR['CR-008'], locale)}
+    <li className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-4 gap-y-3 px-4 py-5 min-[390px]:grid-cols-[6.5rem_minmax(0,1fr)] sm:grid-cols-[11rem_minmax(0,1fr)] sm:gap-x-6 sm:p-5 lg:grid-cols-[12.5rem_minmax(0,1fr)]">
+      {/* Thumbnail: the load caption the preview overlays is already in the spec line below. */}
+      <ShelvingPreview
+        config={configuration}
+        color={color}
+        presentation
+        tightFraming
+        showLoadCaption={false}
+        className="aspect-square w-full self-start sm:aspect-[4/3]"
+      />
+
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:justify-between sm:gap-6">
+        <div className="min-w-0">
+          <h2 className="font-display text-xl sm:text-2xl">{modelName}</h2>
+          <p className="mono mt-1.5 text-sm">
+            <Dimensions configuration={configuration} unit={t(G['G-008'], locale)} />
           </p>
-        )}
-        <div className="tech-label flex flex-wrap gap-x-3 gap-y-1">
-          <span>
-            {item.configuration.height}×{item.configuration.sections.map((s) => s.width).join('+')}×
-            {item.configuration.depth} {t(G['G-008'], locale)}
-          </span>
-          <span>{shelvesLabel(item.configuration.shelves, locale)}</span>
-          <span>{t(CR['CR-009'], locale, { N: item.configuration.sections.length })}</span>
-          <span>{t(CT['CT-024'], locale, { N: item.configuration.loadCapacity })}</span>
+          <p className="mt-1 text-[13px] leading-snug text-steel">{specs.join(' · ')}</p>
+          {delivery && <p className="mt-0.5 text-[13px] leading-snug text-steel">{pick(delivery.name, locale)}</p>}
         </div>
 
-        <div className="mt-auto flex flex-wrap items-center gap-3 pt-2">
-          <label className="flex items-center gap-2 text-sm">
+        <div className="shrink-0 sm:text-right">
+          {priceSnapshot ? (
+            <>
+              <PriceTag value={priceSnapshot.breakdown.total} size="md" className="block whitespace-nowrap sm:text-xl" />
+              {configuration.quantity > 1 && (
+                <p className="mono mt-0.5 text-xs text-steel">{t(CR['CR-014'], locale, { price: formatPrice(priceSnapshot.breakdown.unitTotal) })}</p>
+              )}
+            </>
+          ) : error ? (
+            <span className="text-sm font-medium text-danger">{t(CR['CR-006'], locale)}</span>
+          ) : (
+            <span className="text-sm text-steel">{t(CR['CR-007'], locale)}</span>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <p role="alert" className="col-span-2 border border-danger bg-danger-soft px-3 py-2 text-sm text-danger sm:col-span-1 sm:col-start-2">
+          {error} {t(CR['CR-008'], locale)}
+        </p>
+      )}
+
+      <div className="col-span-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 pt-1 sm:col-span-1 sm:col-start-2 sm:border-t sm:border-line sm:pt-3">
+        <div className="flex items-center gap-3">
+          <label htmlFor={quantityId} className="text-sm text-steel">
             {t(CR['CR-010'], locale)}
-            <input
-              type="number"
-              min={1}
-              max={200}
-              value={item.configuration.quantity}
-              onChange={(e) => onQuantityChange(Number(e.target.value) || 1)}
-              className="mono h-9 w-16 border border-line bg-surface px-2 text-center outline-none focus:border-blueprint"
-            />
           </label>
-          <Link href={editHref} className="text-sm text-blueprint hover:underline">
+          <div className="grid h-11 grid-cols-[2.75rem_3rem_2.75rem] border border-line bg-surface">
+            <button
+              type="button"
+              aria-label={t(CF['CF-040'], locale)}
+              aria-controls={quantityId}
+              onClick={() => onQuantityChange(configuration.quantity - 1)}
+              disabled={configuration.quantity <= MIN_QUANTITY}
+              className="grid place-items-center text-base transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              −
+            </button>
+            <input
+              id={quantityId}
+              type="number"
+              inputMode="numeric"
+              min={MIN_QUANTITY}
+              max={MAX_QUANTITY}
+              value={configuration.quantity}
+              onChange={(e) => onQuantityChange(Number(e.target.value) || 1)}
+              className="mono h-full w-full border-x border-line bg-surface text-center text-sm font-semibold outline-none focus-visible:outline-2 focus-visible:-outline-offset-2"
+            />
+            <button
+              type="button"
+              aria-label={t(CF['CF-041'], locale)}
+              aria-controls={quantityId}
+              onClick={() => onQuantityChange(configuration.quantity + 1)}
+              disabled={configuration.quantity >= MAX_QUANTITY}
+              className="grid place-items-center text-base transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              +
+            </button>
+          </div>
+        </div>
+        <div className="-mx-2 flex flex-wrap items-center">
+          <Link href={editHref} className={LINE_ACTION}>
             {t(CR['CR-011'], locale)}
           </Link>
-          <button type="button" onClick={onDuplicate} className="text-sm text-steel hover:text-foreground">
+          <button type="button" onClick={onDuplicate} className={LINE_ACTION}>
             {t(CR['CR-012'], locale)}
           </button>
-          <button type="button" onClick={onRemove} className="text-sm text-danger hover:underline">
+          <button type="button" onClick={onRemove} className={`${LINE_ACTION} hover:!text-danger`}>
             {t(CR['CR-013'], locale)}
           </button>
         </div>
-        {item.priceSnapshot && (
-          <p className="mono text-xs text-steel">{t(CR['CR-014'], locale, { price: formatPrice(item.priceSnapshot.breakdown.unitTotal) })}</p>
-        )}
       </div>
-    </div>
+    </li>
   );
 }

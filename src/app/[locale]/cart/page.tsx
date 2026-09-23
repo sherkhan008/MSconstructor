@@ -22,11 +22,15 @@ export default async function CartPage({ params }: { params: LocaleParams }) {
   const catalog = await getCatalog();
 
   return (
-    <Container className="py-10">
-      <h1 className="font-display text-4xl">{t(CR['CR-001'], locale)}</h1>
-      <div className="mt-8">
-        <CartClient catalog={toPublicCatalog(catalog)} />
+    <>
+      <div className="border-b border-line bg-surface">
+        <Container className="py-6 sm:py-8 lg:py-10">
+          <h1 className="font-display text-[2rem] sm:text-4xl lg:text-5xl">{t(CR['CR-001'], locale)}</h1>
+        </Container>
       </div>
-    </Container>
+      <Container className="py-6 sm:py-8 lg:py-10">
+        <CartClient catalog={toPublicCatalog(catalog)} />
+      </Container>
+    </>
   );
 }
