@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { ColorOption, ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
 import {
   DEPTH_ANGLE_DEG,
   VIEWBOX_H,
   VIEWBOX_W,
+  clamp,
   mmToPx,
   type DimensionAxis,
 } from './resize/dimension-scale';
@@ -108,27 +109,179 @@ function perforationYs(top: number, bottom: number): number[] {
 // opaque (only its glyph and border fade) so the rack never shows through
 // a control that happens to sit over it.
 //
-// Colour is the site's graphite: a steel ring and graphite glyph at rest, a
-// graphite ring (plus a faint neutral fill) on the selected section, and a
-// solid graphite disc on hover/keyboard focus. Disabled discs fade to the
-// light steel/line tokens and ignore hover.
+// Colour is the site's graphite, one step lighter at rest than before so a
+// row of controls reads as supporting chrome rather than as a second rack:
+// a hairline ring with a steel glyph at rest, a graphite ring on the
+// selected section, and a solid graphite disc on hover/keyboard focus.
+// Disabled discs fade to the light steel/line tokens and ignore hover.
 const CIRCLE_HIT =
   'group grid h-11 w-11 place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-blueprint disabled:cursor-not-allowed';
 const CIRCLE_DISC =
-  'grid place-items-center rounded-full border font-medium leading-none text-foreground transition-colors group-hover:border-foreground group-hover:bg-foreground group-hover:text-surface group-focus-visible:border-foreground group-focus-visible:bg-foreground group-focus-visible:text-surface group-disabled:!border-line group-disabled:!bg-surface group-disabled:!text-steel-soft';
+  'grid place-items-center rounded-full border font-medium leading-none text-steel transition-colors group-hover:border-foreground group-hover:bg-foreground group-hover:text-surface group-focus-visible:border-foreground group-focus-visible:bg-foreground group-focus-visible:text-surface group-disabled:!border-line group-disabled:!bg-surface group-disabled:!text-steel-soft';
 /** Visible disc sizes inside the 44×44 hit area: the section "add" disc is
  * the larger one; section "remove" and shelf +/− share the smaller size. */
 const DISC_LARGE = 'h-[27px] w-[27px] text-base';
 const DISC_SMALL = 'h-6 w-6 text-sm';
 
-// Stage size, in percent of the visible frame, when `framed` is set. Every
-// interactive control is still positioned in percent of the full 640×480
-// viewBox, and useDimensionDrag still measures the full stage — the frame
-// only clips the always-empty right and bottom quarter of the viewBox (the
-// rack is anchored top-left, see RACK_LEFT_MARGIN; the row is capped at
-// MAX_ROW_WIDTH_PX and the total-width tag ends at ~FLOOR_Y + 90), so the
-// rack renders 4/3 larger without any geometry changing.
-const FRAMED_STAGE_PERCENT = `${(4 / 3) * 100}%`;
+/* ---------------------------------------------------------------------------
+   Technical drawing palette. Every dimension line, tick, label surface and
+   selection mark on this canvas reads from these four site tokens and
+   nothing else, so the workspace can never drift into a colour system of
+   its own. Graphite/steel/white only — the legacy red dimension accent is
+   no longer used as general configurator chrome (it stays a token, still
+   used by the section table's active-row marker).
+   --------------------------------------------------------------------------- */
+/** Dimension lines, extension ticks and the idle label border. */
+export const DRAW_LINE = 'var(--color-line-strong)';
+/** The floor reference line and other secondary hairlines. */
+export const DRAW_HAIRLINE = 'var(--color-line)';
+/** Label/value text and the active (dragging) label surface. */
+export const DRAW_INK = 'var(--color-foreground)';
+/** Secondary technical text — idle section widths. */
+export const DRAW_INK_SOFT = 'var(--color-steel)';
+/** Label surface, and the active label's own text. */
+export const DRAW_PAPER = 'var(--color-surface)';
+
+/* ---------------------------------------------------------------------------
+   Framed workspace crop (see `computeFramedCrop`).
+   --------------------------------------------------------------------------- */
+/** The shelf-count column sits this far past the row's right edge, plus up to
+ * SHELF_COLUMN_DEPTH_SHIFT more on a deep rack so it clears the receding
+ * shelf surfaces instead of sitting on them. */
+const SHELF_COLUMN_OFFSET = 24;
+const SHELF_COLUMN_DEPTH_SHIFT = 30;
+/** Room for a 44px touch circle's own radius at the narrowest supported
+ * viewport. Every clearance below is checked against this, so no circular
+ * control is ever clipped by the frame at any crop. */
+const TOUCH_RADIUS_CLEARANCE = 30;
+/** Half of a 44px control, and the narrowest phone frame it has to survive.
+ * A reserve stated in viewBox units depends on the very crop width it helps
+ * determine, so the compact profile solves for it (`R = 22 * w / 320` with
+ * `w = base + R`) instead of guessing a constant that has to be generous
+ * enough for the widest row and is therefore wasteful for every other one. */
+const TOUCH_RADIUS_PX = 22;
+const NARROWEST_FRAME_PX = 320;
+
+/**
+ * How the workspace frame is proportioned, and how much empty room the crop
+ * reserves around the drawing. Two profiles, chosen purely by viewport width
+ * in CSS (see `.configurator-stage` in globals.css) — this component
+ * publishes both as custom properties and never measures the viewport.
+ *
+ *  - `WIDE_FRAME` is the approved desktop/tablet framing, unchanged: a 4:3
+ *    frame, 46 units of room left of the row, and the deepest possible
+ *    shelf-column offset reserved whatever depth is configured.
+ *  - `COMPACT_FRAME` applies to phones only. It is proportioned 6:5 rather
+ *    than 4:3 — a phone can spare a little frame height far more cheaply
+ *    than frame width — and it reserves only what is really drawn: the room
+ *    the height dimension actually needs on the left, and the shelf column's
+ *    real offset at the *committed* depth. Depth is never dragged (it changes
+ *    only through the parameter select), so reading it here cannot rescale
+ *    the workspace mid-gesture the way reading a section width would.
+ */
+export interface FrameProfile {
+  /** Frame width divided by height. The crop always takes the frame's ratio. */
+  aspect: number;
+  /** viewBox x of the crop's left edge: the row starts at RACK_LEFT_MARGIN
+   * (see `committedLeftShift`) and the height dimension line plus its rotated
+   * tag reach ~34 units to its left. */
+  left: number;
+  /** Above the rack's top edge: the per-section add buttons are centred 24
+   * units above it and need room for their own touch circle. */
+  top: number;
+  /** Below the floor: per-section width labels, the remove buttons, and the
+   * total-width dimension line with its tag (which ends at FLOOR_Y + 89.5). */
+  bottom: number;
+  /** Fixed shelf-column depth offset to reserve, or null to reserve only the
+   * offset the committed depth actually produces. */
+  depthAllowance: number | null;
+  /** Fixed room reserved right of the shelf-count column for its own touch
+   * radius, or null to solve for the exact amount at NARROWEST_FRAME_PX. */
+  touchReserve: number | null;
+}
+
+export const WIDE_FRAME: FrameProfile = {
+  aspect: VIEWBOX_W / VIEWBOX_H,
+  left: RACK_LEFT_MARGIN - 46,
+  top: 54,
+  bottom: 94,
+  depthAllowance: SHELF_COLUMN_DEPTH_SHIFT,
+  touchReserve: TOUCH_RADIUS_CLEARANCE,
+};
+
+export const COMPACT_FRAME: FrameProfile = {
+  aspect: 6 / 5,
+  left: RACK_LEFT_MARGIN - 36,
+  top: 54,
+  bottom: 91,
+  depthAllowance: null,
+  touchReserve: null,
+};
+
+/** The top view frames itself with the desktop profile (see its own file). */
+export const CROP_LEFT = WIDE_FRAME.left;
+
+/**
+ * Width of the framed crop, in viewBox units: everything that can possibly be
+ * drawn to the right of the profile's left edge for a row of `sectionCount`
+ * sections — the widest that row can auto-fit to, plus the shelf-count column
+ * at its furthest offset, plus that column's own touch radius.
+ *
+ * A ceiling per section *count*, never a measurement of the current section
+ * widths. The crop drives the stage's zoom, and a zoom that changed when a
+ * width was committed would move the rack under the pointer at the exact
+ * moment a drag is released; `computeRowScale` caps a lone section at
+ * TARGET_FILL_PX and any longer row at MAX_ROW_WIDTH_PX, so these two
+ * ceilings hold for every width the catalog allows.
+ */
+export function framedCropWidth(
+  profile: FrameProfile,
+  sectionCount: number,
+  depthShiftPx = SHELF_COLUMN_DEPTH_SHIFT,
+): number {
+  const rowCeiling = sectionCount <= 1 ? TARGET_FILL_PX : MAX_ROW_WIDTH_PX;
+  const shelfColumn = profile.depthAllowance ?? clamp(depthShiftPx, 0, SHELF_COLUMN_DEPTH_SHIFT);
+  const base = RACK_LEFT_MARGIN + rowCeiling + SHELF_COLUMN_OFFSET + shelfColumn - profile.left;
+  if (profile.touchReserve !== null) return base + profile.touchReserve;
+  return base / (1 - TOUCH_RADIUS_PX / NARROWEST_FRAME_PX);
+}
+
+/**
+ * The rectangle of the 640×480 viewBox that the framed workspace actually
+ * shows, in viewBox units. Exported so tests can assert the framing without
+ * re-deriving it.
+ *
+ * Framing only: no drawing geometry, no drag math and no interactive position
+ * depends on this. `useDimensionDrag` measures the stage element, which still
+ * represents the full viewBox at whatever zoom the crop implies, so
+ * pointer-to-millimetre sensitivity is unchanged at every crop — and the
+ * stage stays exactly 4:3 in real pixels at any frame ratio, because its
+ * width and height are taken from `w` and `h` independently.
+ *
+ * The crop's *size* is a function of the committed rack height, the section
+ * count and (compact profile only) the committed depth — never of section
+ * widths — so adding, removing or resizing a section never rescales the
+ * workspace. Its height still follows a live height drag upward, so a rack
+ * dragged taller than its committed framing is never clipped mid-gesture.
+ */
+export function computeFramedCrop(
+  profile: FrameProfile,
+  contentTop: number,
+  contentBottom: number,
+  sectionCount: number,
+  depthShiftPx?: number,
+) {
+  const minW = framedCropWidth(profile, sectionCount, depthShiftPx);
+  const needed = Math.max(contentBottom - contentTop, 1);
+  const w = clamp(Math.max(needed * profile.aspect, minW), 1, Math.min(VIEWBOX_W, VIEWBOX_H * profile.aspect));
+  const h = w / profile.aspect;
+  return {
+    x: clamp(profile.left - (w - minW) / 2, 0, VIEWBOX_W - w),
+    y: clamp((contentTop + contentBottom) / 2 - h / 2, 0, VIEWBOX_H - h),
+    w,
+    h,
+  };
+}
 
 export interface AllowedDimensions {
   heights: number[];
@@ -163,7 +316,7 @@ interface Props {
    * logic, only renders the button when a handler is supplied. */
   onReset?: () => void;
   /** Configurator workspace framing: renders the preview as a 4:3 frame
-   * that zooms onto the rack (see FRAMED_STAGE_PERCENT), with the first-run
+   * that zooms onto the rack (see `computeFramedCrop`), with the first-run
    * hint and load caption in a caption strip under the frame instead of
    * floating over the drawing. `className` styles the outer wrapper and
    * `frameClassName` the 4:3 frame itself. */
@@ -366,6 +519,13 @@ export function ShelvingPreview({
 
   const rowStart = layout[0].x;
   const rowEnd = layout[layout.length - 1].x + layout[layout.length - 1].width;
+  // Shelf-count column: far enough past the row's right edge to clear the
+  // receding shelf surfaces of a deep rack instead of sitting on top of
+  // them, capped so a deep row never pushes it outside the framed crop.
+  const shelfColumnX = Math.min(
+    rowEnd + SHELF_COLUMN_OFFSET + Math.min(depthVec.dx, SHELF_COLUMN_DEPTH_SHIFT),
+    VIEWBOX_W - 16,
+  );
   // The red height label stays exactly where it always has, to the left of
   // the rack — only the drag *handle* moves. Requirement: the handle must
   // sit on the top shelf/top structural edge, not floating to the side.
@@ -402,9 +562,52 @@ export function ShelvingPreview({
 
   const frameTop = tightFraming ? top + depthVec.dy - 30 : Math.min(0, top + depthVec.dy - 30);
 
+  // Framed workspace crop (see computeFramedCrop): the rack fills the frame
+  // far more confidently than the old fixed top-left 3/4 crop did, without a
+  // single drawing coordinate changing. Sized from the COMMITTED height, so
+  // committing a width — or adding/removing a section — never rescales the
+  // workspace; a live height drag may only ever grow it, so a rack dragged
+  // taller than its committed framing is not clipped mid-gesture.
+  //
+  // Both profiles are computed and published as custom properties; a media
+  // query in globals.css decides which one the stage actually uses, so the
+  // component never reads the viewport and there is nothing to hydrate.
+  const committedTop = FLOOR_Y - mmToPx('height', config.height) * RACK_SCALE;
+  const cropTopEdge = Math.min(committedTop, top);
+  const cropFor = (profile: FrameProfile) =>
+    computeFramedCrop(
+      profile,
+      Math.min(cropTopEdge - profile.top, cropTopEdge + depthVec.dy - 8),
+      FLOOR_Y + profile.bottom,
+      config.sections.length,
+      depthVec.dx,
+    );
+  const wideCrop = cropFor(WIDE_FRAME);
+  const compactCrop = cropFor(COMPACT_FRAME);
+  const stageVars = (crop: ReturnType<typeof cropFor>, prefix: string) => ({
+    [`--stage-${prefix}-w`]: `${(VIEWBOX_W / crop.w) * 100}%`,
+    [`--stage-${prefix}-h`]: `${(VIEWBOX_H / crop.h) * 100}%`,
+    [`--stage-${prefix}-l`]: `${(-crop.x / crop.w) * 100}%`,
+    [`--stage-${prefix}-t`]: `${(-crop.y / crop.h) * 100}%`,
+  });
+
   const drawing = (
     <>
       <svg viewBox={presentation && !interactive ? `0 ${frameTop} ${rowEnd + depthVec.dx + 50} ${FLOOR_Y + 110 - frameTop}` : `0 0 ${VIEWBOX_W} ${VIEWBOX_H}`} className="h-full w-full" role="img" aria-label={t(CF['CF-006'], locale)}>
+        {/* 0. Floor reference — one hairline for the rack's feet to stand on,
+             in the lightest line token, behind every structural element. A
+             single ground line, not a grid: no blueprint squares, no
+             graph-paper texture, nothing that fills the white canvas. */}
+        <line
+          x1={rowStart - 34}
+          y1={FLOOR_Y + FOOT_HEIGHT}
+          x2={rowEnd + depthVec.dx + 20}
+          y2={FLOOR_Y + FOOT_HEIGHT}
+          stroke={DRAW_HAIRLINE}
+          strokeWidth={1}
+          pointerEvents="none"
+        />
+
         {/* 1. Rear posts — the physical steel frame, always visible regardless
              of any wall selection (a rear post is not the same thing as the
              optional rearWall panel). Perforated the same way as the front
@@ -541,13 +744,38 @@ export function ShelvingPreview({
           </g>
         ))}
 
+        {/* 4b. Selected section — a single hairline graphite rectangle just
+             outside the section's own uprights. Deliberately an outline and
+             not a tint: the white space between shelves must stay white, and
+             a filled selection would read as a decorative panel. The mark is
+             geometric, not colour-only — the section's width value below the
+             rack also switches to graphite/semibold and its own +/- controls
+             pick up a graphite ring — so selection stays legible without
+             flooding the rack with accent colour. Only drawn when there is
+             more than one section to tell apart. */}
+        {markActive && (
+          <rect
+            x={activeGeom.x - 3}
+            y={top - 7}
+            width={activeGeom.width + 6}
+            height={FLOOR_Y - top + 14}
+            fill="none"
+            stroke={DRAW_INK}
+            strokeWidth={1}
+            pointerEvents="none"
+          />
+        )}
+
         {/* 5. Interactive hit-areas + hover-only outline. `activeSectionId`
              keeps driving real selection (width drag, SectionTable), but the
              visible dashed box now follows the pointer, not the selection —
              it must disappear the instant the pointer leaves, never persist. */}
         {layout.map((section, i) => {
           const isActive = interactive && section.id === activeSection.id;
-          const isHovered = interactive && section.id === hoveredSectionId;
+          // The selected section already carries its own permanent graphite
+          // outline (4b above), so hovering it must not stack a second box
+          // on top of the first.
+          const isHovered = interactive && section.id === hoveredSectionId && !(markActive && isActive);
           return (
             <g
               key={`hit-${section.id}`}
@@ -576,21 +804,20 @@ export function ShelvingPreview({
               // :focus-visible rule never gets a chance to override it) —
               // focus-visible:outline-* restores a subtle indicator, but only
               // while the section actually has real keyboard focus.
-              className={interactive ? 'outline-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-dashed focus-visible:outline-offset-2 focus-visible:outline-dimension-accent' : undefined}
+              className={interactive ? 'outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blueprint' : undefined}
               style={interactive ? { cursor: 'pointer' } : undefined}
             >
               <rect x={section.x} y={top - 6} width={section.width} height={FLOOR_Y - top + 12} fill="transparent" />
               {isHovered && (
                 <rect
-                  x={section.x - 2}
-                  y={top - 8}
-                  width={section.width + 4}
-                  height={FLOOR_Y - top + 16}
+                  x={section.x - 3}
+                  y={top - 7}
+                  width={section.width + 6}
+                  height={FLOOR_Y - top + 14}
                   fill="none"
-                  stroke="var(--color-dimension-accent)"
-                  strokeWidth={1.5}
-                  strokeDasharray="4 3"
-                  opacity={0.85}
+                  stroke={DRAW_INK_SOFT}
+                  strokeWidth={1}
+                  strokeDasharray="3 3"
                   pointerEvents="none"
                 />
               )}
@@ -664,22 +891,38 @@ export function ShelvingPreview({
           </>
         )}
 
-        {/* 6. Dimension tags/labels. Depth's tag is purely informational —
-             read-only, always the committed config.depth, never "active"
-             (there is no depth drag to be active for; see the component doc
-             comment above). */}
+        {/* 6. Dimension system — thin steel extension lines with the value
+             breaking each one, the way a real technical drawing reads. Every
+             stroke here is one weight lighter than the rack's own edges so
+             the measurement layer never competes with the product. Depth's
+             tag is purely informational — read-only, always the committed
+             config.depth, never "active" (there is no depth drag to be
+             active for; see the component doc comment above). */}
+        <g pointerEvents="none">
+          {/* Height: a vertical extension line down the rack's left side,
+               capped with short ticks at the floor and the top edge. */}
+          <line x1={heightLabelPoint.x} y1={top} x2={heightLabelPoint.x} y2={FLOOR_Y} stroke={DRAW_LINE} strokeWidth={0.75} />
+          <line x1={heightLabelPoint.x - 3.5} y1={top} x2={heightLabelPoint.x + 3.5} y2={top} stroke={DRAW_LINE} strokeWidth={0.75} />
+          <line x1={heightLabelPoint.x - 3.5} y1={FLOOR_Y} x2={heightLabelPoint.x + 3.5} y2={FLOOR_Y} stroke={DRAW_LINE} strokeWidth={0.75} />
+          {/* Depth: a leader following the rack's own perspective diagonal,
+               from the front upright back to the rear plane. */}
+          <line x1={depthOrigin.x} y1={depthOrigin.y} x2={depthEnd.x} y2={depthEnd.y} stroke={DRAW_LINE} strokeWidth={0.75} />
+        </g>
         <DimensionTag x={heightLabelPoint.x} y={heightLabelPoint.y} label={`${Math.round(heightDrag.snapTarget ?? config.height)}`} active={heightDrag.isDragging} orientation="vertical" />
         <DimensionTag x={depthEnd.x} y={depthEnd.y} label={`${config.depth}`} active={false} orientation="horizontal" testId="depth-dimension-tag" />
 
-        {layout.map((section) => (
-          <SectionWidthLabel
-            key={`label-${section.id}`}
-            x={section.x + section.width / 2}
-            y={FLOOR_Y + 13}
-            label={widthDrag.isDragging && section.id === activeSection.id ? (widthDrag.snapTarget ?? section.section.width) : section.section.width}
-            active={widthDrag.isDragging && section.id === activeSection.id}
-          />
-        ))}
+        {layout.map((section) => {
+          const isDraggingThis = widthDrag.isDragging && section.id === activeSection.id;
+          return (
+            <SectionWidthLabel
+              key={`label-${section.id}`}
+              x={section.x + section.width / 2}
+              y={FLOOR_Y + 13}
+              label={isDraggingThis ? (widthDrag.snapTarget ?? section.section.width) : section.section.width}
+              active={isDraggingThis || (markActive && section.id === activeSection.id)}
+            />
+          );
+        })}
 
         <TotalWidthLine x1={rowStart} x2={rowEnd} y={FLOOR_Y + 68} label={Math.round(totalLengthMm)} active={widthDrag.isDragging} />
       </svg>
@@ -755,7 +998,7 @@ export function ShelvingPreview({
                 >
                   <span
                     aria-hidden="true"
-                    className={`${CIRCLE_DISC} ${DISC_LARGE} ${isActive ? 'border-foreground bg-surface-muted' : 'border-steel bg-surface'}`}
+                    className={`${CIRCLE_DISC} ${DISC_LARGE} ${isActive ? 'border-foreground' : 'border-line-strong'} bg-surface`}
                   >
                     +
                   </span>
@@ -783,7 +1026,7 @@ export function ShelvingPreview({
                 >
                   <span
                     aria-hidden="true"
-                    className={`${CIRCLE_DISC} ${DISC_SMALL} ${isActive ? 'border-foreground bg-surface-muted' : 'border-steel bg-surface'}`}
+                    className={`${CIRCLE_DISC} ${DISC_SMALL} ${isActive ? 'border-foreground' : 'border-line-strong'} bg-surface`}
                   >
                     −
                   </span>
@@ -799,18 +1042,18 @@ export function ShelvingPreview({
           <div
             className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center -space-y-1.5"
             style={{
-              left: `${(Math.min(rowEnd + 24, VIEWBOX_W - 16) / VIEWBOX_W) * 100}%`,
+              left: `${(shelfColumnX / VIEWBOX_W) * 100}%`,
               top: `${(((top + FLOOR_Y) / 2) / VIEWBOX_H) * 100}%`,
             }}
           >
             <button type="button" aria-label={t(CF['CF-019'], locale)} onClick={onIncreaseShelves} disabled={config.shelves >= maxShelves} className={CIRCLE_HIT}>
-              <span aria-hidden="true" className={`${CIRCLE_DISC} ${DISC_SMALL} border-steel bg-surface`}>
+              <span aria-hidden="true" className={`${CIRCLE_DISC} ${DISC_SMALL} border-line-strong bg-surface`}>
                 +
               </span>
             </button>
             <span className="mono relative z-10 text-xs font-semibold leading-none text-foreground">{config.shelves}</span>
             <button type="button" aria-label={t(CF['CF-020'], locale)} onClick={onDecreaseShelves} disabled={config.shelves <= minShelves} className={CIRCLE_HIT}>
-              <span aria-hidden="true" className={`${CIRCLE_DISC} ${DISC_SMALL} border-steel bg-surface`}>
+              <span aria-hidden="true" className={`${CIRCLE_DISC} ${DISC_SMALL} border-line-strong bg-surface`}>
                 −
               </span>
             </button>
@@ -827,12 +1070,23 @@ export function ShelvingPreview({
   if (framed) {
     return (
       <div className={`bg-surface ${className}`}>
-        <div className={`relative mx-auto aspect-[4/3] w-full overflow-hidden ${frameClassName}`}>
-          <div ref={containerRef} className="absolute left-0 top-0" style={{ width: FRAMED_STAGE_PERCENT, height: FRAMED_STAGE_PERCENT }}>
+        {/* 6:5 on phones, the approved 4:3 from `sm` up. The top view frame in
+            ConfiguratorClient carries the identical pair, so switching view
+            never changes the workspace's height. */}
+        <div className={`relative mx-auto aspect-[6/5] w-full overflow-hidden sm:aspect-[4/3] ${frameClassName}`}>
+          <div
+            ref={containerRef}
+            data-testid="preview-stage"
+            className="configurator-stage absolute"
+            style={{ ...stageVars(compactCrop, 'c'), ...stageVars(wideCrop, 'w') } as CSSProperties}
+          >
             {drawing}
           </div>
         </div>
-        <div className="flex items-start justify-between gap-x-4 gap-y-1 border-t border-line px-4 py-2.5 text-[13px] leading-snug text-steel">
+        {/* Secondary technical strip: the first-run nudge and the load
+            caption read as guidance under the drawing, never as headings —
+            12px, steel, sentence case, no uppercase spec label. */}
+        <div className="flex items-start justify-between gap-x-4 gap-y-1 border-t border-line px-3 py-2 text-xs leading-snug text-steel sm:px-4">
           {/* First-run nudge — sits under the drawing, so it can never cover
               the rack or its controls at any width. */}
           <p className="min-w-0">{showHint ? hint : null}</p>
@@ -859,7 +1113,7 @@ export function ShelvingPreview({
         <button
           type="button"
           onClick={onReset}
-          className="tech-label absolute right-3 top-3 text-steel underline-offset-2 hover:text-dimension-accent hover:underline"
+          className="tech-label absolute right-3 top-3 text-steel underline-offset-2 hover:text-foreground hover:underline"
         >
           {t(CF['CF-022'], locale)}
         </button>
@@ -922,22 +1176,34 @@ function WallPanels({
   );
 }
 
-/** Compact grey tag under each section — mirrors the reference's per-section width chip. */
+/** The per-section width value under each section. Plain mono figures on the
+ * white canvas — the old solid grey chip added a second row of filled blocks
+ * under the rack for no extra information. `active` (the section being
+ * dragged, or the selected one in a multi-section row) darkens it to graphite
+ * and adds weight; it is never the only cue for either state. */
 export function SectionWidthLabel({ x, y, label, active }: { x: number; y: number; label: number; active: boolean }) {
-  const text = String(Math.round(label));
-  const w = Math.max(24, text.length * 6 + 8);
-  const h = active ? 16 : 14;
   return (
-    <g>
-      <rect x={x - w / 2} y={y - h / 2} width={w} height={h} rx={2} fill={active ? 'var(--color-dimension-accent)' : '#9AA1AB'} opacity={active ? 1 : 0.85} />
-      <text x={x} y={y + 3} textAnchor="middle" fontFamily="IBM Plex Mono, monospace" fontSize={active ? 10 : 9} fontWeight={600} fill="#FFFFFF">
-        {text}
-      </text>
-    </g>
+    <text
+      x={x}
+      y={y + 3.5}
+      textAnchor="middle"
+      fontFamily="IBM Plex Mono, monospace"
+      fontSize={10}
+      fontWeight={active ? 700 : 500}
+      fill={active ? DRAW_INK : DRAW_INK_SOFT}
+      pointerEvents="none"
+    >
+      {String(Math.round(label))}
+    </text>
   );
 }
 
-/** Compact persistent red tag with a white number — the reference's "small red rectangle" dimension style. */
+/** A dimension value sitting on its own extension line: white label surface,
+ * hairline steel border, graphite mono figures. `active` (the axis currently
+ * being dragged) inverts it to solid graphite rather than switching hue, so
+ * the drawing keeps a single neutral palette and the moving value is still
+ * unmistakable. Its box size does not change with `active` — an active tag
+ * that grew would nudge the drawing around mid-drag. */
 export function DimensionTag({
   x,
   y,
@@ -956,31 +1222,47 @@ export function DimensionTag({
    * differing, which a test can't otherwise reliably tell apart. */
   testId?: string;
 }) {
-  const w = Math.max(28, label.length * 7 + 10);
-  const h = active ? 18 : 16;
+  const w = Math.max(26, label.length * 6.6 + 11);
+  const h = 15;
   const isVertical = orientation === 'vertical';
   return (
-    <g transform={isVertical ? `rotate(-90 ${x} ${y})` : undefined} data-testid={testId}>
-      <rect x={x - w / 2} y={y - h / 2} width={w} height={h} rx={2} fill="var(--color-dimension-accent)" opacity={active ? 1 : 0.92} />
-      <text x={x} y={y + 3.5} textAnchor="middle" fontFamily="IBM Plex Mono, monospace" fontSize={active ? 11 : 10} fontWeight={600} fill="#FFFFFF">
+    <g transform={isVertical ? `rotate(-90 ${x} ${y})` : undefined} data-testid={testId} pointerEvents="none">
+      <rect
+        x={x - w / 2}
+        y={y - h / 2}
+        width={w}
+        height={h}
+        rx={1.5}
+        fill={active ? DRAW_INK : DRAW_PAPER}
+        stroke={active ? DRAW_INK : DRAW_LINE}
+        strokeWidth={0.75}
+      />
+      <text
+        x={x}
+        y={y + 3.4}
+        textAnchor="middle"
+        fontFamily="IBM Plex Mono, monospace"
+        fontSize={10}
+        fontWeight={600}
+        fill={active ? DRAW_PAPER : DRAW_INK}
+      >
         {label}
       </text>
     </g>
   );
 }
 
-/** Thin dimension line + centered value under the whole row — no arrowheads, no sentence-length label. */
+/** Thin dimension line + centred value under the whole row — no arrowheads,
+ * no sentence-length label, and no colour of its own: the same steel hairline
+ * and neutral tag every other dimension on this canvas uses. */
 function TotalWidthLine({ x1, x2, y, label, active }: { x1: number; x2: number; y: number; label: number; active: boolean }) {
-  // Always the red dimension accent — thin idle, no colour switch to grey —
-  // matching the reference's simple red measurement lines.
-  const color = 'var(--color-dimension-accent)';
   const locale = useLocale();
   return (
-    <g opacity={active ? 1 : 0.7}>
-      <line x1={x1} y1={y} x2={x2} y2={y} stroke={color} strokeWidth={1} />
-      <line x1={x1} y1={y - 3} x2={x1} y2={y + 3} stroke={color} strokeWidth={1} />
-      <line x1={x2} y1={y - 3} x2={x2} y2={y + 3} stroke={color} strokeWidth={1} />
-      <DimensionTag x={(x1 + x2) / 2} y={y + 15} label={`${label} ${t(G['G-008'], locale)}`} active={active} orientation="horizontal" />
+    <g pointerEvents="none">
+      <line x1={x1} y1={y} x2={x2} y2={y} stroke={DRAW_LINE} strokeWidth={0.75} />
+      <line x1={x1} y1={y - 3.5} x2={x1} y2={y + 3.5} stroke={DRAW_LINE} strokeWidth={0.75} />
+      <line x1={x2} y1={y - 3.5} x2={x2} y2={y + 3.5} stroke={DRAW_LINE} strokeWidth={0.75} />
+      <DimensionTag x={(x1 + x2) / 2} y={y + 14} label={`${label} ${t(G['G-008'], locale)}`} active={active} orientation="horizontal" />
     </g>
   );
 }

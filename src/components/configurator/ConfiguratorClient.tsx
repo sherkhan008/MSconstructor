@@ -223,8 +223,12 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
 
         <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(340px,380px)] lg:items-start xl:gap-8">
           <div className="-mx-4 border-y border-line bg-surface sm:mx-0 sm:border-x lg:sticky lg:top-[calc(var(--header-height)+1rem)]">
-            <div className="border-b border-line p-2 sm:px-3">
-              <div className="flex w-full border border-line sm:w-auto sm:max-w-full sm:inline-flex" role="group" aria-label={t(CF['CF-003'], locale)}>
+            {/* Compact segmented control, not a full-width toolbar: it names
+                the two presentation modes and then gets out of the rack's
+                way. Both modes render into the identical 4:3 frame below, so
+                switching never moves anything else on the page. */}
+            <div className="border-b border-line px-3 py-2 sm:px-4">
+              <div className="inline-flex max-w-full border border-line" role="group" aria-label={t(CF['CF-003'], locale)}>
                 <ViewToggleButton pressed={previewMode === 'front'} onClick={() => setPreviewMode('front')}>
                   {t(CF['CF-004'], locale)}
                 </ViewToggleButton>
@@ -254,9 +258,10 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
               />
             ) : (
               <div>
-                {/* Same 4:3 frame as the front view, so switching modes never
+                {/* Exactly the front view's frame ratio at every breakpoint
+                    (6:5 on phones, 4:3 from `sm` up), so switching modes never
                     makes the workspace jump. */}
-                <div className="configurator-frame mx-auto flex aspect-[4/3] w-full items-center">
+                <div className="configurator-frame mx-auto flex aspect-[6/5] w-full items-center sm:aspect-[4/3]">
                   <TopShelvingPreview
                     config={config}
                     color={color}
@@ -266,7 +271,9 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
                     onSelectSection={setActiveSectionId}
                   />
                 </div>
-                <div className="flex justify-end border-t border-line px-4 py-2.5 text-[13px] leading-snug text-steel">
+                {/* Same secondary caption strip the front view renders, so
+                    the two modes are visibly one component. */}
+                <div className="flex justify-end border-t border-line px-3 py-2 text-xs leading-snug text-steel sm:px-4">
                   <p className="mono whitespace-nowrap">{t(CT['CT-024'], locale, { N: config.loadCapacity })}</p>
                 </div>
               </div>
@@ -324,8 +331,8 @@ function ViewToggleButton({
       type="button"
       aria-pressed={pressed}
       onClick={onClick}
-      className={`min-h-11 flex-1 px-2 py-1 text-[13px] font-medium leading-tight transition-colors sm:flex-none lg:min-h-9 ${
-        pressed ? 'bg-foreground text-background' : 'bg-surface text-steel hover:text-foreground'
+      className={`min-h-11 min-w-0 px-3 py-1.5 text-xs font-medium leading-tight transition-colors sm:text-[13px] lg:min-h-9 ${
+        pressed ? 'bg-foreground text-surface' : 'bg-surface text-steel hover:bg-surface-muted hover:text-foreground'
       } ${className}`}
     >
       {children}

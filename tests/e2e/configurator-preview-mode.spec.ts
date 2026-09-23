@@ -36,7 +36,7 @@ test('switching between front and top view causes zero pricing requests and pres
 
   // Selecting a section in top view stays in sync with the section table.
   await page.getByRole('button', { name: /Секция 1, ширина/ }).first().click();
-  await expect(page.getByRole('button', { name: 'Секция 1', exact: true })).toHaveAttribute('class', /dimension-accent/);
+  await expect(page.getByRole('button', { name: 'Секция 1', exact: true })).toHaveAttribute('aria-pressed', 'true');
 
   // Switch back to front view — still zero extra pricing requests, state unchanged.
   await page.getByRole('button', { name: 'Вид спереди' }).click();

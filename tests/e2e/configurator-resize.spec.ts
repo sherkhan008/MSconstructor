@@ -402,7 +402,7 @@ test('hovering a section\'s right upright targets that section for width resizin
   // pre-switch position.
   const section2Button = page.getByRole('button', { name: 'Секция 2', exact: true });
   await section2Button.click();
-  await expect(section2Button).toHaveAttribute('class', /dimension-accent/);
+  await expect(section2Button).toHaveAttribute('aria-pressed', 'true');
   const before = [
     await widthSelects.nth(0).inputValue(),
     await widthSelects.nth(1).inputValue(),
@@ -427,7 +427,7 @@ test('hovering a section\'s right upright targets that section for width resizin
   await expect(widthSelects).toHaveCount(4);
   const section4Button = page.getByRole('button', { name: 'Секция 4', exact: true });
   await section4Button.click();
-  await expect(section4Button).toHaveAttribute('class', /dimension-accent/);
+  await expect(section4Button).toHaveAttribute('aria-pressed', 'true');
   const before4 = await widthSelects.nth(3).inputValue();
   await widthHandle.scrollIntoViewIfNeeded();
   const box2 = await widthHandle.boundingBox();
