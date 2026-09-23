@@ -107,18 +107,26 @@ export function ResizeHandle({
       <span
         aria-hidden="true"
         className={[
-          'grid h-5 w-5 place-items-center rounded-full border text-[10px] font-bold leading-none transition-opacity',
+          // A resize *point*, not a knob: an 18px disc inside the unchanged
+          // 44px touch target, small enough to sit on a dimension edge
+          // without covering the value next to it.
+          'grid h-[18px] w-[18px] place-items-center rounded-full border text-[9px] font-bold leading-none transition-opacity',
           // Hidden until the pointer is over this axis's own discovery zone
           // (see ShelvingPreview) — never gated on the whole white canvas.
           // Keyboard focus on this exact handle (group-focus-visible) and an
           // active drag on this exact axis (isDragging) can still reveal it
           // on their own. Coarse pointers (touch) have no hover concept, so
           // always show there.
+          //
+          // Graphite throughout, matching the rest of the technical drawing
+          // layer: a hairline steel ring at rest, and a solid graphite disc
+          // while this axis is actually being dragged — inverted rather than
+          // recoloured, so the canvas keeps one neutral palette.
           isDragging
-            ? 'border-dimension-accent bg-dimension-accent-soft text-dimension-accent opacity-100'
+            ? 'border-foreground bg-foreground text-surface opacity-100'
             : zoneHovered
-              ? 'border-steel-soft bg-surface text-steel opacity-100'
-              : 'border-steel-soft bg-surface text-steel opacity-0 group-focus-visible:opacity-100 pointer-coarse:opacity-100',
+              ? 'border-foreground bg-surface text-foreground opacity-100'
+              : 'border-line-strong bg-surface text-steel opacity-0 group-focus-visible:border-foreground group-focus-visible:text-foreground group-focus-visible:opacity-100 pointer-coarse:opacity-100',
         ].join(' ')}
       >
         {AXIS_ICON[axis]}

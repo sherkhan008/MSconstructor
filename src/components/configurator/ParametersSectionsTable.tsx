@@ -76,14 +76,19 @@ export function ParametersSectionsTable({ catalog, onReset }: { catalog: PublicC
           return (
             <li
               key={section.id}
-              className={`border-b border-l-[3px] border-b-line px-4 pb-3 pt-1 ${active ? 'border-l-dimension-accent bg-surface' : 'border-l-transparent bg-background/60'}`}
+              // Graphite rail + white surface for the active section, matching
+              // the graphite outline the preview draws around that same
+              // section — the two views of one selection must agree. (Not the
+              // legacy red accent: see the workspace's colour system, where
+              // red is reserved for semantic/destructive states.)
+              className={`border-b border-l-[3px] border-b-line px-4 pb-3 pt-1 ${active ? 'border-l-foreground bg-surface' : 'border-l-transparent bg-background/60'}`}
             >
               <div className="flex items-center justify-between gap-2">
                 <button
                   type="button"
                   onClick={() => setActiveSectionId(section.id)}
                   aria-pressed={active}
-                  className={`-ml-1 min-h-11 px-1 text-left text-[15px] font-semibold ${active ? 'text-dimension-accent' : 'text-foreground hover:text-steel'}`}
+                  className={`-ml-1 min-h-11 px-1 text-left text-[15px] font-semibold ${active ? 'text-foreground' : 'text-steel hover:text-foreground'}`}
                 >
                   {t(CF['CF-025'], locale, { N: i + 1 })}
                 </button>

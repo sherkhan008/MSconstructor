@@ -182,6 +182,28 @@
     background-color: var(--color-accent);
   }
 
+  /* The framed preview's drawing stage. ShelvingPreview publishes two crop
+     profiles as custom properties (compact = phones, wide = the approved
+     sm-and-up framing); which one applies is decided here, so the component
+     never has to measure the viewport and nothing depends on hydration.
+     The stage always resolves to a 4:3 box in real pixels, matching the SVG
+     viewBox, which is what keeps drag sensitivity identical at every crop. */
+  .configurator-stage {
+    width: var(--stage-c-w);
+    height: var(--stage-c-h);
+    left: var(--stage-c-l);
+    top: var(--stage-c-t);
+  }
+
+  @media (min-width: 40rem) {
+    .configurator-stage {
+      width: var(--stage-w-w);
+      height: var(--stage-w-h);
+      left: var(--stage-w-l);
+      top: var(--stage-w-t);
+    }
+  }
+
   /* Configurator rack frame (4:3). On desktop the workspace fits one screen
      below the header and the 5rem page title, so the frame is capped to the
      height left after the preview's toolbar and caption strip (~6rem) and
