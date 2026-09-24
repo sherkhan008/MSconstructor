@@ -2,15 +2,12 @@ import { readFileSync } from 'node:fs';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { NextRequest } from 'next/server';
 import { POST as ordersPost } from '@/app/api/orders/route';
-import { POST as pricingPost } from '@/app/api/pricing/calculate/route';
 import { clearMemoryOrders, countMemoryOrders } from '@/lib/orders/store';
 import { parseConfiguration } from '@/lib/pricing/schema';
 import { catalogProductToConfiguration } from '@/lib/catalog-product-configuration';
 import { CATALOG_PRODUCTS } from '@/lib/data/seed-data';
 import { getCatalog, resetCatalogCache, type Catalog } from '@/lib/data/repository';
-import { buildBom, calculatePrice } from '@/lib/pricing';
-import { MIXED_SECTION_DIMENSIONS_DIAGNOSTIC } from '@/lib/pricing/bom';
-import { toPublicPriceFailure, toPublicPriceResult } from '@/lib/pricing/public-result';
+import { calculatePrice } from '@/lib/pricing';
 import type { ShelvingConfiguration } from '@/lib/types/domain';
 
 /**
@@ -31,9 +28,19 @@ import type { ShelvingConfiguration } from '@/lib/types/domain';
  *     data); like the other pricing tests, it expects the test database to
  *     hold that seeded catalog.
  *
- *  2. Transitional fail-closed guard — a configuration whose sections differ
- *     in height or shelf count is never priced with the V2.1 shared-upright
- *     assumptions; it is refused until V2.2B ships per-section pricing.
+ *  2. (Removed in V2.2B.) V2.2A refused a configuration whose sections
+ *     differ in height or shelf count, because the BOM still shared uprights
+ *     between neighbours. V2.2B prices every section from its own BOM with
+ *     its own four uprights, so that guard is gone and mixed rows are priced
+ *     — see tests/integration/pricing-v22b-per-section.test.ts.
+ *
+ * V2.2B deliberately changes the price of every MULTI-section row (each
+ * section now carries its own uprights instead of sharing them). The fixture
+ * is kept exactly as captured, as historical evidence: the golden cases V2.2B
+ * does not touch — every single-section configuration and every expected
+ * failure — must still equal it here, and every multi-section case is
+ * compared with it line by line in pricing-v22b-per-section.test.ts, which
+ * proves each difference is exactly the independent-upright change.
  */
 
 interface GoldenCase {
@@ -65,6 +72,11 @@ function outcomeOf(result: ReturnType<typeof calculatePrice>) {
     : { ok: false, code: result.code, message: result.message, details: result.details ?? null };
 }
 
+/** A golden case V2.2B leaves commercially unchanged: one section, or an expected failure. */
+function unchangedByV22b(golden: GoldenCase): boolean {
+  return golden.config.sections.length === 1 || !golden.outcome.ok;
+}
+
 function mixed(overrides: Partial<ShelvingConfiguration> = {}): ShelvingConfiguration {
   return {
     modelSlug: 'ms-standard',
@@ -85,7 +97,7 @@ function mixed(overrides: Partial<ShelvingConfiguration> = {}): ShelvingConfigur
   };
 }
 
-describe('V2.2A — uniform configurations price exactly as V2.1 (golden regression)', () => {
+describe('V2.2A — uniform configurations V2.2B does not touch price exactly as V2.1 (golden regression)', () => {
   let catalog: Catalog;
   beforeAll(async () => {
     resetCatalogCache();
@@ -96,80 +108,14 @@ describe('V2.2A — uniform configurations price exactly as V2.1 (golden regress
     expect(GOLDEN.length).toBeGreaterThanOrEqual(70);
     expect(GOLDEN.filter((g) => g.outcome.ok).length).toBeGreaterThanOrEqual(60);
     expect(readFileSync('tests/fixtures/pricing-golden-v2.1.json', 'utf8')).not.toMatch(/unitCost|purchasePrice/);
+    // Every single-section case (every height × min/max shelves, every
+    // width × depth, walls, accessories, delivery, colours, products…) stays
+    // pinned here; only the multi-section cases move to the V2.2B comparison.
+    expect(GOLDEN.filter((g) => unchangedByV22b(g) && g.outcome.ok).length).toBeGreaterThanOrEqual(45);
   });
 
-  it.each(GOLDEN.map((g) => [g.name, g] as const))('%s', (_name, golden) => {
+  it.each(GOLDEN.filter(unchangedByV22b).map((g) => [g.name, g] as const))('%s', (_name, golden) => {
     expect(outcomeOf(calculatePrice(toV2(golden.config), catalog))).toEqual(golden.outcome);
-  });
-});
-
-describe('V2.2A — mixed section heights/shelves fail closed until V2.2B', () => {
-  let catalog: Catalog;
-  beforeAll(async () => {
-    resetCatalogCache();
-    catalog = await getCatalog();
-  });
-
-  it('refuses mixed heights (1500 | 2500 | 1000) instead of pricing them', () => {
-    const result = calculatePrice(mixed(), catalog);
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.code).toBe('INDIVIDUAL_QUOTE_REQUIRED');
-    expect(result.internalDetails).toEqual([MIXED_SECTION_DIMENSIONS_DIAGNOSTIC]);
-  });
-
-  it('refuses mixed shelf counts at one height', () => {
-    const config = mixed();
-    config.sections = config.sections.map((s, i) => ({ ...s, height: 2000, shelves: [3, 5, 7][i] }));
-    const result = calculatePrice(config, catalog);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.code).toBe('INDIVIDUAL_QUOTE_REQUIRED');
-  });
-
-  it('refuses a two-section row that differs only in height', () => {
-    const config = mixed({ sections: mixed().sections.slice(0, 2) });
-    config.sections = config.sections.map((s, i) => ({ ...s, height: [2000, 2200][i], shelves: 5 }));
-    expect(calculatePrice(config, catalog).ok).toBe(false);
-  });
-
-  it('the same row made uniform is priced normally', () => {
-    const config = mixed();
-    config.sections = config.sections.map((s) => ({ ...s, height: 2000, shelves: 5 }));
-    expect(calculatePrice(config, catalog).ok).toBe(true);
-  });
-
-  it('still reports real compatibility problems first (per-section shelf ceiling)', () => {
-    const config = mixed();
-    config.sections = config.sections.map((s, i) => ({ ...s, shelves: i === 2 ? 6 : 4 }));
-    const result = calculatePrice(config, catalog);
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.code).toBe('INCOMPATIBLE_CONFIGURATION');
-    expect(result.details).toContain('При высоте 1000 мм максимум 4 полок');
-  });
-
-  it('buildBom itself refuses mixed sections (second, independent guard)', () => {
-    const bom = buildBom(mixed(), catalog);
-    expect(bom.missingCritical).toBe(true);
-    expect(bom.lines).toEqual([]);
-    expect(bom.warnings).toEqual([MIXED_SECTION_DIMENSIONS_DIAGNOSTIC]);
-  });
-
-  it('the customer-facing failure carries no internal diagnostic and no price', () => {
-    const result = calculatePrice(mixed(), catalog);
-    if (result.ok) throw new Error('expected failure');
-    const publicFailure = toPublicPriceFailure(result);
-    const text = JSON.stringify(publicFailure);
-    expect(text).not.toContain('V2.2');
-    expect(text).not.toMatch(/total|unitCost|purchase|markup/i);
-  });
-
-  it('uniform public result exposes no purchase cost', () => {
-    const config = mixed();
-    config.sections = config.sections.map((s) => ({ ...s, height: 2000, shelves: 5 }));
-    const result = calculatePrice(config, catalog);
-    if (!result.ok) throw new Error('expected success');
-    expect(JSON.stringify(toPublicPriceResult(result))).not.toMatch(/unitCost|purchasePrice|markup/);
   });
 });
 
@@ -203,31 +149,8 @@ function uniform(): ShelvingConfiguration {
   return config;
 }
 
-describe('V2.2A — API boundaries (forged requests cannot bypass the guard)', () => {
+describe('V2.2A — API boundaries for V2 configurations', () => {
   beforeEach(() => clearMemoryOrders());
-
-  it('POST /api/pricing/calculate refuses a forged mixed configuration and returns no price', async () => {
-    const response = await post(pricingPost, '/api/pricing/calculate', mixed());
-    const json = await response.json();
-    expect(json.ok).toBe(false);
-    expect(json.code).toBe('INDIVIDUAL_QUOTE_REQUIRED');
-    expect(JSON.stringify(json)).not.toMatch(/"total"|breakdown|unitCost|purchase|V2\.2/);
-  });
-
-  it('POST /api/orders refuses a forged mixed configuration and creates NO order', async () => {
-    const response = await post(ordersPost, '/api/orders', orderBody([mixed()]));
-    const json = await response.json();
-    expect(response.ok).toBe(false);
-    expect(json.ok).toBe(false);
-    expect(json.code).toBe('INDIVIDUAL_QUOTE_REQUIRED');
-    expect(countMemoryOrders()).toBe(0);
-  });
-
-  it('one mixed line in an otherwise valid order still fails the whole order', async () => {
-    const response = await post(ordersPost, '/api/orders', orderBody([uniform(), mixed()]));
-    expect(response.ok).toBe(false);
-    expect(countMemoryOrders()).toBe(0);
-  });
 
   it('a uniform V2 order is accepted (repriced on the server)', async () => {
     const response = await post(ordersPost, '/api/orders', orderBody([uniform()]));

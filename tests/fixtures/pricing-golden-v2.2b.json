@@ -1,0 +1,3486 @@
+[
+  {
+    "name": "single-H1000-S2",
+    "config": {
+      "modelSlug": "ms-standard",
+      "depth": 400,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [],
+      "assemblyId": "assembly-self",
+      "deliveryId": "delivery-pickup",
+      "quantity": 1,
+      "sections": [
+        {
+          "id": "g1",
+          "width": 1000,
+          "height": 1000,
+          "shelves": 2,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        }
+      ]
+    },
+    "outcome": {
+      "ok": true,
+      "breakdown": {
+        "componentsSubtotal": 87200,
+        "colorSurcharge": 0,
+        "markup": 19184,
+        "unitNet": 106384,
+        "quantity": 1,
+        "itemsNet": 106384,
+        "assembly": 0,
+        "delivery": 0,
+        "discount": 0,
+        "discountReasons": [],
+        "net": 106384,
+        "vatPercent": 16,
+        "vat": 17021,
+        "total": 123405,
+        "unitTotal": 123405
+      },
+      "bom": [
+        {
+          "componentId": "upright-1000-STANDARD",
+          "sku": "UPR-0003",
+          "type": "UPRIGHT",
+          "name": "Стойка 1000 мм",
+          "quantity": 4,
+          "unitPrice": 2800,
+          "totalPrice": 11200,
+          "weightKg": 12.4
+        },
+        {
+          "componentId": "beam-depth-400",
+          "sku": "BMD-0093",
+          "type": "BEAM_DEPTH",
+          "name": "Балка поперечная 400 мм",
+          "quantity": 4,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 3.2
+        },
+        {
+          "componentId": "tie-generic",
+          "sku": "TIE-0131",
+          "type": "TIE",
+          "name": "Стяжка рамы",
+          "quantity": 8,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 4.8
+        },
+        {
+          "componentId": "fastener-generic",
+          "sku": "FST-0132",
+          "type": "FASTENER",
+          "name": "Комплект крепежа (болт + гайка)",
+          "quantity": 24,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 1.2000000000000002
+        },
+        {
+          "componentId": "foot-generic",
+          "sku": "FOT-0133",
+          "type": "FOOT",
+          "name": "Опора пластиковая",
+          "quantity": 4,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 0.4
+        },
+        {
+          "componentId": "shelf-STANDARD-1000-400",
+          "sku": "SHF-0034",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1000×400",
+          "quantity": 2,
+          "unitPrice": 38000,
+          "totalPrice": 76000,
+          "weightKg": 7.6
+        },
+        {
+          "componentId": "beam-long-1000",
+          "sku": "BML-0089",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1000 мм",
+          "quantity": 4,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 9.6
+        }
+      ],
+      "totalWeightKg": 39,
+      "rowLengthMm": 1000,
+      "leadTimeDays": 2,
+      "warnings": [],
+      "deliveryNote": null
+    }
+  },
+  {
+    "name": "single-H1000-S4",
+    "config": {
+      "modelSlug": "ms-standard",
+      "depth": 400,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [],
+      "assemblyId": "assembly-self",
+      "deliveryId": "delivery-pickup",
+      "quantity": 1,
+      "sections": [
+        {
+          "id": "g2",
+          "width": 1000,
+          "height": 1000,
+          "shelves": 4,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        }
+      ]
+    },
+    "outcome": {
+      "ok": true,
+      "breakdown": {
+        "componentsSubtotal": 163200,
+        "colorSurcharge": 0,
+        "markup": 35904,
+        "unitNet": 199104,
+        "quantity": 1,
+        "itemsNet": 199104,
+        "assembly": 0,
+        "delivery": 0,
+        "discount": 0,
+        "discountReasons": [],
+        "net": 199104,
+        "vatPercent": 16,
+        "vat": 31857,
+        "total": 230961,
+        "unitTotal": 230961
+      },
+      "bom": [
+        {
+          "componentId": "upright-1000-STANDARD",
+          "sku": "UPR-0003",
+          "type": "UPRIGHT",
+          "name": "Стойка 1000 мм",
+          "quantity": 4,
+          "unitPrice": 2800,
+          "totalPrice": 11200,
+          "weightKg": 12.4
+        },
+        {
+          "componentId": "beam-depth-400",
+          "sku": "BMD-0093",
+          "type": "BEAM_DEPTH",
+          "name": "Балка поперечная 400 мм",
+          "quantity": 8,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 6.4
+        },
+        {
+          "componentId": "tie-generic",
+          "sku": "TIE-0131",
+          "type": "TIE",
+          "name": "Стяжка рамы",
+          "quantity": 8,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 4.8
+        },
+        {
+          "componentId": "fastener-generic",
+          "sku": "FST-0132",
+          "type": "FASTENER",
+          "name": "Комплект крепежа (болт + гайка)",
+          "quantity": 32,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 1.6
+        },
+        {
+          "componentId": "foot-generic",
+          "sku": "FOT-0133",
+          "type": "FOOT",
+          "name": "Опора пластиковая",
+          "quantity": 4,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 0.4
+        },
+        {
+          "componentId": "shelf-STANDARD-1000-400",
+          "sku": "SHF-0034",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1000×400",
+          "quantity": 4,
+          "unitPrice": 38000,
+          "totalPrice": 152000,
+          "weightKg": 15.2
+        },
+        {
+          "componentId": "beam-long-1000",
+          "sku": "BML-0089",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1000 мм",
+          "quantity": 8,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 19.2
+        }
+      ],
+      "totalWeightKg": 60,
+      "rowLengthMm": 1000,
+      "leadTimeDays": 2,
+      "warnings": [],
+      "deliveryNote": null
+    }
+  },
+  {
+    "name": "single-H1500-S6",
+    "config": {
+      "modelSlug": "ms-standard",
+      "depth": 400,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [],
+      "assemblyId": "assembly-self",
+      "deliveryId": "delivery-pickup",
+      "quantity": 1,
+      "sections": [
+        {
+          "id": "g3",
+          "width": 1000,
+          "height": 1500,
+          "shelves": 6,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        }
+      ]
+    },
+    "outcome": {
+      "ok": true,
+      "breakdown": {
+        "componentsSubtotal": 244800,
+        "colorSurcharge": 0,
+        "markup": 53856,
+        "unitNet": 298656,
+        "quantity": 1,
+        "itemsNet": 298656,
+        "assembly": 0,
+        "delivery": 0,
+        "discount": 0,
+        "discountReasons": [],
+        "net": 298656,
+        "vatPercent": 16,
+        "vat": 47785,
+        "total": 346441,
+        "unitTotal": 346441
+      },
+      "bom": [
+        {
+          "componentId": "upright-1500-STANDARD",
+          "sku": "UPR-0007",
+          "type": "UPRIGHT",
+          "name": "Стойка 1500 мм",
+          "quantity": 4,
+          "unitPrice": 4200,
+          "totalPrice": 16800,
+          "weightKg": 18.8
+        },
+        {
+          "componentId": "beam-depth-400",
+          "sku": "BMD-0093",
+          "type": "BEAM_DEPTH",
+          "name": "Балка поперечная 400 мм",
+          "quantity": 12,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 9.600000000000001
+        },
+        {
+          "componentId": "tie-generic",
+          "sku": "TIE-0131",
+          "type": "TIE",
+          "name": "Стяжка рамы",
+          "quantity": 8,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 4.8
+        },
+        {
+          "componentId": "fastener-generic",
+          "sku": "FST-0132",
+          "type": "FASTENER",
+          "name": "Комплект крепежа (болт + гайка)",
+          "quantity": 40,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 2
+        },
+        {
+          "componentId": "foot-generic",
+          "sku": "FOT-0133",
+          "type": "FOOT",
+          "name": "Опора пластиковая",
+          "quantity": 4,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 0.4
+        },
+        {
+          "componentId": "shelf-STANDARD-1000-400",
+          "sku": "SHF-0034",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1000×400",
+          "quantity": 6,
+          "unitPrice": 38000,
+          "totalPrice": 228000,
+          "weightKg": 22.799999999999997
+        },
+        {
+          "componentId": "beam-long-1000",
+          "sku": "BML-0089",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1000 мм",
+          "quantity": 12,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 28.799999999999997
+        }
+      ],
+      "totalWeightKg": 87,
+      "rowLengthMm": 1000,
+      "leadTimeDays": 2,
+      "warnings": [],
+      "deliveryNote": null
+    }
+  },
+  {
+    "name": "single-H2000-S5",
+    "config": {
+      "modelSlug": "ms-standard",
+      "depth": 400,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [],
+      "assemblyId": "assembly-self",
+      "deliveryId": "delivery-pickup",
+      "quantity": 1,
+      "sections": [
+        {
+          "id": "g4",
+          "width": 1000,
+          "height": 2000,
+          "shelves": 5,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        }
+      ]
+    },
+    "outcome": {
+      "ok": true,
+      "breakdown": {
+        "componentsSubtotal": 212400,
+        "colorSurcharge": 0,
+        "markup": 46728,
+        "unitNet": 259128,
+        "quantity": 1,
+        "itemsNet": 259128,
+        "assembly": 0,
+        "delivery": 0,
+        "discount": 0,
+        "discountReasons": [],
+        "net": 259128,
+        "vatPercent": 16,
+        "vat": 41460,
+        "total": 300588,
+        "unitTotal": 300588
+      },
+      "bom": [
+        {
+          "componentId": "upright-2000-STANDARD",
+          "sku": "UPR-0015",
+          "type": "UPRIGHT",
+          "name": "Стойка 2000 мм",
+          "quantity": 4,
+          "unitPrice": 5600,
+          "totalPrice": 22400,
+          "weightKg": 24.8
+        },
+        {
+          "componentId": "beam-depth-400",
+          "sku": "BMD-0093",
+          "type": "BEAM_DEPTH",
+          "name": "Балка поперечная 400 мм",
+          "quantity": 10,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 8
+        },
+        {
+          "componentId": "tie-generic",
+          "sku": "TIE-0131",
+          "type": "TIE",
+          "name": "Стяжка рамы",
+          "quantity": 8,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 4.8
+        },
+        {
+          "componentId": "fastener-generic",
+          "sku": "FST-0132",
+          "type": "FASTENER",
+          "name": "Комплект крепежа (болт + гайка)",
+          "quantity": 36,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 1.8
+        },
+        {
+          "componentId": "foot-generic",
+          "sku": "FOT-0133",
+          "type": "FOOT",
+          "name": "Опора пластиковая",
+          "quantity": 4,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 0.4
+        },
+        {
+          "componentId": "shelf-STANDARD-1000-400",
+          "sku": "SHF-0034",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1000×400",
+          "quantity": 5,
+          "unitPrice": 38000,
+          "totalPrice": 190000,
+          "weightKg": 19
+        },
+        {
+          "componentId": "beam-long-1000",
+          "sku": "BML-0089",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1000 мм",
+          "quantity": 10,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 24
+        }
+      ],
+      "totalWeightKg": 83,
+      "rowLengthMm": 1000,
+      "leadTimeDays": 2,
+      "warnings": [],
+      "deliveryNote": null
+    }
+  },
+  {
+    "name": "single-H2500-S8",
+    "config": {
+      "modelSlug": "ms-standard",
+      "depth": 400,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [],
+      "assemblyId": "assembly-self",
+      "deliveryId": "delivery-pickup",
+      "quantity": 1,
+      "sections": [
+        {
+          "id": "g5",
+          "width": 1000,
+          "height": 2500,
+          "shelves": 8,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        }
+      ]
+    },
+    "outcome": {
+      "ok": true,
+      "breakdown": {
+        "componentsSubtotal": 332000,
+        "colorSurcharge": 0,
+        "markup": 73040,
+        "unitNet": 405040,
+        "quantity": 1,
+        "itemsNet": 405040,
+        "assembly": 0,
+        "delivery": 0,
+        "discount": 0,
+        "discountReasons": [],
+        "net": 405040,
+        "vatPercent": 16,
+        "vat": 64806,
+        "total": 469846,
+        "unitTotal": 469846
+      },
+      "bom": [
+        {
+          "componentId": "upright-2500-STANDARD",
+          "sku": "UPR-0023",
+          "type": "UPRIGHT",
+          "name": "Стойка 2500 мм",
+          "quantity": 4,
+          "unitPrice": 7000,
+          "totalPrice": 28000,
+          "weightKg": 31.2
+        },
+        {
+          "componentId": "beam-depth-400",
+          "sku": "BMD-0093",
+          "type": "BEAM_DEPTH",
+          "name": "Балка поперечная 400 мм",
+          "quantity": 16,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 12.8
+        },
+        {
+          "componentId": "tie-generic",
+          "sku": "TIE-0131",
+          "type": "TIE",
+          "name": "Стяжка рамы",
+          "quantity": 8,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 4.8
+        },
+        {
+          "componentId": "fastener-generic",
+          "sku": "FST-0132",
+          "type": "FASTENER",
+          "name": "Комплект крепежа (болт + гайка)",
+          "quantity": 48,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 2.4000000000000004
+        },
+        {
+          "componentId": "foot-generic",
+          "sku": "FOT-0133",
+          "type": "FOOT",
+          "name": "Опора пластиковая",
+          "quantity": 4,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 0.4
+        },
+        {
+          "componentId": "shelf-STANDARD-1000-400",
+          "sku": "SHF-0034",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1000×400",
+          "quantity": 8,
+          "unitPrice": 38000,
+          "totalPrice": 304000,
+          "weightKg": 30.4
+        },
+        {
+          "componentId": "beam-long-1000",
+          "sku": "BML-0089",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1000 мм",
+          "quantity": 16,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 38.4
+        }
+      ],
+      "totalWeightKg": 120,
+      "rowLengthMm": 1000,
+      "leadTimeDays": 5,
+      "warnings": [],
+      "deliveryNote": null
+    }
+  },
+  {
+    "name": "single-H3000-S2",
+    "config": {
+      "modelSlug": "ms-standard",
+      "depth": 400,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [],
+      "assemblyId": "assembly-self",
+      "deliveryId": "delivery-pickup",
+      "quantity": 1,
+      "sections": [
+        {
+          "id": "g6",
+          "width": 1000,
+          "height": 3000,
+          "shelves": 2,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        }
+      ]
+    },
+    "outcome": {
+      "ok": true,
+      "breakdown": {
+        "componentsSubtotal": 109600,
+        "colorSurcharge": 0,
+        "markup": 24112,
+        "unitNet": 133712,
+        "quantity": 1,
+        "itemsNet": 133712,
+        "assembly": 0,
+        "delivery": 0,
+        "discount": 0,
+        "discountReasons": [],
+        "net": 133712,
+        "vatPercent": 16,
+        "vat": 21394,
+        "total": 155106,
+        "unitTotal": 155106
+      },
+      "bom": [
+        {
+          "componentId": "upright-3000-STANDARD",
+          "sku": "UPR-0025",
+          "type": "UPRIGHT",
+          "name": "Стойка 3000 мм",
+          "quantity": 4,
+          "unitPrice": 8400,
+          "totalPrice": 33600,
+          "weightKg": 37.2
+        },
+        {
+          "componentId": "beam-depth-400",
+          "sku": "BMD-0093",
+          "type": "BEAM_DEPTH",
+          "name": "Балка поперечная 400 мм",
+          "quantity": 4,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 3.2
+        },
+        {
+          "componentId": "tie-generic",
+          "sku": "TIE-0131",
+          "type": "TIE",
+          "name": "Стяжка рамы",
+          "quantity": 8,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 4.8
+        },
+        {
+          "componentId": "fastener-generic",
+          "sku": "FST-0132",
+          "type": "FASTENER",
+          "name": "Комплект крепежа (болт + гайка)",
+          "quantity": 24,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 1.2000000000000002
+        },
+        {
+          "componentId": "foot-generic",
+          "sku": "FOT-0133",
+          "type": "FOOT",
+          "name": "Опора пластиковая",
+          "quantity": 4,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 0.4
+        },
+        {
+          "componentId": "shelf-STANDARD-1000-400",
+          "sku": "SHF-0034",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1000×400",
+          "quantity": 2,
+          "unitPrice": 38000,
+          "totalPrice": 76000,
+          "weightKg": 7.6
+        },
+        {
+          "componentId": "beam-long-1000",
+          "sku": "BML-0089",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1000 мм",
+          "quantity": 4,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 9.6
+        }
+      ],
+      "totalWeightKg": 64,
+      "rowLengthMm": 1000,
+      "leadTimeDays": 5,
+      "warnings": [],
+      "deliveryNote": null
+    }
+  },
+  {
+    "name": "single-H3000-S8",
+    "config": {
+      "modelSlug": "ms-standard",
+      "depth": 400,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [],
+      "assemblyId": "assembly-self",
+      "deliveryId": "delivery-pickup",
+      "quantity": 1,
+      "sections": [
+        {
+          "id": "g7",
+          "width": 1000,
+          "height": 3000,
+          "shelves": 8,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        }
+      ]
+    },
+    "outcome": {
+      "ok": true,
+      "breakdown": {
+        "componentsSubtotal": 337600,
+        "colorSurcharge": 0,
+        "markup": 74272,
+        "unitNet": 411872,
+        "quantity": 1,
+        "itemsNet": 411872,
+        "assembly": 0,
+        "delivery": 0,
+        "discount": 0,
+        "discountReasons": [],
+        "net": 411872,
+        "vatPercent": 16,
+        "vat": 65900,
+        "total": 477772,
+        "unitTotal": 477772
+      },
+      "bom": [
+        {
+          "componentId": "upright-3000-STANDARD",
+          "sku": "UPR-0025",
+          "type": "UPRIGHT",
+          "name": "Стойка 3000 мм",
+          "quantity": 4,
+          "unitPrice": 8400,
+          "totalPrice": 33600,
+          "weightKg": 37.2
+        },
+        {
+          "componentId": "beam-depth-400",
+          "sku": "BMD-0093",
+          "type": "BEAM_DEPTH",
+          "name": "Балка поперечная 400 мм",
+          "quantity": 16,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 12.8
+        },
+        {
+          "componentId": "tie-generic",
+          "sku": "TIE-0131",
+          "type": "TIE",
+          "name": "Стяжка рамы",
+          "quantity": 8,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 4.8
+        },
+        {
+          "componentId": "fastener-generic",
+          "sku": "FST-0132",
+          "type": "FASTENER",
+          "name": "Комплект крепежа (болт + гайка)",
+          "quantity": 48,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 2.4000000000000004
+        },
+        {
+          "componentId": "foot-generic",
+          "sku": "FOT-0133",
+          "type": "FOOT",
+          "name": "Опора пластиковая",
+          "quantity": 4,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 0.4
+        },
+        {
+          "componentId": "shelf-STANDARD-1000-400",
+          "sku": "SHF-0034",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1000×400",
+          "quantity": 8,
+          "unitPrice": 38000,
+          "totalPrice": 304000,
+          "weightKg": 30.4
+        },
+        {
+          "componentId": "beam-long-1000",
+          "sku": "BML-0089",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1000 мм",
+          "quantity": 16,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 38.4
+        }
+      ],
+      "totalWeightKg": 126,
+      "rowLengthMm": 1000,
+      "leadTimeDays": 5,
+      "warnings": [],
+      "deliveryNote": null
+    }
+  },
+  {
+    "name": "single-W700-D300",
+    "config": {
+      "modelSlug": "ms-standard",
+      "depth": 300,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [],
+      "assemblyId": "assembly-self",
+      "deliveryId": "delivery-pickup",
+      "quantity": 1,
+      "sections": [
+        {
+          "id": "g8",
+          "width": 700,
+          "height": 2000,
+          "shelves": 5,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        }
+      ]
+    },
+    "outcome": {
+      "ok": true,
+      "breakdown": {
+        "componentsSubtotal": 122150,
+        "colorSurcharge": 0,
+        "markup": 26873,
+        "unitNet": 149023,
+        "quantity": 1,
+        "itemsNet": 149023,
+        "assembly": 0,
+        "delivery": 0,
+        "discount": 0,
+        "discountReasons": [],
+        "net": 149023,
+        "vatPercent": 16,
+        "vat": 23844,
+        "total": 172867,
+        "unitTotal": 172867
+      },
+      "bom": [
+        {
+          "componentId": "upright-2000-STANDARD",
+          "sku": "UPR-0015",
+          "type": "UPRIGHT",
+          "name": "Стойка 2000 мм",
+          "quantity": 4,
+          "unitPrice": 5600,
+          "totalPrice": 22400,
+          "weightKg": 24.8
+        },
+        {
+          "componentId": "beam-depth-300",
+          "sku": "BMD-0092",
+          "type": "BEAM_DEPTH",
+          "name": "Балка поперечная 300 мм",
+          "quantity": 10,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 6
+        },
+        {
+          "componentId": "tie-generic",
+          "sku": "TIE-0131",
+          "type": "TIE",
+          "name": "Стяжка рамы",
+          "quantity": 8,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 4.8
+        },
+        {
+          "componentId": "fastener-generic",
+          "sku": "FST-0132",
+          "type": "FASTENER",
+          "name": "Комплект крепежа (болт + гайка)",
+          "quantity": 36,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 1.8
+        },
+        {
+          "componentId": "foot-generic",
+          "sku": "FOT-0133",
+          "type": "FOOT",
+          "name": "Опора пластиковая",
+          "quantity": 4,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 0.4
+        },
+        {
+          "componentId": "shelf-STANDARD-700-300",
+          "sku": "SHF-0027",
+          "type": "SHELF",
+          "name": "Полка Стандартная 700×300",
+          "quantity": 5,
+          "unitPrice": 19950,
+          "totalPrice": 99750,
+          "weightKg": 10
+        },
+        {
+          "componentId": "beam-long-700",
+          "sku": "BML-0088",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 700 мм",
+          "quantity": 10,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 17
+        }
+      ],
+      "totalWeightKg": 65,
+      "rowLengthMm": 700,
+      "leadTimeDays": 2,
+      "warnings": [],
+      "deliveryNote": null
+    }
+  },
+  {
+    "name": "single-W1200-D600",
+    "config": {
+      "modelSlug": "ms-standard",
+      "depth": 600,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [],
+      "assemblyId": "assembly-self",
+      "deliveryId": "delivery-pickup",
+      "quantity": 1,
+      "sections": [
+        {
+          "id": "g9",
+          "width": 1200,
+          "height": 2000,
+          "shelves": 5,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        }
+      ]
+    },
+    "outcome": {
+      "ok": true,
+      "breakdown": {
+        "componentsSubtotal": 364400,
+        "colorSurcharge": 0,
+        "markup": 80168,
+        "unitNet": 444568,
+        "quantity": 1,
+        "itemsNet": 444568,
+        "assembly": 0,
+        "delivery": 0,
+        "discount": 0,
+        "discountReasons": [],
+        "net": 444568,
+        "vatPercent": 16,
+        "vat": 71131,
+        "total": 515699,
+        "unitTotal": 515699
+      },
+      "bom": [
+        {
+          "componentId": "upright-2000-STANDARD",
+          "sku": "UPR-0015",
+          "type": "UPRIGHT",
+          "name": "Стойка 2000 мм",
+          "quantity": 4,
+          "unitPrice": 5600,
+          "totalPrice": 22400,
+          "weightKg": 24.8
+        },
+        {
+          "componentId": "beam-depth-600",
+          "sku": "BMD-0095",
+          "type": "BEAM_DEPTH",
+          "name": "Балка поперечная 600 мм",
+          "quantity": 10,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 13
+        },
+        {
+          "componentId": "tie-generic",
+          "sku": "TIE-0131",
+          "type": "TIE",
+          "name": "Стяжка рамы",
+          "quantity": 8,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 4.8
+        },
+        {
+          "componentId": "fastener-generic",
+          "sku": "FST-0132",
+          "type": "FASTENER",
+          "name": "Комплект крепежа (болт + гайка)",
+          "quantity": 36,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 1.8
+        },
+        {
+          "componentId": "foot-generic",
+          "sku": "FOT-0133",
+          "type": "FOOT",
+          "name": "Опора пластиковая",
+          "quantity": 4,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 0.4
+        },
+        {
+          "componentId": "shelf-STANDARD-1200-600",
+          "sku": "SHF-0042",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1200×600",
+          "quantity": 5,
+          "unitPrice": 68400,
+          "totalPrice": 342000,
+          "weightKg": 34
+        },
+        {
+          "componentId": "beam-long-1200",
+          "sku": "BML-0090",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1200 мм",
+          "quantity": 10,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 29
+        }
+      ],
+      "totalWeightKg": 108,
+      "rowLengthMm": 1200,
+      "leadTimeDays": 2,
+      "warnings": [],
+      "deliveryNote": null
+    }
+  },
+  {
+    "name": "single-W1500-D400",
+    "config": {
+      "modelSlug": "ms-standard",
+      "depth": 400,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [],
+      "assemblyId": "assembly-self",
+      "deliveryId": "delivery-pickup",
+      "quantity": 1,
+      "sections": [
+        {
+          "id": "g10",
+          "width": 1500,
+          "height": 2000,
+          "shelves": 5,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        }
+      ]
+    },
+    "outcome": {
+      "ok": true,
+      "breakdown": {
+        "componentsSubtotal": 307400,
+        "colorSurcharge": 0,
+        "markup": 67628,
+        "unitNet": 375028,
+        "quantity": 1,
+        "itemsNet": 375028,
+        "assembly": 0,
+        "delivery": 0,
+        "discount": 0,
+        "discountReasons": [],
+        "net": 375028,
+        "vatPercent": 16,
+        "vat": 60004,
+        "total": 435032,
+        "unitTotal": 435032
+      },
+      "bom": [
+        {
+          "componentId": "upright-2000-STANDARD",
+          "sku": "UPR-0015",
+          "type": "UPRIGHT",
+          "name": "Стойка 2000 мм",
+          "quantity": 4,
+          "unitPrice": 5600,
+          "totalPrice": 22400,
+          "weightKg": 24.8
+        },
+        {
+          "componentId": "beam-depth-400",
+          "sku": "BMD-0093",
+          "type": "BEAM_DEPTH",
+          "name": "Балка поперечная 400 мм",
+          "quantity": 10,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 8
+        },
+        {
+          "componentId": "tie-generic",
+          "sku": "TIE-0131",
+          "type": "TIE",
+          "name": "Стяжка рамы",
+          "quantity": 8,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 4.8
+        },
+        {
+          "componentId": "fastener-generic",
+          "sku": "FST-0132",
+          "type": "FASTENER",
+          "name": "Комплект крепежа (болт + гайка)",
+          "quantity": 36,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 1.8
+        },
+        {
+          "componentId": "foot-generic",
+          "sku": "FOT-0133",
+          "type": "FOOT",
+          "name": "Опора пластиковая",
+          "quantity": 4,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 0.4
+        },
+        {
+          "componentId": "shelf-STANDARD-1500-400",
+          "sku": "SHF-0046",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1500×400",
+          "quantity": 5,
+          "unitPrice": 57000,
+          "totalPrice": 285000,
+          "weightKg": 28.5
+        },
+        {
+          "componentId": "beam-long-1500",
+          "sku": "BML-0091",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1500 мм",
+          "quantity": 10,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 36
+        }
+      ],
+      "totalWeightKg": 104,
+      "rowLengthMm": 1500,
+      "leadTimeDays": 2,
+      "warnings": [],
+      "deliveryNote": null
+    }
+  },
+  {
+    "name": "single-W1000-D800",
+    "config": {
+      "modelSlug": "ms-standard",
+      "depth": 800,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [],
+      "assemblyId": "assembly-self",
+      "deliveryId": "delivery-pickup",
+      "quantity": 1,
+      "sections": [
+        {
+          "id": "g11",
+          "width": 1000,
+          "height": 2500,
+          "shelves": 6,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        }
+      ]
+    },
+    "outcome": {
+      "ok": true,
+      "breakdown": {
+        "componentsSubtotal": 484000,
+        "colorSurcharge": 0,
+        "markup": 106480,
+        "unitNet": 590480,
+        "quantity": 1,
+        "itemsNet": 590480,
+        "assembly": 0,
+        "delivery": 0,
+        "discount": 0,
+        "discountReasons": [],
+        "net": 590480,
+        "vatPercent": 16,
+        "vat": 94477,
+        "total": 684957,
+        "unitTotal": 684957
+      },
+      "bom": [
+        {
+          "componentId": "upright-2500-STANDARD",
+          "sku": "UPR-0023",
+          "type": "UPRIGHT",
+          "name": "Стойка 2500 мм",
+          "quantity": 4,
+          "unitPrice": 7000,
+          "totalPrice": 28000,
+          "weightKg": 31.2
+        },
+        {
+          "componentId": "beam-depth-800",
+          "sku": "BMD-0097",
+          "type": "BEAM_DEPTH",
+          "name": "Балка поперечная 800 мм",
+          "quantity": 12,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 20.4
+        },
+        {
+          "componentId": "tie-generic",
+          "sku": "TIE-0131",
+          "type": "TIE",
+          "name": "Стяжка рамы",
+          "quantity": 8,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 4.8
+        },
+        {
+          "componentId": "fastener-generic",
+          "sku": "FST-0132",
+          "type": "FASTENER",
+          "name": "Комплект крепежа (болт + гайка)",
+          "quantity": 40,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 2
+        },
+        {
+          "componentId": "foot-generic",
+          "sku": "FOT-0133",
+          "type": "FOOT",
+          "name": "Опора пластиковая",
+          "quantity": 4,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 0.4
+        },
+        {
+          "componentId": "shelf-STANDARD-1000-800",
+          "sku": "SHF-0038",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1000×800",
+          "quantity": 6,
+          "unitPrice": 76000,
+          "totalPrice": 456000,
+          "weightKg": 45.599999999999994
+        },
+        {
+          "componentId": "beam-long-1000",
+          "sku": "BML-0089",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1000 мм",
+          "quantity": 12,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 28.799999999999997
+        }
+      ],
+      "totalWeightKg": 133,
+      "rowLengthMm": 1000,
+      "leadTimeDays": 5,
+      "warnings": [],
+      "deliveryNote": null
+    }
+  },
+  {
+    "name": "single-walls-all",
+    "config": {
+      "modelSlug": "ms-standard",
+      "depth": 400,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [],
+      "assemblyId": "assembly-self",
+      "deliveryId": "delivery-pickup",
+      "quantity": 1,
+      "sections": [
+        {
+          "id": "g12",
+          "width": 1000,
+          "height": 2000,
+          "shelves": 5,
+          "rearWall": true,
+          "leftWall": true,
+          "rightWall": true
+        }
+      ]
+    },
+    "outcome": {
+      "ok": true,
+      "breakdown": {
+        "componentsSubtotal": 218360,
+        "colorSurcharge": 0,
+        "markup": 48039,
+        "unitNet": 266399,
+        "quantity": 1,
+        "itemsNet": 266399,
+        "assembly": 0,
+        "delivery": 0,
+        "discount": 0,
+        "discountReasons": [],
+        "net": 266399,
+        "vatPercent": 16,
+        "vat": 42624,
+        "total": 309023,
+        "unitTotal": 309023
+      },
+      "bom": [
+        {
+          "componentId": "upright-2000-STANDARD",
+          "sku": "UPR-0015",
+          "type": "UPRIGHT",
+          "name": "Стойка 2000 мм",
+          "quantity": 4,
+          "unitPrice": 5600,
+          "totalPrice": 22400,
+          "weightKg": 24.8
+        },
+        {
+          "componentId": "beam-depth-400",
+          "sku": "BMD-0093",
+          "type": "BEAM_DEPTH",
+          "name": "Балка поперечная 400 мм",
+          "quantity": 10,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 8
+        },
+        {
+          "componentId": "tie-generic",
+          "sku": "TIE-0131",
+          "type": "TIE",
+          "name": "Стяжка рамы",
+          "quantity": 8,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 4.8
+        },
+        {
+          "componentId": "fastener-generic",
+          "sku": "FST-0132",
+          "type": "FASTENER",
+          "name": "Комплект крепежа (болт + гайка)",
+          "quantity": 36,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 1.8
+        },
+        {
+          "componentId": "foot-generic",
+          "sku": "FOT-0133",
+          "type": "FOOT",
+          "name": "Опора пластиковая",
+          "quantity": 4,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 0.4
+        },
+        {
+          "componentId": "shelf-STANDARD-1000-400",
+          "sku": "SHF-0034",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1000×400",
+          "quantity": 5,
+          "unitPrice": 38000,
+          "totalPrice": 190000,
+          "weightKg": 19
+        },
+        {
+          "componentId": "beam-long-1000",
+          "sku": "BML-0089",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1000 мм",
+          "quantity": 10,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 24
+        },
+        {
+          "componentId": "rear-SOLID-1000",
+          "sku": "RWL-0113",
+          "type": "REAR_WALL",
+          "name": "Задняя стенка сплошная 1000 мм",
+          "quantity": 1,
+          "unitPrice": 3400,
+          "totalPrice": 3400,
+          "weightKg": 5.2
+        },
+        {
+          "componentId": "side-SOLID-400",
+          "sku": "SWL-0121",
+          "type": "SIDE_WALL",
+          "name": "Боковая стенка сплошная 400 мм",
+          "quantity": 2,
+          "unitPrice": 1280,
+          "totalPrice": 2560,
+          "weightKg": 3.6
+        }
+      ],
+      "totalWeightKg": 92,
+      "rowLengthMm": 1000,
+      "leadTimeDays": 2,
+      "warnings": [],
+      "deliveryNote": null
+    }
+  },
+  {
+    "name": "uniform-2",
+    "config": {
+      "modelSlug": "ms-standard",
+      "depth": 400,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [],
+      "assemblyId": "assembly-self",
+      "deliveryId": "delivery-pickup",
+      "quantity": 1,
+      "sections": [
+        {
+          "id": "g13",
+          "width": 1000,
+          "height": 2000,
+          "shelves": 5,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g14",
+          "width": 1000,
+          "height": 2000,
+          "shelves": 5,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        }
+      ]
+    },
+    "outcome": {
+      "ok": true,
+      "breakdown": {
+        "componentsSubtotal": 424800,
+        "colorSurcharge": 0,
+        "markup": 93456,
+        "unitNet": 518256,
+        "quantity": 1,
+        "itemsNet": 518256,
+        "assembly": 0,
+        "delivery": 0,
+        "discount": 0,
+        "discountReasons": [],
+        "net": 518256,
+        "vatPercent": 16,
+        "vat": 82921,
+        "total": 601177,
+        "unitTotal": 601177
+      },
+      "bom": [
+        {
+          "componentId": "upright-2000-STANDARD",
+          "sku": "UPR-0015",
+          "type": "UPRIGHT",
+          "name": "Стойка 2000 мм",
+          "quantity": 8,
+          "unitPrice": 5600,
+          "totalPrice": 44800,
+          "weightKg": 49.6
+        },
+        {
+          "componentId": "beam-depth-400",
+          "sku": "BMD-0093",
+          "type": "BEAM_DEPTH",
+          "name": "Балка поперечная 400 мм",
+          "quantity": 20,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 16
+        },
+        {
+          "componentId": "tie-generic",
+          "sku": "TIE-0131",
+          "type": "TIE",
+          "name": "Стяжка рамы",
+          "quantity": 16,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 9.6
+        },
+        {
+          "componentId": "fastener-generic",
+          "sku": "FST-0132",
+          "type": "FASTENER",
+          "name": "Комплект крепежа (болт + гайка)",
+          "quantity": 72,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 3.6
+        },
+        {
+          "componentId": "foot-generic",
+          "sku": "FOT-0133",
+          "type": "FOOT",
+          "name": "Опора пластиковая",
+          "quantity": 8,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 0.8
+        },
+        {
+          "componentId": "shelf-STANDARD-1000-400",
+          "sku": "SHF-0034",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1000×400",
+          "quantity": 10,
+          "unitPrice": 38000,
+          "totalPrice": 380000,
+          "weightKg": 38
+        },
+        {
+          "componentId": "beam-long-1000",
+          "sku": "BML-0089",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1000 мм",
+          "quantity": 20,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 48
+        }
+      ],
+      "totalWeightKg": 166,
+      "rowLengthMm": 2000,
+      "leadTimeDays": 2,
+      "warnings": [],
+      "deliveryNote": null
+    }
+  },
+  {
+    "name": "uniform-3",
+    "config": {
+      "modelSlug": "ms-standard",
+      "depth": 400,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [],
+      "assemblyId": "assembly-self",
+      "deliveryId": "delivery-pickup",
+      "quantity": 1,
+      "sections": [
+        {
+          "id": "g15",
+          "width": 1000,
+          "height": 2000,
+          "shelves": 5,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g16",
+          "width": 1000,
+          "height": 2000,
+          "shelves": 5,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g17",
+          "width": 1000,
+          "height": 2000,
+          "shelves": 5,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        }
+      ]
+    },
+    "outcome": {
+      "ok": true,
+      "breakdown": {
+        "componentsSubtotal": 637200,
+        "colorSurcharge": 0,
+        "markup": 140184,
+        "unitNet": 777384,
+        "quantity": 1,
+        "itemsNet": 777384,
+        "assembly": 0,
+        "delivery": 0,
+        "discount": 0,
+        "discountReasons": [],
+        "net": 777384,
+        "vatPercent": 16,
+        "vat": 124381,
+        "total": 901765,
+        "unitTotal": 901765
+      },
+      "bom": [
+        {
+          "componentId": "upright-2000-STANDARD",
+          "sku": "UPR-0015",
+          "type": "UPRIGHT",
+          "name": "Стойка 2000 мм",
+          "quantity": 12,
+          "unitPrice": 5600,
+          "totalPrice": 67200,
+          "weightKg": 74.4
+        },
+        {
+          "componentId": "beam-depth-400",
+          "sku": "BMD-0093",
+          "type": "BEAM_DEPTH",
+          "name": "Балка поперечная 400 мм",
+          "quantity": 30,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 24
+        },
+        {
+          "componentId": "tie-generic",
+          "sku": "TIE-0131",
+          "type": "TIE",
+          "name": "Стяжка рамы",
+          "quantity": 24,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 14.4
+        },
+        {
+          "componentId": "fastener-generic",
+          "sku": "FST-0132",
+          "type": "FASTENER",
+          "name": "Комплект крепежа (болт + гайка)",
+          "quantity": 108,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 5.4
+        },
+        {
+          "componentId": "foot-generic",
+          "sku": "FOT-0133",
+          "type": "FOOT",
+          "name": "Опора пластиковая",
+          "quantity": 12,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 1.2
+        },
+        {
+          "componentId": "shelf-STANDARD-1000-400",
+          "sku": "SHF-0034",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1000×400",
+          "quantity": 15,
+          "unitPrice": 38000,
+          "totalPrice": 570000,
+          "weightKg": 57
+        },
+        {
+          "componentId": "beam-long-1000",
+          "sku": "BML-0089",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1000 мм",
+          "quantity": 30,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 72
+        }
+      ],
+      "totalWeightKg": 248,
+      "rowLengthMm": 3000,
+      "leadTimeDays": 2,
+      "warnings": [],
+      "deliveryNote": null
+    }
+  },
+  {
+    "name": "uniform-5-H3000-S8-D800",
+    "config": {
+      "modelSlug": "ms-standard",
+      "depth": 800,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [],
+      "assemblyId": "assembly-self",
+      "deliveryId": "delivery-pickup",
+      "quantity": 1,
+      "sections": [
+        {
+          "id": "g18",
+          "width": 1000,
+          "height": 3000,
+          "shelves": 8,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g19",
+          "width": 1000,
+          "height": 3000,
+          "shelves": 8,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g20",
+          "width": 1000,
+          "height": 3000,
+          "shelves": 8,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g21",
+          "width": 1000,
+          "height": 3000,
+          "shelves": 8,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g22",
+          "width": 1000,
+          "height": 3000,
+          "shelves": 8,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        }
+      ]
+    },
+    "outcome": {
+      "ok": true,
+      "breakdown": {
+        "componentsSubtotal": 3208000,
+        "colorSurcharge": 0,
+        "markup": 705760,
+        "unitNet": 3913760,
+        "quantity": 1,
+        "itemsNet": 3913760,
+        "assembly": 0,
+        "delivery": 0,
+        "discount": 0,
+        "discountReasons": [],
+        "net": 3913760,
+        "vatPercent": 16,
+        "vat": 626202,
+        "total": 4539962,
+        "unitTotal": 4539962
+      },
+      "bom": [
+        {
+          "componentId": "upright-3000-STANDARD",
+          "sku": "UPR-0025",
+          "type": "UPRIGHT",
+          "name": "Стойка 3000 мм",
+          "quantity": 20,
+          "unitPrice": 8400,
+          "totalPrice": 168000,
+          "weightKg": 186
+        },
+        {
+          "componentId": "beam-depth-800",
+          "sku": "BMD-0097",
+          "type": "BEAM_DEPTH",
+          "name": "Балка поперечная 800 мм",
+          "quantity": 80,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 136
+        },
+        {
+          "componentId": "tie-generic",
+          "sku": "TIE-0131",
+          "type": "TIE",
+          "name": "Стяжка рамы",
+          "quantity": 40,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 24
+        },
+        {
+          "componentId": "fastener-generic",
+          "sku": "FST-0132",
+          "type": "FASTENER",
+          "name": "Комплект крепежа (болт + гайка)",
+          "quantity": 240,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 12
+        },
+        {
+          "componentId": "foot-generic",
+          "sku": "FOT-0133",
+          "type": "FOOT",
+          "name": "Опора пластиковая",
+          "quantity": 20,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 2
+        },
+        {
+          "componentId": "shelf-STANDARD-1000-800",
+          "sku": "SHF-0038",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1000×800",
+          "quantity": 40,
+          "unitPrice": 76000,
+          "totalPrice": 3040000,
+          "weightKg": 304
+        },
+        {
+          "componentId": "beam-long-1000",
+          "sku": "BML-0089",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1000 мм",
+          "quantity": 80,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 192
+        }
+      ],
+      "totalWeightKg": 856,
+      "rowLengthMm": 5000,
+      "leadTimeDays": 5,
+      "warnings": [],
+      "deliveryNote": null
+    }
+  },
+  {
+    "name": "mixed-heights-3",
+    "config": {
+      "modelSlug": "ms-standard",
+      "depth": 400,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [],
+      "assemblyId": "assembly-self",
+      "deliveryId": "delivery-pickup",
+      "quantity": 1,
+      "sections": [
+        {
+          "id": "g23",
+          "width": 1000,
+          "height": 1500,
+          "shelves": 4,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g24",
+          "width": 1000,
+          "height": 2500,
+          "shelves": 4,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g25",
+          "width": 1000,
+          "height": 1000,
+          "shelves": 4,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        }
+      ]
+    },
+    "outcome": {
+      "ok": true,
+      "breakdown": {
+        "componentsSubtotal": 512000,
+        "colorSurcharge": 0,
+        "markup": 112640,
+        "unitNet": 624640,
+        "quantity": 1,
+        "itemsNet": 624640,
+        "assembly": 0,
+        "delivery": 0,
+        "discount": 0,
+        "discountReasons": [],
+        "net": 624640,
+        "vatPercent": 16,
+        "vat": 99942,
+        "total": 724582,
+        "unitTotal": 724582
+      },
+      "bom": [
+        {
+          "componentId": "upright-1500-STANDARD",
+          "sku": "UPR-0007",
+          "type": "UPRIGHT",
+          "name": "Стойка 1500 мм",
+          "quantity": 4,
+          "unitPrice": 4200,
+          "totalPrice": 16800,
+          "weightKg": 18.8
+        },
+        {
+          "componentId": "beam-depth-400",
+          "sku": "BMD-0093",
+          "type": "BEAM_DEPTH",
+          "name": "Балка поперечная 400 мм",
+          "quantity": 24,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 19.2
+        },
+        {
+          "componentId": "tie-generic",
+          "sku": "TIE-0131",
+          "type": "TIE",
+          "name": "Стяжка рамы",
+          "quantity": 24,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 14.4
+        },
+        {
+          "componentId": "fastener-generic",
+          "sku": "FST-0132",
+          "type": "FASTENER",
+          "name": "Комплект крепежа (болт + гайка)",
+          "quantity": 96,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 4.8
+        },
+        {
+          "componentId": "foot-generic",
+          "sku": "FOT-0133",
+          "type": "FOOT",
+          "name": "Опора пластиковая",
+          "quantity": 12,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 1.2
+        },
+        {
+          "componentId": "upright-2500-STANDARD",
+          "sku": "UPR-0023",
+          "type": "UPRIGHT",
+          "name": "Стойка 2500 мм",
+          "quantity": 4,
+          "unitPrice": 7000,
+          "totalPrice": 28000,
+          "weightKg": 31.2
+        },
+        {
+          "componentId": "upright-1000-STANDARD",
+          "sku": "UPR-0003",
+          "type": "UPRIGHT",
+          "name": "Стойка 1000 мм",
+          "quantity": 4,
+          "unitPrice": 2800,
+          "totalPrice": 11200,
+          "weightKg": 12.4
+        },
+        {
+          "componentId": "shelf-STANDARD-1000-400",
+          "sku": "SHF-0034",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1000×400",
+          "quantity": 12,
+          "unitPrice": 38000,
+          "totalPrice": 456000,
+          "weightKg": 45.6
+        },
+        {
+          "componentId": "beam-long-1000",
+          "sku": "BML-0089",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1000 мм",
+          "quantity": 24,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 57.6
+        }
+      ],
+      "totalWeightKg": 205,
+      "rowLengthMm": 3000,
+      "leadTimeDays": 5,
+      "warnings": [],
+      "deliveryNote": null
+    }
+  },
+  {
+    "name": "mixed-shelves-3",
+    "config": {
+      "modelSlug": "ms-standard",
+      "depth": 400,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [],
+      "assemblyId": "assembly-self",
+      "deliveryId": "delivery-pickup",
+      "quantity": 1,
+      "sections": [
+        {
+          "id": "g26",
+          "width": 1000,
+          "height": 2000,
+          "shelves": 3,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g27",
+          "width": 1000,
+          "height": 2000,
+          "shelves": 5,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g28",
+          "width": 1000,
+          "height": 2000,
+          "shelves": 7,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        }
+      ]
+    },
+    "outcome": {
+      "ok": true,
+      "breakdown": {
+        "componentsSubtotal": 637200,
+        "colorSurcharge": 0,
+        "markup": 140184,
+        "unitNet": 777384,
+        "quantity": 1,
+        "itemsNet": 777384,
+        "assembly": 0,
+        "delivery": 0,
+        "discount": 0,
+        "discountReasons": [],
+        "net": 777384,
+        "vatPercent": 16,
+        "vat": 124381,
+        "total": 901765,
+        "unitTotal": 901765
+      },
+      "bom": [
+        {
+          "componentId": "upright-2000-STANDARD",
+          "sku": "UPR-0015",
+          "type": "UPRIGHT",
+          "name": "Стойка 2000 мм",
+          "quantity": 12,
+          "unitPrice": 5600,
+          "totalPrice": 67200,
+          "weightKg": 74.4
+        },
+        {
+          "componentId": "beam-depth-400",
+          "sku": "BMD-0093",
+          "type": "BEAM_DEPTH",
+          "name": "Балка поперечная 400 мм",
+          "quantity": 30,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 24
+        },
+        {
+          "componentId": "tie-generic",
+          "sku": "TIE-0131",
+          "type": "TIE",
+          "name": "Стяжка рамы",
+          "quantity": 24,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 14.4
+        },
+        {
+          "componentId": "fastener-generic",
+          "sku": "FST-0132",
+          "type": "FASTENER",
+          "name": "Комплект крепежа (болт + гайка)",
+          "quantity": 108,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 5.4
+        },
+        {
+          "componentId": "foot-generic",
+          "sku": "FOT-0133",
+          "type": "FOOT",
+          "name": "Опора пластиковая",
+          "quantity": 12,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 1.2
+        },
+        {
+          "componentId": "shelf-STANDARD-1000-400",
+          "sku": "SHF-0034",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1000×400",
+          "quantity": 15,
+          "unitPrice": 38000,
+          "totalPrice": 570000,
+          "weightKg": 57
+        },
+        {
+          "componentId": "beam-long-1000",
+          "sku": "BML-0089",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1000 мм",
+          "quantity": 30,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 72
+        }
+      ],
+      "totalWeightKg": 248,
+      "rowLengthMm": 3000,
+      "leadTimeDays": 2,
+      "warnings": [],
+      "deliveryNote": null
+    }
+  },
+  {
+    "name": "mixed-widths-3",
+    "config": {
+      "modelSlug": "ms-standard",
+      "depth": 400,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [],
+      "assemblyId": "assembly-self",
+      "deliveryId": "delivery-pickup",
+      "quantity": 1,
+      "sections": [
+        {
+          "id": "g29",
+          "width": 700,
+          "height": 1500,
+          "shelves": 4,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g30",
+          "width": 1000,
+          "height": 1500,
+          "shelves": 4,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g31",
+          "width": 1200,
+          "height": 1500,
+          "shelves": 4,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        }
+      ]
+    },
+    "outcome": {
+      "ok": true,
+      "breakdown": {
+        "componentsSubtotal": 491200,
+        "colorSurcharge": 0,
+        "markup": 108064,
+        "unitNet": 599264,
+        "quantity": 1,
+        "itemsNet": 599264,
+        "assembly": 0,
+        "delivery": 0,
+        "discount": 0,
+        "discountReasons": [],
+        "net": 599264,
+        "vatPercent": 16,
+        "vat": 95882,
+        "total": 695146,
+        "unitTotal": 695146
+      },
+      "bom": [
+        {
+          "componentId": "upright-1500-STANDARD",
+          "sku": "UPR-0007",
+          "type": "UPRIGHT",
+          "name": "Стойка 1500 мм",
+          "quantity": 12,
+          "unitPrice": 4200,
+          "totalPrice": 50400,
+          "weightKg": 56.4
+        },
+        {
+          "componentId": "beam-depth-400",
+          "sku": "BMD-0093",
+          "type": "BEAM_DEPTH",
+          "name": "Балка поперечная 400 мм",
+          "quantity": 24,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 19.2
+        },
+        {
+          "componentId": "tie-generic",
+          "sku": "TIE-0131",
+          "type": "TIE",
+          "name": "Стяжка рамы",
+          "quantity": 24,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 14.4
+        },
+        {
+          "componentId": "fastener-generic",
+          "sku": "FST-0132",
+          "type": "FASTENER",
+          "name": "Комплект крепежа (болт + гайка)",
+          "quantity": 96,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 4.8
+        },
+        {
+          "componentId": "foot-generic",
+          "sku": "FOT-0133",
+          "type": "FOOT",
+          "name": "Опора пластиковая",
+          "quantity": 12,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 1.2
+        },
+        {
+          "componentId": "shelf-STANDARD-700-400",
+          "sku": "SHF-0028",
+          "type": "SHELF",
+          "name": "Полка Стандартная 700×400",
+          "quantity": 4,
+          "unitPrice": 26600,
+          "totalPrice": 106400,
+          "weightKg": 10.8
+        },
+        {
+          "componentId": "beam-long-700",
+          "sku": "BML-0088",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 700 мм",
+          "quantity": 8,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 13.6
+        },
+        {
+          "componentId": "shelf-STANDARD-1000-400",
+          "sku": "SHF-0034",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1000×400",
+          "quantity": 4,
+          "unitPrice": 38000,
+          "totalPrice": 152000,
+          "weightKg": 15.2
+        },
+        {
+          "componentId": "beam-long-1000",
+          "sku": "BML-0089",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1000 мм",
+          "quantity": 8,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 19.2
+        },
+        {
+          "componentId": "shelf-STANDARD-1200-400",
+          "sku": "SHF-0040",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1200×400",
+          "quantity": 4,
+          "unitPrice": 45600,
+          "totalPrice": 182400,
+          "weightKg": 18.4
+        },
+        {
+          "componentId": "beam-long-1200",
+          "sku": "BML-0090",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1200 мм",
+          "quantity": 8,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 23.2
+        }
+      ],
+      "totalWeightKg": 196,
+      "rowLengthMm": 2900,
+      "leadTimeDays": 2,
+      "warnings": [],
+      "deliveryNote": null
+    }
+  },
+  {
+    "name": "owner-example-1000x1500x4+1200x2500x8",
+    "config": {
+      "modelSlug": "ms-standard",
+      "depth": 400,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [],
+      "assemblyId": "assembly-self",
+      "deliveryId": "delivery-pickup",
+      "quantity": 1,
+      "sections": [
+        {
+          "id": "g32",
+          "width": 1000,
+          "height": 1500,
+          "shelves": 4,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g33",
+          "width": 1200,
+          "height": 2500,
+          "shelves": 8,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        }
+      ]
+    },
+    "outcome": {
+      "ok": true,
+      "breakdown": {
+        "componentsSubtotal": 561600,
+        "colorSurcharge": 0,
+        "markup": 123552,
+        "unitNet": 685152,
+        "quantity": 1,
+        "itemsNet": 685152,
+        "assembly": 0,
+        "delivery": 0,
+        "discount": 0,
+        "discountReasons": [],
+        "net": 685152,
+        "vatPercent": 16,
+        "vat": 109624,
+        "total": 794776,
+        "unitTotal": 794776
+      },
+      "bom": [
+        {
+          "componentId": "upright-1500-STANDARD",
+          "sku": "UPR-0007",
+          "type": "UPRIGHT",
+          "name": "Стойка 1500 мм",
+          "quantity": 4,
+          "unitPrice": 4200,
+          "totalPrice": 16800,
+          "weightKg": 18.8
+        },
+        {
+          "componentId": "beam-depth-400",
+          "sku": "BMD-0093",
+          "type": "BEAM_DEPTH",
+          "name": "Балка поперечная 400 мм",
+          "quantity": 24,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 19.2
+        },
+        {
+          "componentId": "tie-generic",
+          "sku": "TIE-0131",
+          "type": "TIE",
+          "name": "Стяжка рамы",
+          "quantity": 16,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 9.6
+        },
+        {
+          "componentId": "fastener-generic",
+          "sku": "FST-0132",
+          "type": "FASTENER",
+          "name": "Комплект крепежа (болт + гайка)",
+          "quantity": 80,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 4
+        },
+        {
+          "componentId": "foot-generic",
+          "sku": "FOT-0133",
+          "type": "FOOT",
+          "name": "Опора пластиковая",
+          "quantity": 8,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 0.8
+        },
+        {
+          "componentId": "upright-2500-STANDARD",
+          "sku": "UPR-0023",
+          "type": "UPRIGHT",
+          "name": "Стойка 2500 мм",
+          "quantity": 4,
+          "unitPrice": 7000,
+          "totalPrice": 28000,
+          "weightKg": 31.2
+        },
+        {
+          "componentId": "shelf-STANDARD-1000-400",
+          "sku": "SHF-0034",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1000×400",
+          "quantity": 4,
+          "unitPrice": 38000,
+          "totalPrice": 152000,
+          "weightKg": 15.2
+        },
+        {
+          "componentId": "beam-long-1000",
+          "sku": "BML-0089",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1000 мм",
+          "quantity": 8,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 19.2
+        },
+        {
+          "componentId": "shelf-STANDARD-1200-400",
+          "sku": "SHF-0040",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1200×400",
+          "quantity": 8,
+          "unitPrice": 45600,
+          "totalPrice": 364800,
+          "weightKg": 36.8
+        },
+        {
+          "componentId": "beam-long-1200",
+          "sku": "BML-0090",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1200 мм",
+          "quantity": 16,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 46.4
+        }
+      ],
+      "totalWeightKg": 201,
+      "rowLengthMm": 2200,
+      "leadTimeDays": 5,
+      "warnings": [],
+      "deliveryNote": null
+    }
+  },
+  {
+    "name": "mixed-all-5-walls",
+    "config": {
+      "modelSlug": "ms-standard",
+      "depth": 400,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [],
+      "assemblyId": "assembly-self",
+      "deliveryId": "delivery-pickup",
+      "quantity": 1,
+      "sections": [
+        {
+          "id": "g34",
+          "width": 700,
+          "height": 1000,
+          "shelves": 2,
+          "rearWall": false,
+          "leftWall": true,
+          "rightWall": false
+        },
+        {
+          "id": "g35",
+          "width": 1000,
+          "height": 1500,
+          "shelves": 6,
+          "rearWall": true,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g36",
+          "width": 1200,
+          "height": 2000,
+          "shelves": 8,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g37",
+          "width": 1500,
+          "height": 2500,
+          "shelves": 5,
+          "rearWall": true,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g38",
+          "width": 1000,
+          "height": 3000,
+          "shelves": 8,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": true
+        }
+      ]
+    },
+    "outcome": {
+      "ok": true,
+      "breakdown": {
+        "componentsSubtotal": 1358060,
+        "colorSurcharge": 0,
+        "markup": 298773,
+        "unitNet": 1656833,
+        "quantity": 1,
+        "itemsNet": 1656833,
+        "assembly": 0,
+        "delivery": 0,
+        "discount": 0,
+        "discountReasons": [],
+        "net": 1656833,
+        "vatPercent": 16,
+        "vat": 265093,
+        "total": 1921926,
+        "unitTotal": 1921926
+      },
+      "bom": [
+        {
+          "componentId": "upright-1000-STANDARD",
+          "sku": "UPR-0003",
+          "type": "UPRIGHT",
+          "name": "Стойка 1000 мм",
+          "quantity": 4,
+          "unitPrice": 2800,
+          "totalPrice": 11200,
+          "weightKg": 12.4
+        },
+        {
+          "componentId": "beam-depth-400",
+          "sku": "BMD-0093",
+          "type": "BEAM_DEPTH",
+          "name": "Балка поперечная 400 мм",
+          "quantity": 58,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 46.4
+        },
+        {
+          "componentId": "tie-generic",
+          "sku": "TIE-0131",
+          "type": "TIE",
+          "name": "Стяжка рамы",
+          "quantity": 40,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 24
+        },
+        {
+          "componentId": "fastener-generic",
+          "sku": "FST-0132",
+          "type": "FASTENER",
+          "name": "Комплект крепежа (болт + гайка)",
+          "quantity": 196,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 9.8
+        },
+        {
+          "componentId": "foot-generic",
+          "sku": "FOT-0133",
+          "type": "FOOT",
+          "name": "Опора пластиковая",
+          "quantity": 20,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 2
+        },
+        {
+          "componentId": "upright-1500-STANDARD",
+          "sku": "UPR-0007",
+          "type": "UPRIGHT",
+          "name": "Стойка 1500 мм",
+          "quantity": 4,
+          "unitPrice": 4200,
+          "totalPrice": 16800,
+          "weightKg": 18.8
+        },
+        {
+          "componentId": "upright-2000-STANDARD",
+          "sku": "UPR-0015",
+          "type": "UPRIGHT",
+          "name": "Стойка 2000 мм",
+          "quantity": 4,
+          "unitPrice": 5600,
+          "totalPrice": 22400,
+          "weightKg": 24.8
+        },
+        {
+          "componentId": "upright-2500-STANDARD",
+          "sku": "UPR-0023",
+          "type": "UPRIGHT",
+          "name": "Стойка 2500 мм",
+          "quantity": 4,
+          "unitPrice": 7000,
+          "totalPrice": 28000,
+          "weightKg": 31.2
+        },
+        {
+          "componentId": "upright-3000-STANDARD",
+          "sku": "UPR-0025",
+          "type": "UPRIGHT",
+          "name": "Стойка 3000 мм",
+          "quantity": 4,
+          "unitPrice": 8400,
+          "totalPrice": 33600,
+          "weightKg": 37.2
+        },
+        {
+          "componentId": "shelf-STANDARD-700-400",
+          "sku": "SHF-0028",
+          "type": "SHELF",
+          "name": "Полка Стандартная 700×400",
+          "quantity": 2,
+          "unitPrice": 26600,
+          "totalPrice": 53200,
+          "weightKg": 5.4
+        },
+        {
+          "componentId": "beam-long-700",
+          "sku": "BML-0088",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 700 мм",
+          "quantity": 4,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 6.8
+        },
+        {
+          "componentId": "side-SOLID-400",
+          "sku": "SWL-0121",
+          "type": "SIDE_WALL",
+          "name": "Боковая стенка сплошная 400 мм",
+          "quantity": 2,
+          "unitPrice": 1280,
+          "totalPrice": 2560,
+          "weightKg": 3.6
+        },
+        {
+          "componentId": "shelf-STANDARD-1000-400",
+          "sku": "SHF-0034",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1000×400",
+          "quantity": 14,
+          "unitPrice": 38000,
+          "totalPrice": 532000,
+          "weightKg": 53.2
+        },
+        {
+          "componentId": "beam-long-1000",
+          "sku": "BML-0089",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1000 мм",
+          "quantity": 28,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 67.2
+        },
+        {
+          "componentId": "rear-SOLID-1000",
+          "sku": "RWL-0113",
+          "type": "REAR_WALL",
+          "name": "Задняя стенка сплошная 1000 мм",
+          "quantity": 1,
+          "unitPrice": 3400,
+          "totalPrice": 3400,
+          "weightKg": 5.2
+        },
+        {
+          "componentId": "shelf-STANDARD-1200-400",
+          "sku": "SHF-0040",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1200×400",
+          "quantity": 8,
+          "unitPrice": 45600,
+          "totalPrice": 364800,
+          "weightKg": 36.8
+        },
+        {
+          "componentId": "beam-long-1200",
+          "sku": "BML-0090",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1200 мм",
+          "quantity": 16,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 46.4
+        },
+        {
+          "componentId": "shelf-STANDARD-1500-400",
+          "sku": "SHF-0046",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1500×400",
+          "quantity": 5,
+          "unitPrice": 57000,
+          "totalPrice": 285000,
+          "weightKg": 28.5
+        },
+        {
+          "componentId": "beam-long-1500",
+          "sku": "BML-0091",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1500 мм",
+          "quantity": 10,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 36
+        },
+        {
+          "componentId": "rear-SOLID-1500",
+          "sku": "RWL-0117",
+          "type": "REAR_WALL",
+          "name": "Задняя стенка сплошная 1500 мм",
+          "quantity": 1,
+          "unitPrice": 5100,
+          "totalPrice": 5100,
+          "weightKg": 7.8
+        }
+      ],
+      "totalWeightKg": 504,
+      "rowLengthMm": 5400,
+      "leadTimeDays": 5,
+      "warnings": [],
+      "deliveryNote": null
+    }
+  },
+  {
+    "name": "mixed-qty2-assembly-per-section",
+    "config": {
+      "modelSlug": "ms-standard",
+      "depth": 400,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [],
+      "assemblyId": "assembly-professional",
+      "deliveryId": "delivery-city",
+      "quantity": 2,
+      "sections": [
+        {
+          "id": "g39",
+          "width": 1000,
+          "height": 1800,
+          "shelves": 6,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g40",
+          "width": 1200,
+          "height": 2200,
+          "shelves": 7,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        }
+      ]
+    },
+    "outcome": {
+      "ok": true,
+      "breakdown": {
+        "componentsSubtotal": 592000,
+        "colorSurcharge": 0,
+        "markup": 130240,
+        "unitNet": 722240,
+        "quantity": 2,
+        "itemsNet": 1444480,
+        "assembly": 24000,
+        "delivery": 0,
+        "discount": 0,
+        "discountReasons": [],
+        "net": 1468480,
+        "vatPercent": 16,
+        "vat": 234957,
+        "total": 1703437,
+        "unitTotal": 851719
+      },
+      "bom": [
+        {
+          "componentId": "upright-1800-STANDARD",
+          "sku": "UPR-0011",
+          "type": "UPRIGHT",
+          "name": "Стойка 1800 мм",
+          "quantity": 4,
+          "unitPrice": 5040,
+          "totalPrice": 20160,
+          "weightKg": 22.4
+        },
+        {
+          "componentId": "beam-depth-400",
+          "sku": "BMD-0093",
+          "type": "BEAM_DEPTH",
+          "name": "Балка поперечная 400 мм",
+          "quantity": 26,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 20.8
+        },
+        {
+          "componentId": "tie-generic",
+          "sku": "TIE-0131",
+          "type": "TIE",
+          "name": "Стяжка рамы",
+          "quantity": 16,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 9.6
+        },
+        {
+          "componentId": "fastener-generic",
+          "sku": "FST-0132",
+          "type": "FASTENER",
+          "name": "Комплект крепежа (болт + гайка)",
+          "quantity": 84,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 4.2
+        },
+        {
+          "componentId": "foot-generic",
+          "sku": "FOT-0133",
+          "type": "FOOT",
+          "name": "Опора пластиковая",
+          "quantity": 8,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 0.8
+        },
+        {
+          "componentId": "upright-2200-STANDARD",
+          "sku": "UPR-0017",
+          "type": "UPRIGHT",
+          "name": "Стойка 2200 мм",
+          "quantity": 4,
+          "unitPrice": 6160,
+          "totalPrice": 24640,
+          "weightKg": 27.2
+        },
+        {
+          "componentId": "shelf-STANDARD-1000-400",
+          "sku": "SHF-0034",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1000×400",
+          "quantity": 6,
+          "unitPrice": 38000,
+          "totalPrice": 228000,
+          "weightKg": 22.799999999999997
+        },
+        {
+          "componentId": "beam-long-1000",
+          "sku": "BML-0089",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1000 мм",
+          "quantity": 12,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 28.799999999999997
+        },
+        {
+          "componentId": "shelf-STANDARD-1200-400",
+          "sku": "SHF-0040",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1200×400",
+          "quantity": 7,
+          "unitPrice": 45600,
+          "totalPrice": 319200,
+          "weightKg": 32.199999999999996
+        },
+        {
+          "componentId": "beam-long-1200",
+          "sku": "BML-0090",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1200 мм",
+          "quantity": 14,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 40.6
+        }
+      ],
+      "totalWeightKg": 419,
+      "rowLengthMm": 2200,
+      "leadTimeDays": 2,
+      "warnings": [],
+      "deliveryNote": null
+    }
+  },
+  {
+    "name": "mixed-cross-brace-accessory",
+    "config": {
+      "modelSlug": "ms-standard",
+      "depth": 400,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [
+        {
+          "accessoryId": "acc-cross-brace",
+          "quantity": 1,
+          "sectionId": "g41"
+        }
+      ],
+      "assemblyId": "assembly-self",
+      "deliveryId": "delivery-pickup",
+      "quantity": 1,
+      "sections": [
+        {
+          "id": "g41",
+          "width": 1000,
+          "height": 2000,
+          "shelves": 5,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g42",
+          "width": 1200,
+          "height": 2500,
+          "shelves": 6,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        }
+      ]
+    },
+    "outcome": {
+      "ok": true,
+      "breakdown": {
+        "componentsSubtotal": 515600,
+        "colorSurcharge": 0,
+        "markup": 113432,
+        "unitNet": 629032,
+        "quantity": 1,
+        "itemsNet": 629032,
+        "assembly": 0,
+        "delivery": 0,
+        "discount": 0,
+        "discountReasons": [],
+        "net": 629032,
+        "vatPercent": 16,
+        "vat": 100645,
+        "total": 729677,
+        "unitTotal": 729677
+      },
+      "bom": [
+        {
+          "componentId": "upright-2000-STANDARD",
+          "sku": "UPR-0015",
+          "type": "UPRIGHT",
+          "name": "Стойка 2000 мм",
+          "quantity": 4,
+          "unitPrice": 5600,
+          "totalPrice": 22400,
+          "weightKg": 24.8
+        },
+        {
+          "componentId": "beam-depth-400",
+          "sku": "BMD-0093",
+          "type": "BEAM_DEPTH",
+          "name": "Балка поперечная 400 мм",
+          "quantity": 22,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 17.6
+        },
+        {
+          "componentId": "tie-generic",
+          "sku": "TIE-0131",
+          "type": "TIE",
+          "name": "Стяжка рамы",
+          "quantity": 16,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 9.6
+        },
+        {
+          "componentId": "fastener-generic",
+          "sku": "FST-0132",
+          "type": "FASTENER",
+          "name": "Комплект крепежа (болт + гайка)",
+          "quantity": 76,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 3.8
+        },
+        {
+          "componentId": "foot-generic",
+          "sku": "FOT-0133",
+          "type": "FOOT",
+          "name": "Опора пластиковая",
+          "quantity": 8,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 0.8
+        },
+        {
+          "componentId": "upright-2500-STANDARD",
+          "sku": "UPR-0023",
+          "type": "UPRIGHT",
+          "name": "Стойка 2500 мм",
+          "quantity": 4,
+          "unitPrice": 7000,
+          "totalPrice": 28000,
+          "weightKg": 31.2
+        },
+        {
+          "componentId": "shelf-STANDARD-1000-400",
+          "sku": "SHF-0034",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1000×400",
+          "quantity": 5,
+          "unitPrice": 38000,
+          "totalPrice": 190000,
+          "weightKg": 19
+        },
+        {
+          "componentId": "beam-long-1000",
+          "sku": "BML-0089",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1000 мм",
+          "quantity": 10,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 24
+        },
+        {
+          "componentId": "shelf-STANDARD-1200-400",
+          "sku": "SHF-0040",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1200×400",
+          "quantity": 6,
+          "unitPrice": 45600,
+          "totalPrice": 273600,
+          "weightKg": 27.599999999999998
+        },
+        {
+          "componentId": "beam-long-1200",
+          "sku": "BML-0090",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1200 мм",
+          "quantity": 12,
+          "unitPrice": 0,
+          "totalPrice": 0,
+          "weightKg": 34.8
+        },
+        {
+          "componentId": "acc-cross-brace",
+          "sku": "ACC-0005",
+          "type": "ACCESSORY",
+          "name": "Крестовина жёсткости",
+          "quantity": 1,
+          "unitPrice": 1600,
+          "totalPrice": 1600,
+          "weightKg": 1.8
+        }
+      ],
+      "totalWeightKg": 195,
+      "rowLengthMm": 2200,
+      "leadTimeDays": 5,
+      "warnings": [],
+      "deliveryNote": null
+    }
+  },
+  {
+    "name": "archive-mixed-heights",
+    "config": {
+      "modelSlug": "archive-ms",
+      "depth": 400,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [],
+      "assemblyId": "assembly-self",
+      "deliveryId": "delivery-pickup",
+      "quantity": 1,
+      "sections": [
+        {
+          "id": "g43",
+          "width": 1000,
+          "height": 1850,
+          "shelves": 6,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g44",
+          "width": 1000,
+          "height": 2200,
+          "shelves": 7,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        }
+      ]
+    },
+    "outcome": {
+      "ok": true,
+      "breakdown": {
+        "componentsSubtotal": 628940,
+        "colorSurcharge": 0,
+        "markup": 125788,
+        "unitNet": 754728,
+        "quantity": 1,
+        "itemsNet": 754728,
+        "assembly": 0,
+        "delivery": 0,
+        "discount": 0,
+        "discountReasons": [],
+        "net": 754728,
+        "vatPercent": 16,
+        "vat": 120756,
+        "total": 875484,
+        "unitTotal": 875484
+      },
+      "bom": [
+        {
+          "componentId": "upright-1850-STANDARD",
+          "sku": "UPR-0013",
+          "type": "UPRIGHT",
+          "name": "Стойка 1850 мм",
+          "quantity": 4,
+          "unitPrice": 5180,
+          "totalPrice": 20720,
+          "weightKg": 22.8
+        },
+        {
+          "componentId": "beam-depth-400",
+          "sku": "BMD-0093",
+          "type": "BEAM_DEPTH",
+          "name": "Балка поперечная 400 мм",
+          "quantity": 26,
+          "unitPrice": 580,
+          "totalPrice": 15080,
+          "weightKg": 20.8
+        },
+        {
+          "componentId": "tie-generic",
+          "sku": "TIE-0131",
+          "type": "TIE",
+          "name": "Стяжка рамы",
+          "quantity": 16,
+          "unitPrice": 780,
+          "totalPrice": 12480,
+          "weightKg": 9.6
+        },
+        {
+          "componentId": "fastener-generic",
+          "sku": "FST-0132",
+          "type": "FASTENER",
+          "name": "Комплект крепежа (болт + гайка)",
+          "quantity": 136,
+          "unitPrice": 120,
+          "totalPrice": 16320,
+          "weightKg": 6.8
+        },
+        {
+          "componentId": "foot-generic",
+          "sku": "FOT-0133",
+          "type": "FOOT",
+          "name": "Опора пластиковая",
+          "quantity": 8,
+          "unitPrice": 350,
+          "totalPrice": 2800,
+          "weightKg": 0.8
+        },
+        {
+          "componentId": "upright-2200-STANDARD",
+          "sku": "UPR-0017",
+          "type": "UPRIGHT",
+          "name": "Стойка 2200 мм",
+          "quantity": 4,
+          "unitPrice": 6160,
+          "totalPrice": 24640,
+          "weightKg": 27.2
+        },
+        {
+          "componentId": "shelf-STANDARD-1000-400",
+          "sku": "SHF-0034",
+          "type": "SHELF",
+          "name": "Полка Стандартная 1000×400",
+          "quantity": 13,
+          "unitPrice": 38000,
+          "totalPrice": 494000,
+          "weightKg": 49.4
+        },
+        {
+          "componentId": "beam-long-1000",
+          "sku": "BML-0089",
+          "type": "BEAM_LONGITUDINAL",
+          "name": "Балка продольная 1000 мм",
+          "quantity": 26,
+          "unitPrice": 1650,
+          "totalPrice": 42900,
+          "weightKg": 62.4
+        }
+      ],
+      "totalWeightKg": 200,
+      "rowLengthMm": 2000,
+      "leadTimeDays": 2,
+      "warnings": [],
+      "deliveryNote": null
+    }
+  },
+  {
+    "name": "fail-mixed-shelf-ceiling",
+    "config": {
+      "modelSlug": "ms-standard",
+      "depth": 400,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [],
+      "assemblyId": "assembly-self",
+      "deliveryId": "delivery-pickup",
+      "quantity": 1,
+      "sections": [
+        {
+          "id": "g45",
+          "width": 1000,
+          "height": 2000,
+          "shelves": 5,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g46",
+          "width": 1000,
+          "height": 1000,
+          "shelves": 6,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        }
+      ]
+    },
+    "outcome": {
+      "ok": false,
+      "code": "INCOMPATIBLE_CONFIGURATION",
+      "message": "При высоте 1000 мм максимум 4 полок",
+      "details": [
+        "При высоте 1000 мм максимум 4 полок"
+      ]
+    }
+  },
+  {
+    "name": "fail-mixed-unsupported-height",
+    "config": {
+      "modelSlug": "ms-standard",
+      "depth": 400,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [],
+      "assemblyId": "assembly-self",
+      "deliveryId": "delivery-pickup",
+      "quantity": 1,
+      "sections": [
+        {
+          "id": "g47",
+          "width": 1000,
+          "height": 2000,
+          "shelves": 5,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g48",
+          "width": 1000,
+          "height": 1700,
+          "shelves": 5,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        }
+      ]
+    },
+    "outcome": {
+      "ok": false,
+      "code": "INCOMPATIBLE_CONFIGURATION",
+      "message": "Высота 1700 мм недоступна",
+      "details": [
+        "Высота 1700 мм недоступна",
+        "Высота 1700 мм недоступна для MS Стандарт"
+      ]
+    }
+  },
+  {
+    "name": "fail-six-sections",
+    "config": {
+      "modelSlug": "ms-standard",
+      "depth": 400,
+      "loadCapacity": 150,
+      "shelfType": "STANDARD",
+      "colorId": "color-grey",
+      "accessories": [],
+      "assemblyId": "assembly-self",
+      "deliveryId": "delivery-pickup",
+      "quantity": 1,
+      "sections": [
+        {
+          "id": "g49",
+          "width": 1000,
+          "height": 2000,
+          "shelves": 5,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g50",
+          "width": 1000,
+          "height": 2000,
+          "shelves": 5,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g51",
+          "width": 1000,
+          "height": 2000,
+          "shelves": 5,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g52",
+          "width": 1000,
+          "height": 2000,
+          "shelves": 5,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g53",
+          "width": 1000,
+          "height": 2000,
+          "shelves": 5,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        },
+        {
+          "id": "g54",
+          "width": 1000,
+          "height": 2000,
+          "shelves": 5,
+          "rearWall": false,
+          "leftWall": false,
+          "rightWall": false
+        }
+      ]
+    },
+    "outcome": {
+      "ok": false,
+      "code": "VALIDATION_ERROR",
+      "message": "Некорректные данные конфигурации",
+      "details": [
+        "Достигнуто максимальное количество секций (5)"
+      ]
+    }
+  }
+]

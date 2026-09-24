@@ -71,23 +71,25 @@ describe('pricing engine', () => {
     expect(result.breakdown.total).toBeGreaterThan(1);
   });
 
-  it('reduces upright and tie quantities for shared-upright multi-section rows', () => {
+  it('gives every section of a multi-section row its own uprights and ties — none are shared', () => {
     const single = calculatePrice(baseConfig({ sections: [section(1000)] }), catalog);
-    const shared = calculatePrice(
+    const row = calculatePrice(
       baseConfig({ sections: [section(1000), section(1000), section(1000)] }),
       catalog,
     );
     expect(single.ok).toBe(true);
-    expect(shared.ok).toBe(true);
-    if (!single.ok || !shared.ok) return;
+    expect(row.ok).toBe(true);
+    if (!single.ok || !row.ok) return;
 
-    const uprightQty = (r: typeof single) => r.bom.find((l) => l.type === 'UPRIGHT')?.quantity ?? 0;
-    // A lone section has nothing to share with, so it prices as `sections * 4`
-    // = 4. Three sections in one row always share boundary uprights:
-    // `(sections + 1) * 2` = 8, not the independent `sections * 4` = 12.
-    expect(uprightQty(single)).toBe(4);
-    expect(uprightQty(shared)).toBe(8);
-    expect(uprightQty(shared)).toBeLessThan(3 * uprightQty(single));
+    const qty = (r: typeof single, type: string) => r.bom.find((l) => l.type === type)?.quantity ?? 0;
+    // Sections are physically independent (V2.2B): each stands on its own
+    // four uprights, so three sections carry 3 × 4 = 12, never the old
+    // shared-boundary (sections + 1) × 2 = 8.
+    expect(qty(single, 'UPRIGHT')).toBe(4);
+    expect(qty(row, 'UPRIGHT')).toBe(12);
+    expect(qty(row, 'TIE')).toBe(3 * qty(single, 'TIE'));
+    expect(qty(row, 'FOOT')).toBe(3 * qty(single, 'FOOT'));
+    expect(row.bom.some((l) => l.type === 'CONNECTOR')).toBe(false);
   });
 
   it('prices mixed section widths using each section\'s own width, not the first section\'s', () => {

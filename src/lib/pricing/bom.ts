@@ -3,7 +3,6 @@ import { findAccessory, findComponent } from '@/lib/data/repository';
 import { evaluateCondition, evaluateQuantity, FormulaError, type FormulaScope } from '@/lib/formula';
 import { roundTenge } from '@/lib/money';
 import type { BomLine, ComponentType, ConfigurationRule, ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
-import { getUniformSectionHeight, getUniformSectionShelves } from '@/lib/configurator/section-dimensions';
 
 /** Component types whose absence means the configuration cannot be built at all. */
 const CRITICAL_COMPONENT_TYPES: ComponentType[] = [
@@ -14,23 +13,18 @@ const CRITICAL_COMPONENT_TYPES: ComponentType[] = [
 ];
 
 /**
- * Component types priced once for the whole row (uprights, ties, feet,
- * connectors between shared uprights, depth beams, cross braces). None of
- * these depend on an individual section's width, so they are evaluated once
- * against a scope describing the row as a whole — this is exactly where the
- * "shared uprights" saving lives (rule-upright / rule-tie / rule-foot use
- * `sharedUprights` to charge `sections + 1` upright pairs instead of
- * `sections * 4` when the row has more than one section).
+ * The frame of one section: uprights, frame ties, bolt/nut sets, feet,
+ * connectors, depth beams and cross braces. None of these parts has a width
+ * of its own, so they are looked up by the section's height (and the shared
+ * depth) with no width — exactly as they always were.
  */
-const ROW_LEVEL_TYPES: ComponentType[] = ['UPRIGHT', 'TIE', 'FASTENER', 'FOOT', 'CONNECTOR', 'BEAM_DEPTH', 'CROSS_BRACE'];
+const FRAME_TYPES: ComponentType[] = ['UPRIGHT', 'TIE', 'FASTENER', 'FOOT', 'CONNECTOR', 'BEAM_DEPTH', 'CROSS_BRACE'];
 
 /**
- * Component types that depend on an individual section's width (shelves,
- * longitudinal beams, wall panels). Evaluated once per section so a row of
- * 700 + 1000 + 1200 mm sections prices each width correctly instead of
- * charging every section as if it were the widest (or narrowest) one.
+ * The width-dependent parts of one section: shelves, longitudinal beams and
+ * wall panels, looked up by that section's own width as well.
  */
-const SECTION_LEVEL_TYPES: ComponentType[] = ['SHELF', 'BEAM_LONGITUDINAL', 'REAR_WALL', 'SIDE_WALL'];
+const WIDTH_TYPES: ComponentType[] = ['SHELF', 'BEAM_LONGITUDINAL', 'REAR_WALL', 'SIDE_WALL'];
 
 export interface BomResult {
   lines: BomLine[];
@@ -48,56 +42,18 @@ export interface BomResult {
 }
 
 /**
- * The height and shelf count the row-level (shared-upright) rules are
- * evaluated with.
+ * The formula scope of ONE physically independent section (Configurator
+ * V2.2B): `sections` is always 1 and every value is that section's own —
+ * width, height, shelf count, wall panels — plus the kit-wide depth, load
+ * capacity, shelf type and quantity.
  *
- * TRANSITIONAL (V2.2A → V2.2B): the row-level rules still price a
- * multi-section row with SHARED uprights, which describes a real rack only
- * when every section has the same height and shelf count. Until V2.2B
- * replaces them with per-section structural pricing (4 uprights per section),
- * a row whose sections differ has no row-level reading at all: this returns
- * undefined and buildBom fails closed instead of pricing it with invented
- * row values. calculatePrice() already refuses such a configuration before
- * it gets here (see engine.ts); this is the second, independent guard.
+ * `sharedUprights` and `isRow` are always 0. Adjacent sections never share
+ * an upright: each one stands on its own four, so every stored rule is read
+ * through its independent-section branch (rule-upright
+ * `sharedUprights == 1 ? … : sections * 4` → 4 uprights per section,
+ * rule-connector → none). The variables stay in the scope only so the
+ * formulas stored in the database keep evaluating unchanged.
  */
-interface UniformRowDimensions {
-  height: number;
-  shelves: number;
-}
-
-function readUniformRowDimensions(config: ShelvingConfiguration): UniformRowDimensions | undefined {
-  const height = getUniformSectionHeight(config.sections);
-  const shelves = getUniformSectionShelves(config.sections);
-  return height === undefined || shelves === undefined ? undefined : { height, shelves };
-}
-
-/** Server-only diagnostic for the transitional mixed-dimension refusal. */
-export const MIXED_SECTION_DIMENSIONS_DIAGNOSTIC =
-  'V2.2A: секции с разной высотой или количеством полок пока не рассчитываются автоматически (расчёт появится в V2.2B)';
-
-/** Row-level scope: describes the whole shelving row, not any one section. */
-function buildRowScope(config: ShelvingConfiguration, row: UniformRowDimensions, sharedUprights: 0 | 1): FormulaScope {
-  return {
-    sections: config.sections.length,
-    shelves: row.shelves,
-    width: 0,
-    depth: config.depth,
-    height: row.height,
-    quantity: config.quantity,
-    loadCapacity: config.loadCapacity,
-    rearSolid: 0,
-    rearPerforated: 0,
-    rearBrace: 0,
-    sideCount: 0,
-    sidePerforated: 0,
-    sharedUprights,
-    isRow: sharedUprights,
-    shelfReinforced: config.shelfType === 'REINFORCED' || config.shelfType === 'EXTRA_REINFORCED' ? 1 : 0,
-  };
-}
-
-/** Section-level scope: describes exactly one section (`sections` is always 1)
- * with that section's own width, height and shelf count. */
 function buildSectionScope(config: ShelvingConfiguration, section: ShelvingSection): FormulaScope {
   return {
     sections: 1,
@@ -125,9 +81,10 @@ function wallVariant(): string {
 
 /**
  * Evaluates every active, applicable rule of the given types against one
- * scope and returns the resulting BOM lines. Shared by both the row-level
- * and per-section passes below — never hardcodes a component quantity,
- * every line still comes from a stored formula (src/lib/formula).
+ * section's scope and returns the resulting BOM lines. Used for both the
+ * frame and the width-dependent pass of buildSectionBom — never hardcodes a
+ * component quantity, every line still comes from a stored formula
+ * (src/lib/formula).
  */
 function runRules(
   rules: ConfigurationRule[],
@@ -208,11 +165,10 @@ function runRules(
  * MS Standard is bought from the supplier as exactly two commercial
  * positions — «Стойка ST MS-750» and «Полка ST MP-750» — and the price of
  * each already covers everything that ships with it: the beams that make the
- * shelf a shelf, the frame ties, the bolt/nut sets, the feet and the
- * connectors that join two sections on a shared upright. None of those is a
- * separately purchasable line in the approved list, so charging them again
- * from their own catalog rows would invoice the customer (and cost the
- * business) twice for one supplied part.
+ * shelf a shelf, the frame ties, the bolt/nut sets, the feet and any
+ * section connectors. None of those is a separately purchasable line in the
+ * approved list, so charging them again from their own catalog rows would
+ * invoice the customer (and cost the business) twice for one supplied part.
  *
  * Scoped by model slug on purpose: MS Strong and Archive MS are not priced
  * from that list and keep every component's own selling price and cost
@@ -256,7 +212,13 @@ function applySupplierKitPriceOwnership(lines: BomLine[], modelSlug: string): Bo
   );
 }
 
-/** Merges BOM lines that reference the same physical component into one row. */
+/**
+ * Merges BOM lines that reference the same catalog component into one row:
+ * quantity, total price and weight are summed; the unit price and unit cost
+ * are the component's own and therefore identical on every merged line.
+ * Lines of different components are never merged, so different upright
+ * heights or shelf widths stay separate rows. Insertion order is kept.
+ */
 function aggregateLines(lines: BomLine[]): BomLine[] {
   const byComponent = new Map<string, BomLine>();
   for (const line of lines) {
@@ -267,54 +229,82 @@ function aggregateLines(lines: BomLine[]): BomLine[] {
     }
     existing.quantity += line.quantity;
     existing.totalPrice += line.totalPrice;
-    existing.weightKg += line.weightKg;
+    // Summing per-section weights accumulates binary floating-point noise
+    // (5 × 2.4 kg = 12.000000000000002); a milligram grid removes it without
+    // moving any real value.
+    existing.weightKg = Math.round((existing.weightKg + line.weightKg) * 1e6) / 1e6;
   }
   return [...byComponent.values()];
 }
 
+/** The structural BOM of one physically independent section, before aggregation. */
+export interface SectionBom {
+  sectionId: string;
+  /** Uprights, ties, fasteners, feet, depth beams… — looked up by this section's height. */
+  frameLines: BomLine[];
+  /** Shelves, longitudinal beams, wall panels — looked up by this section's width too. */
+  widthLines: BomLine[];
+  warnings: string[];
+  missingCritical: boolean;
+}
+
 /**
- * Builds the bill of materials from the database-driven configuration rules.
- * Row-level components (uprights, ties, feet, connectors, depth beams, cross
- * braces) are priced once for the whole row so the shared-uprights saving is
- * preserved exactly as before — TEMPORARILY: V2.2B replaces this with
- * independent per-section uprights, and until then a row whose sections
- * differ in height or shelf count is refused (see readUniformRowDimensions).
- * For a model priced from a two-position
- * supplier list the structural helper parts then hand their price ownership
- * to the upright/shelf — see applySupplierKitPriceOwnership; quantities and
- * weights are never affected. Section-level components (shelves,
- * longitudinal beams, wall panels) are priced once per section against that
- * section's own width and wall selection, then aggregated by SKU so the
- * customer-facing BOM shows one row per physical part even when several
- * sections happen to share the same width.
+ * The structural BOM of ONE section, from that section's own width, height,
+ * shelf count and wall panels plus the kit-wide depth, load capacity and
+ * shelf type (Configurator V2.2B). Sections are physically independent:
+ * nothing here depends on a neighbour, so a section prices the same wherever
+ * it stands in the row. Quantities come only from the stored rules evaluated
+ * with buildSectionScope; unit prices only from the catalog component each
+ * rule resolves to. Model-level price ownership (applySupplierKitPriceOwnership)
+ * and accessories are applied once to the whole kit by buildBom.
+ */
+export function buildSectionBom(config: ShelvingConfiguration, section: ShelvingSection, catalog: Catalog): SectionBom {
+  const scope = buildSectionScope(config, section);
+  const frame = runRules(catalog.rules, FRAME_TYPES, scope, config, catalog, section.height, undefined);
+  const width = runRules(catalog.rules, WIDTH_TYPES, scope, config, catalog, section.height, section.width);
+  return {
+    sectionId: section.id,
+    frameLines: frame.lines,
+    widthLines: width.lines,
+    warnings: [...frame.warnings, ...width.warnings],
+    missingCritical: frame.missingCritical || width.missingCritical,
+  };
+}
+
+/**
+ * Builds the bill of materials from the database-driven configuration rules
+ * (Configurator V2.2B — independent sections).
+ *
+ *   1. Every section gets its own structural BOM (buildSectionBom) from its
+ *      own width, height, shelves and walls: its own four uprights, its own
+ *      frame ties, feet and fasteners, its own shelves and beams. Adjacent
+ *      sections never share an upright, so a row of N sections carries
+ *      N × the per-section upright quantity — there is no row-level pass and
+ *      no row-wide height or shelf count, so sections of different heights
+ *      or shelf counts are each priced exactly as built.
+ *   2. The section BOMs are merged by catalog component (aggregateLines):
+ *      identical parts become one line whose quantity, price and weight are
+ *      the sums of the sections' own lines, while parts that differ (a 1500 mm
+ *      and a 2500 mm upright, a 1000 and a 1200 shelf) stay separate lines.
+ *      Frame lines come first, then shelves/beams/walls, in row order.
+ *   3. For a model priced from a two-position supplier list the structural
+ *      helper parts hand their price ownership to the upright/shelf
+ *      (applySupplierKitPriceOwnership); quantities and weights are never
+ *      affected.
+ *   4. Accessories are appended as their own paid lines.
  */
 export function buildBom(config: ShelvingConfiguration, catalog: Catalog): BomResult {
   const warnings: string[] = [];
   let missingCritical = false;
-  const rawLines: BomLine[] = [];
 
   const rowLengthMm = config.sections.reduce((sum, s) => sum + s.width, 0);
-  const row = readUniformRowDimensions(config);
-  if (!row) {
-    return { lines: [], totalWeightKg: 0, warnings: [MIXED_SECTION_DIMENSIONS_DIAGNOSTIC], missingCritical: true, rowLengthMm };
+
+  const sectionBoms = config.sections.map((section) => buildSectionBom(config, section, catalog));
+  for (const sectionBom of sectionBoms) {
+    warnings.push(...sectionBom.warnings);
+    missingCritical = missingCritical || sectionBom.missingCritical;
   }
-
-  const activeRules = catalog.rules;
-  const sharedUprights: 0 | 1 = config.sections.length > 1 ? 1 : 0;
-
-  const rowScope = buildRowScope(config, row, sharedUprights);
-  const rowResult = runRules(activeRules, ROW_LEVEL_TYPES, rowScope, config, catalog, row.height, undefined);
-  rawLines.push(...rowResult.lines);
-  warnings.push(...rowResult.warnings);
-  missingCritical = missingCritical || rowResult.missingCritical;
-
-  for (const section of config.sections) {
-    const sectionScope = buildSectionScope(config, section);
-    const sectionResult = runRules(activeRules, SECTION_LEVEL_TYPES, sectionScope, config, catalog, section.height, section.width);
-    rawLines.push(...sectionResult.lines);
-    warnings.push(...sectionResult.warnings);
-    missingCritical = missingCritical || sectionResult.missingCritical;
-  }
+  const rawLines = [...sectionBoms.flatMap((s) => s.frameLines), ...sectionBoms.flatMap((s) => s.widthLines)];
 
   const lines = applySupplierKitPriceOwnership(aggregateLines(rawLines), config.modelSlug);
 
@@ -350,9 +340,9 @@ export type PublicBomLine = Omit<BomLine, 'unitCost'>;
 /**
  * Structural parts a customer never orders as their own kit position: the
  * shelf is supplied as one complete shelf assembly (shelf + its beams) on a
- * bolted frame (uprights + frame ties + the connectors joining adjacent
- * sections on a shared upright), so beams, frame ties and section connectors
- * are not independent positions in the customer-facing kit composition.
+ * bolted frame (uprights + frame ties + any section connectors), so beams,
+ * frame ties and section connectors are not independent positions in the
+ * customer-facing kit composition.
  *
  * This is presentation only. The internal BOM built above keeps every one of
  * these as a real line with its own quantity and weight — the authoritative

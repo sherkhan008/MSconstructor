@@ -7,8 +7,9 @@ import type { ShelvingSection } from '@/lib/types/domain';
  * helpers, each with an explicit meaning — never an arbitrary `sections[0]`.
  *
  *   uniform…   the one value every section shares, or `undefined` when they
- *              differ (used by the transitional pricing guard and by the
- *              single shared height/shelf controls of today's UI);
+ *              differ (used by the single shared height/shelf controls of
+ *              today's UI; pricing never needs it — V2.2B prices every
+ *              section from its own BOM);
  *   max…       the tallest section / most shelves — the row's overall
  *              envelope (e.g. the overall В×Ш×Г, the preview frame);
  *   …Summary   a display string that states one value when all sections

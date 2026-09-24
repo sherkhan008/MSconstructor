@@ -349,12 +349,10 @@ describe('CSV ↔ current public source', () => {
   /** Single literals inside otherwise public files that are intentionally not inventoried. */
   const EXCLUDED_STRINGS: Record<string, string[]> = {
     // Internal BOM diagnostics → PriceResult.internalWarnings / PriceFailure.internalDetails (never sent to the browser).
-    // The V2.2A mixed-section refusal diagnostic goes to the same server-only channel.
     'src/lib/pricing/bom.ts': [
       'Не найден компонент для правила «',
       'Ошибка расчёта правила',
       'Правило «',
-      'V2.2A: секции с разной высотой или количеством полок пока не рассчитываются автоматически (расчёт появится в V2.2B)',
     ],
     'src/lib/pricing/engine.ts': ['Скидка ограничена минимальной наценкой и была уменьшена'],
     // Message composed by a manager from the admin order card, not by the public site.

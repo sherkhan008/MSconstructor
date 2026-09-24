@@ -9,8 +9,8 @@ import { uniformRow, type LooseSection, type UniformRowInput } from '../helpers/
  *
  * MS Standard is bought as exactly two commercial positions — the upright and
  * the ordinary straight shelf. Everything else in the rack (the beams that
- * make a shelf a shelf, the frame ties, the bolt/nut sets, the feet, the
- * connectors joining two sections on a shared upright) ships inside those two
+ * make a shelf a shelf, the frame ties, the bolt/nut sets, the feet, any
+ * section connectors) ships inside those two
  * supplier prices, so the merchandise price of a plain MS Standard rack must
  * be exactly:
  *
@@ -140,12 +140,12 @@ describe('MS Standard is priced from the approved upright + shelf list only', ()
     });
   });
 
-  it('leaves the shared-upright quantity formulas untouched', () => {
+  it('charges 4 uprights per independent section — adjacent sections share none', () => {
     const uprights = (cfg: ShelvingConfiguration) =>
       priced(cfg).bom.find((l) => l.type === 'UPRIGHT')?.quantity ?? 0;
     expect(uprights(config({ sections: [section(1000)] }))).toBe(4);
-    expect(uprights(config({ sections: [section(1000), section(1000)] }))).toBe(6);
-    expect(uprights(config({ sections: [section(700), section(1000), section(1200)] }))).toBe(8);
+    expect(uprights(config({ sections: [section(1000), section(1000)] }))).toBe(8);
+    expect(uprights(config({ sections: [section(700), section(1000), section(1200)] }))).toBe(12);
   });
 
   it('scales exactly with shelf count — one approved shelf price per shelf', () => {

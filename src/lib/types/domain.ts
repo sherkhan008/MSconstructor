@@ -289,12 +289,10 @@ export interface ConfigurationAccessorySelection {
  * Depth, load capacity, shelf type and colour stay kit-wide — see
  * ShelvingConfiguration.
  *
- * Pricing note (transitional, V2.2A → V2.2B): the domain can describe
- * sections of different heights/shelf counts, but the BOM still prices a
- * multi-section row with shared uprights, which is only meaningful when every
- * section has the same height and shelf count. Until V2.2B replaces that with
- * per-section structural pricing, calculatePrice() refuses mixed values —
- * see src/lib/pricing/engine.ts.
+ * Pricing (V2.2B): every section is priced from its own structural BOM —
+ * its own four uprights, never shared with a neighbour — so sections of
+ * different heights, shelf counts and widths are priced as built. See
+ * buildBom in src/lib/pricing/bom.ts.
  */
 export interface ShelvingSection {
   id: string;
