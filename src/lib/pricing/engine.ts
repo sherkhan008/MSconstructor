@@ -9,8 +9,7 @@ import {
 import { addVat, clampMin, extractVat, multiply, percentOf, roundTenge, sum, type Tenge } from '@/lib/money';
 import type { PriceBreakdown, PriceResult, PricingOutcome, ShelvingConfiguration } from '@/lib/types/domain';
 import { quotedDeliveryPrice } from '@/lib/delivery/city-delivery';
-import { buildBom, MIXED_SECTION_DIMENSIONS_DIAGNOSTIC } from './bom';
-import { hasUniformSectionDimensions } from '@/lib/configurator/section-dimensions';
+import { buildBom } from './bom';
 import { validateCompatibility } from './compatibility';
 import { parseConfiguration } from './schema';
 import type { Locale } from '@/lib/i18n/locales';
@@ -69,23 +68,9 @@ export function calculatePrice(rawConfig: unknown, catalog: Catalog, context: Pr
     };
   }
 
-  // TRANSITIONAL GUARD (V2.2A → V2.2B). The domain already lets every
-  // section carry its own height and shelf count, but the BOM still prices a
-  // multi-section row with shared uprights, which is only true of a rack
-  // whose sections all have the same height and shelf count. Until V2.2B
-  // ships per-section structural pricing, a configuration with mixed values
-  // is refused here — never priced with row-level assumptions. It is a
-  // server-side check, so a forged request cannot bypass it; every
-  // uniform configuration passes straight through, priced exactly as V2.1.
-  if (!hasUniformSectionDimensions(config.sections)) {
-    return {
-      ok: false,
-      code: 'INDIVIDUAL_QUOTE_REQUIRED',
-      message: t(ER['ER-021'], locale),
-      internalDetails: [MIXED_SECTION_DIMENSIONS_DIAGNOSTIC],
-    };
-  }
-
+  // Every section is priced from its own structural BOM (V2.2B — see
+  // buildBom), so sections of different heights, shelf counts and widths are
+  // all priced as built; there is no row-level assumption left to guard.
   const bomResult = buildBom(config, catalog);
   if (bomResult.missingCritical) {
     return {

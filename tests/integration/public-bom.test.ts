@@ -6,7 +6,7 @@ import { uniformRow, type LooseSection, type UniformRowInput } from '../helpers/
 
 /**
  * Customer-visible kit composition: MS Standard ships as one complete shelf
- * assembly, so beams, frame ties and section connectors must not appear as
+ * assembly, so beams, frame ties and any section connectors must not appear as
  * their own kit positions for a customer — while staying real rows, with
  * their own quantity and weight, in the internal BOM the authoritative price
  * and the delivery weight are computed from.
@@ -205,46 +205,71 @@ describe('public (customer-visible) BOM', () => {
     );
     expect(publicBom.filter((l) => l.type === 'SHELF').length).toBeGreaterThan(0);
     expect(publicBom.some((l) => l.type === 'CONNECTOR')).toBe(false);
-    expect(bom.find((l) => l.type === 'CONNECTOR')?.quantity).toBe(2);
+    // Independent sections (V2.2B): 3 × 4 uprights, nothing shared, no connector.
+    expect(bom.find((l) => l.type === 'UPRIGHT')?.quantity).toBe(12);
+    expect(bom.some((l) => l.type === 'CONNECTOR')).toBe(false);
     expect(publicBom.reduce((s, l) => s + l.totalPrice, 0)).toBe(bom.reduce((s, l) => s + l.totalPrice, 0));
   });
 
-  describe('section connector in a mixed-width row (700 + 1000 × 2000 × 600 / 5 полок)', () => {
+  describe('independent sections in a mixed-width row (700 + 1000 × 2000 × 600 / 5 полок)', () => {
     const CONNECTOR_NAME = 'Комплект соединения секций';
-    // Authoritative totals for this row, from the development sample
-    // catalog — never a real supplier figure.
+    // Authoritative V2.2B totals for this row, from the development sample
+    // catalog — never a real supplier figure. V2.1 priced it with 6 shared
+    // uprights (componentsSubtotal 518100); every section now has its own 4,
+    // so it carries 8: +2 × the 2000 mm upright (5600) = 529300.
     const baseline = {
-      componentsSubtotal: 518100,
-      net: 632082,
-      vat: 101133,
-      total: 733215,
-      totalWeightKg: 165,
+      componentsSubtotal: 529300,
+      net: 645746,
+      vat: 103319,
+      total: 749065,
+      totalWeightKg: 179,
     };
     const mixed = () => config({ sections: [section(700), section(1000)], depth: 600, shelves: 5 });
 
-    it('shows no CONNECTOR row and no «Комплект соединения секций» publicly', () => {
-      const publicBom = toPublicBom(internalBom(mixed()), 'ms-standard');
+    it('has 4 uprights per section and no section connector, internally or publicly', () => {
+      const bom = internalBom(mixed());
+      expect(bom.find((l) => l.type === 'UPRIGHT')?.quantity).toBe(8);
+      expect(bom.some((l) => l.type === 'CONNECTOR')).toBe(false);
+      const publicBom = toPublicBom(bom, 'ms-standard');
       expect(publicBom.filter((l) => l.type === 'CONNECTOR')).toEqual([]);
       expect(publicBom.some((l) => l.name === CONNECTOR_NAME)).toBe(false);
     });
 
-    it('keeps the connector in the internal BOM with its quantity and weight', () => {
-      const connector = internalBom(mixed()).find((l) => l.type === 'CONNECTOR');
-      expect(connector?.name).toBe(CONNECTOR_NAME);
-      expect(connector!.quantity).toBe(1);
-      expect(connector!.weightKg).toBeGreaterThan(0);
-      // Part of the supplier-priced frame for MS Standard — see the module
-      // header: it ships and it weighs, it is not charged separately.
-      expect(connector!.totalPrice).toBe(0);
-      expect(connector!.unitCost).toBe(0);
-    });
-
-    it('folds the connector price and weight into the upright (frame) row', () => {
+    it('folds the frame ties into the upright (frame) row', () => {
       const bom = internalBom(mixed());
       const sumOf = (types: string[], key: 'totalPrice' | 'weightKg') =>
         bom.filter((l) => types.includes(l.type)).reduce((s, l) => s + l[key], 0);
       const publicUpright = toPublicBom(bom, 'ms-standard').find((l) => l.type === 'UPRIGHT');
 
+      expect(publicUpright?.totalPrice).toBe(sumOf(['UPRIGHT', 'TIE'], 'totalPrice'));
+      expect(publicUpright?.weightKg).toBeCloseTo(sumOf(['UPRIGHT', 'TIE'], 'weightKg'), 6);
+    });
+
+    it('still folds a section connector into the upright row if a stored rule ever produces one', () => {
+      // No shipped rule charges a connector for independent sections, but the
+      // rules are editable data: the public projection must still hide one
+      // and keep its price and weight on the frame row.
+      const connectorComponent = catalog.components.find((c) => c.type === 'CONNECTOR')!;
+      const bom: BomLine[] = [
+        ...internalBom(mixed()),
+        {
+          componentId: connectorComponent.id,
+          sku: connectorComponent.sku,
+          type: 'CONNECTOR',
+          name: CONNECTOR_NAME,
+          quantity: 1,
+          unitPrice: 0,
+          totalPrice: 0,
+          weightKg: connectorComponent.weightKg,
+          unitCost: 0,
+        },
+      ];
+      const sumOf = (types: string[], key: 'totalPrice' | 'weightKg') =>
+        bom.filter((l) => types.includes(l.type)).reduce((s, l) => s + l[key], 0);
+      const publicBom = toPublicBom(bom, 'ms-standard');
+      const publicUpright = publicBom.find((l) => l.type === 'UPRIGHT');
+
+      expect(publicBom.some((l) => l.type === 'CONNECTOR' || l.name === CONNECTOR_NAME)).toBe(false);
       expect(publicUpright?.totalPrice).toBe(sumOf(['UPRIGHT', 'TIE', 'CONNECTOR'], 'totalPrice'));
       expect(publicUpright?.weightKg).toBeCloseTo(sumOf(['UPRIGHT', 'TIE', 'CONNECTOR'], 'weightKg'), 6);
     });
@@ -273,7 +298,7 @@ describe('public (customer-visible) BOM', () => {
       );
     });
 
-    it('prices exactly as before the connector was hidden', () => {
+    it('prices exactly the V2.2B independent-section baseline', () => {
       const result = calculatePrice(mixed(), catalog);
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -291,7 +316,7 @@ describe('public (customer-visible) BOM', () => {
     expect(toPublicBom(bom, 'ms-standard').some((l) => l.type === 'CONNECTOR')).toBe(false);
   });
 
-  it('keeps the section connector as its own public row for ms-strong and archive-ms', () => {
+  it('keeps every structural part as its own public row for ms-strong and archive-ms', () => {
     const strong = internalBom(
       config({
         modelSlug: 'ms-strong',
@@ -313,7 +338,11 @@ describe('public (customer-visible) BOM', () => {
     ] as const) {
       const pub = toPublicBom(bom, slug);
       expect(pub).toEqual(stripBomCosts(bom));
-      expect(pub.some((l) => l.type === 'CONNECTOR')).toBe(true);
+      // Not folded: frame ties stay their own customer-visible position.
+      expect(pub.some((l) => l.type === 'TIE')).toBe(true);
+      // Independent sections: 2 × 4 uprights, no shared-upright connector.
+      expect(bom.filter((l) => l.type === 'UPRIGHT').reduce((s, l) => s + l.quantity, 0)).toBe(8);
+      expect(pub.some((l) => l.type === 'CONNECTOR')).toBe(false);
     }
   });
 
