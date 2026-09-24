@@ -127,7 +127,15 @@ export function ParametersSectionsTable({ catalog, onReset }: { catalog: PublicC
         >
           {t(CF['CF-028'], locale)}
         </button>
-        {!canAdd && <p className="mt-2 text-[13px] text-steel">{t(CF['CF-029'], locale)}</p>}
+        {/* Over the limit only happens for a row saved/shared before it
+            dropped: kept intact, and the customer removes sections here. */}
+        {config.sections.length > MAX_SECTIONS ? (
+          <p role="alert" className="mt-2 text-[13px] text-danger">
+            {t(CF['CF-103'], locale, { N: MAX_SECTIONS })}
+          </p>
+        ) : (
+          !canAdd && <p className="mt-2 text-[13px] text-steel">{t(CF['CF-029'], locale)}</p>
+        )}
         {/* Reset sits with the settings it resets: easy to find at the end
             of the panel, visually secondary to adding a section. Reuses the
             store's reset(), passed in by the page. */}

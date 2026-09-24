@@ -1,4 +1,5 @@
 import type { ConfigurationAccessorySelection, ShelfType, ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
+import { LEGACY_MAX_SECTIONS } from '@/lib/configurator/limits';
 
 /**
  * Serialises a configuration to URL query parameters and back, so a shared
@@ -10,10 +11,14 @@ import type { ConfigurationAccessorySelection, ShelfType, ShelvingConfiguration,
  * joined by `,`, in the exact order the sections appear in the row. Every
  * parsed value is validated before use — a shared URL is still untrusted
  * client input, and a malformed one must never crash the configurator.
+ *
+ * Section count: parsed up to LEGACY_MAX_SECTIONS, not MAX_SECTIONS, so a
+ * link shared before the limit dropped opens with all its sections (shown as
+ * over the limit, and rejected by the server until reduced) instead of
+ * silently losing some. See src/lib/configurator/limits.ts.
  */
 
 const SHELF_TYPES: ShelfType[] = ['STANDARD', 'REINFORCED', 'EXTRA_REINFORCED', 'PERFORATED', 'GALVANIZED'];
-const MAX_SECTIONS = 10;
 
 function isOneOf<T extends string>(value: string | null, options: readonly T[]): value is T {
   return value !== null && (options as readonly string[]).includes(value);
@@ -142,7 +147,7 @@ export function parseConfigurationFromSearchParams(
     const looksLegacy = tokens.length > 0 && !tokens[0].includes(':');
     if (looksLegacy) {
       // Legacy shape: `sections` was a plain count sharing the top-level `width`.
-      const count = Math.min(Math.max(Number.parseInt(tokens[0], 10) || 1, 1), MAX_SECTIONS);
+      const count = Math.min(Math.max(Number.parseInt(tokens[0], 10) || 1, 1), LEGACY_MAX_SECTIONS);
       const width = legacyWidth && legacyWidth > 0 ? legacyWidth : 1000;
       result.sections = Array.from({ length: count }, () => ({
         id: generateSectionId(),
@@ -153,7 +158,7 @@ export function parseConfigurationFromSearchParams(
       }));
     } else {
       const decoded = tokens.map(decodeSection).filter((s): s is ShelvingSection => s !== undefined);
-      if (decoded.length > 0) result.sections = decoded.slice(0, MAX_SECTIONS);
+      if (decoded.length > 0) result.sections = decoded.slice(0, LEGACY_MAX_SECTIONS);
     }
   } else if (legacyWidth && legacyWidth > 0) {
     // Pre-section-array legacy URL with only `width` and no `sections` at all.

@@ -8,12 +8,13 @@ import { formatPrice } from '@/lib/money';
 import { trackEvent } from '@/lib/analytics';
 import { configurationToShareQuery } from '@/lib/configurator/url';
 import { whatsAppConfiguratorUrl } from '@/lib/whatsapp';
-import { useConfiguratorStore } from '@/store/configurator-store';
+import { MAX_SECTIONS, useConfiguratorStore } from '@/store/configurator-store';
 import { useCartStore } from '@/store/cart-store';
 import type { PublicCatalog } from '@/lib/data/public-catalog';
 import { pick, t } from '@/lib/i18n/format';
 import { localizePath } from '@/lib/i18n/locales';
-import { CF } from '@/lib/i18n/strings';
+import { CF, VL } from '@/lib/i18n/strings';
+import { canAddKits, MAX_KITS_PER_ORDER } from '@/lib/orders/limits';
 import { useLocale } from '@/components/i18n/LocaleProvider';
 import { WhatsAppIcon } from '@/components/layout/Header';
 import type { PublicPriceResult } from '@/lib/pricing/public-result';
@@ -39,6 +40,7 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
   const isPricing = useConfiguratorStore((s) => s.isPricing);
   const retryPricing = useConfiguratorStore((s) => s.retryPricing);
   const addItem = useCartStore((s) => s.addItem);
+  const cartItems = useCartStore((s) => s.items);
   const router = useRouter();
   const [feedback, setFeedback] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -53,9 +55,19 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
     return `${window.location.origin}${localizePath(`/configurator?${configurationToShareQuery(config)}`, locale)}`;
   }
 
+  // Limits the order cannot pass (the server rejects both anyway): a
+  // configuration persisted/shared with more than MAX_SECTIONS sections, and
+  // a cart that has no room left for this configuration's quantity (see
+  // src/lib/orders/limits.ts). Either one blocks adding to the cart and says why.
+  const sectionsOverLimit = config.sections.length > MAX_SECTIONS;
+  const kitLimitBlocked = !canAddKits(cartItems, config.quantity);
+
   function handleAddToCart(redirectToOrder: boolean) {
-    if (!priceResult) return;
-    addItem({ modelSlug: config.modelSlug, modelName, configuration: priceResult.configuration, priceSnapshot: priceResult });
+    if (!priceResult || sectionsOverLimit) return;
+    const added = addItem({ modelSlug: config.modelSlug, modelName, configuration: priceResult.configuration, priceSnapshot: priceResult });
+    // Refused by the store's own kit-limit check: nothing was added, and the
+    // limit message below is already on screen.
+    if (!added.ok) return;
     trackEvent('product_added_to_cart', { model: config.modelSlug, redirectToOrder });
     if (redirectToOrder) {
       router.push(localizePath('/order', locale));
@@ -89,7 +101,8 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
     window.open(whatsAppConfiguratorUrl(priceResult, catalog.accessories, shareUrl(), locale), '_blank', 'noopener,noreferrer');
   }
 
-  const actionsDisabled = !priceResult || isPricing;
+  const actionsDisabled = !priceResult || isPricing || sectionsOverLimit;
+  const cartActionsDisabled = actionsDisabled || kitLimitBlocked;
   // Transient status replaces the "Итого" label in place instead of adding a
   // line, so the bar never changes height while a price is recalculated.
   const status = feedback ?? (isPricing ? t(CF['CF-071'], locale) : null);
@@ -120,7 +133,11 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
               {status ?? t(CF['CF-064'], locale)}
             </p>
             <div className="max-[359px]:col-span-4 max-[359px]:row-start-2 max-[359px]:min-w-0">
-            {priceResult ? (
+            {sectionsOverLimit ? (
+              <p role="alert" data-testid="sections-over-limit" className="text-[13px] leading-snug text-danger">
+                {t(CF['CF-103'], locale, { N: MAX_SECTIONS })}
+              </p>
+            ) : priceResult ? (
               <PriceTag
                 value={priceResult.breakdown.total}
                 size="lg"
@@ -180,10 +197,16 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
             in the desktop card once the screen is tall enough to afford it.
             Side by side on desktop, checkout takes the larger share so the
             pair reads as primary + secondary, not two equal toolbar buttons. */}
+        {kitLimitBlocked && !sectionsOverLimit && (
+          <p role="alert" data-testid="configurator-kit-limit" className="text-[13px] leading-snug text-danger sm:basis-full lg:basis-auto">
+            {t(VL['VL-018'], locale, { N: MAX_KITS_PER_ORDER })}
+          </p>
+        )}
+
         <div className="grid grid-cols-2 gap-2 sm:w-[24rem] sm:shrink-0 lg:w-auto lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:[@media(min-height:840px)]:grid-cols-1">
           <Button
             onClick={() => handleAddToCart(true)}
-            disabled={actionsDisabled}
+            disabled={cartActionsDisabled}
             variant="accent"
             className="min-h-12 !whitespace-normal !px-2 !tracking-normal !py-1.5 text-center !text-[15px] leading-tight min-[390px]:!text-base"
           >
@@ -191,7 +214,7 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
           </Button>
           <Button
             onClick={() => handleAddToCart(false)}
-            disabled={actionsDisabled}
+            disabled={cartActionsDisabled}
             variant="outline"
             className="min-h-12 bg-surface !whitespace-normal !px-2 !tracking-normal !py-1.5 text-center !text-[15px] leading-tight min-[390px]:!text-base"
           >

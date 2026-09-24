@@ -13,6 +13,7 @@ import { shelvesLabel } from '@/lib/plural';
 import { CUSTOMER_PAYMENT_METHODS, schemasFor, type OrderFormInput } from '@/lib/pricing/schema';
 import { paymentMethodDescription, paymentMethodLabel } from '@/lib/orders/payment-methods';
 import { useCartStore } from '@/store/cart-store';
+import { exceedsKitLimit, MAX_KITS_PER_ORDER } from '@/lib/orders/limits';
 import type { DeliveryMethod } from '@/lib/types/domain';
 import { pick, t } from '@/lib/i18n/format';
 import { localizePath } from '@/lib/i18n/locales';
@@ -75,6 +76,9 @@ export function OrderForm({
   // rendered in the page locale, so a snapshot priced on the other-language
   // page never shows up in the wrong language.
   const hasIndividualDelivery = items.some((item) => Boolean(item.priceSnapshot?.deliveryNote));
+  // A cart persisted over the physical-kit limit is shown as-is (never
+  // trimmed) but cannot be submitted; the order API rejects it regardless.
+  const overKitLimit = exceedsKitLimit(items);
 
   useEffect(() => {
     if (sameAsPhone) setValue('whatsapp', phone);
@@ -95,6 +99,7 @@ export function OrderForm({
   }
 
   async function onSubmit(data: OrderFormInput) {
+    if (overKitLimit) return;
     setServerError(null);
     setServerErrorDetails([]);
     try {
@@ -331,6 +336,12 @@ export function OrderForm({
         {hasIndividualDelivery && <p className="mt-2 text-[13px] leading-snug text-blueprint">{t(ER['ER-024'], locale)}</p>}
         <p className="mt-2 text-xs leading-snug text-steel">{t(CK['CK-022'], locale)}</p>
 
+        {overKitLimit && (
+          <p role="alert" data-testid="checkout-kit-limit" className="mt-4 border border-danger bg-danger-soft px-4 py-3 text-sm text-danger">
+            {t(VL['VL-018'], locale, { N: MAX_KITS_PER_ORDER })} {t(CR['CR-018'], locale)}
+          </p>
+        )}
+
         {serverError && (
           <div
             ref={serverErrorRef}
@@ -355,7 +366,7 @@ export function OrderForm({
             form={FORM_ID}
             variant="accent"
             size="lg"
-            disabled={isSubmitting}
+            disabled={isSubmitting || overKitLimit}
             aria-busy={isSubmitting}
             className="min-h-12 w-full !whitespace-normal text-center"
           >
