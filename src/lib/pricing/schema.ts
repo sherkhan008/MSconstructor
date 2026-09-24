@@ -2,6 +2,8 @@ import { z } from 'zod';
 import type { Locale } from '@/lib/i18n/locales';
 import { t } from '@/lib/i18n/format';
 import { VL } from '@/lib/i18n/strings';
+import { MAX_SECTIONS, MIN_SECTIONS } from '@/lib/configurator/limits';
+import { getPhysicalKitCount, MAX_KITS_PER_ORDER } from '@/lib/orders/limits';
 
 /**
  * Validation for a customer-submitted configuration. This is the boundary
@@ -34,8 +36,7 @@ export const configurationAccessorySchema = z.object({
   sectionId: z.string().min(1).max(64).optional(),
 });
 
-export const MIN_SECTIONS = 1;
-export const MAX_SECTIONS = 10;
+export { MAX_SECTIONS, MIN_SECTIONS };
 
 export const shelvingSectionSchema = z.object({
   id: z.string().min(1).max(64),
@@ -155,7 +156,17 @@ function buildSchemas(locale: Locale) {
     customerType: customerTypeSchema,
     paymentPreference: customerPaymentPreferenceSchema,
     comment: z.string().trim().max(2000).optional(),
-    items: z.array(orderItemSchema).min(1).max(50),
+    // The physical-kit limit counts quantities, not lines (see
+    // src/lib/orders/limits.ts). Enforced here, on the server, so a forged
+    // request or a stale browser cart can never exceed it.
+    items: z
+      .array(orderItemSchema)
+      .min(1)
+      .max(50)
+      .refine(
+        (items) => getPhysicalKitCount(items) <= MAX_KITS_PER_ORDER,
+        t(VL['VL-018'], locale, { N: MAX_KITS_PER_ORDER }),
+      ),
   });
 
   /** For LEGAL_ENTITY, companyName and a valid 12-digit binIin are required —

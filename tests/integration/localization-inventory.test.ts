@@ -207,6 +207,19 @@ describe('rack vs shelf terminology', () => {
     for (const [id, kk] of Object.entries(locked)) expect(row(id).kk_proposed, id).toBe(kk);
     expect(row('G-004').kk_proposed).toContain('MS модульдік металл стеллаждары.');
   });
+
+  it('locks the owner-approved V2.1 limit messages (2026-09-24)', () => {
+    const approved: Record<string, string> = {
+      'CF-103': 'Бір стеллажда ең көбі {N} секция болуы мүмкін. Артық секцияларды жойыңыз.',
+      'CR-018': 'Санын азайтыңыз немесе позицияны жойыңыз.',
+      'VL-018': 'Бір тапсырыста ең көбі {N} стеллажға тапсырыс беруге болады.',
+    };
+    for (const [id, kk] of Object.entries(approved)) {
+      expect(row(id).kk_proposed, id).toBe(kk);
+      expect(row(id).notes, id).toContain('утверждённая владельцем формулировка (2026-09-24)');
+      expect(row(id).notes, id).not.toContain('требует проверки');
+    }
+  });
 });
 
 describe('FAQ inventory', () => {

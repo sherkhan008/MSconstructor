@@ -7,6 +7,7 @@ import {
   migrateConfiguratorState,
   useConfiguratorStore,
 } from '@/store/configurator-store';
+import { LEGACY_MAX_SECTIONS } from '@/lib/configurator/limits';
 
 function resetStore() {
   useConfiguratorStore.setState({
@@ -32,9 +33,10 @@ describe('configurator store — section actions', () => {
     expect(state.activeSectionId).toBe(state.config.sections[1].id);
   });
 
-  it('addSection never exceeds the maximum of 10 sections', () => {
+  it('addSection never exceeds the maximum of 5 sections', () => {
     const { addSection } = useConfiguratorStore.getState();
     for (let i = 0; i < 20; i += 1) addSection();
+    expect(MAX_SECTIONS).toBe(5);
     expect(useConfiguratorStore.getState().config.sections.length).toBe(MAX_SECTIONS);
   });
 
@@ -141,10 +143,16 @@ describe('configurator store — persistence migration', () => {
     expect('configurationType' in migrated.config).toBe(false);
   });
 
-  it('caps a legacy section count at the new maximum instead of crashing', () => {
+  it('caps an impossible legacy section count at the old parse ceiling instead of crashing', () => {
     const legacy = { config: { width: 1000, sections: 25 } };
     const migrated = migrateConfiguratorState(legacy, 1);
-    expect(migrated.config.sections.length).toBe(MAX_SECTIONS);
+    expect(migrated.config.sections.length).toBe(LEGACY_MAX_SECTIONS);
+  });
+
+  it('keeps a legacy 6–10 section row intact instead of truncating it to MAX_SECTIONS', () => {
+    const migrated = migrateConfiguratorState({ config: { width: 1000, sections: 8 } }, 1);
+    expect(migrated.config.sections.length).toBe(8);
+    expect(migrated.config.sections.length).toBeGreaterThan(MAX_SECTIONS);
   });
 
   it('falls back to the default configuration for garbage persisted state rather than throwing', () => {

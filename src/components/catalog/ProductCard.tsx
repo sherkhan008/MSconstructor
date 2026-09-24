@@ -14,7 +14,8 @@ import type { CatalogProduct, ShelvingConfiguration } from '@/lib/types/domain';
 import { pick, t } from '@/lib/i18n/format';
 import { localizePath } from '@/lib/i18n/locales';
 import { apiHeaders } from '@/lib/i18n/request';
-import { CT, G } from '@/lib/i18n/strings';
+import { CT, G, VL } from '@/lib/i18n/strings';
+import { MAX_KITS_PER_ORDER } from '@/lib/orders/limits';
 import { useLocale } from '@/components/i18n/LocaleProvider';
 
 export function ProductCard({
@@ -35,7 +36,7 @@ export function ProductCard({
 }) {
   const addItem = useCartStore((s) => s.addItem);
   const locale = useLocale();
-  const [status, setStatus] = useState<'idle' | 'loading' | 'done'>('idle');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'limit'>('idle');
   const configureHref = localizePath(`/configurator?${configurationToShareQuery(configuration)}`, locale);
   const name = pick(product.name, locale);
 
@@ -52,7 +53,12 @@ export function ProductCard({
         setStatus('idle');
         return;
       }
-      addItem({ modelSlug: product.modelSlug, modelName, configuration: data.configuration, priceSnapshot: data });
+      const added = addItem({ modelSlug: product.modelSlug, modelName, configuration: data.configuration, priceSnapshot: data });
+      if (!added.ok) {
+        // The cart has no room left under the order's kit limit — nothing was added.
+        setStatus('limit');
+        return;
+      }
       trackEvent('product_added_to_cart', { model: product.modelSlug, source: 'catalog_card' });
       setStatus('done');
       setTimeout(() => setStatus('idle'), 2000);
@@ -90,6 +96,11 @@ export function ProductCard({
             {status === 'done' ? t(CT['CT-023'], locale) : t(CT['CT-022'], locale)}
           </Button>
         </div>
+        {status === 'limit' && (
+          <p role="alert" className="text-[13px] leading-snug text-danger">
+            {t(VL['VL-018'], locale, { N: MAX_KITS_PER_ORDER })}
+          </p>
+        )}
       </div>
     </div>
   );

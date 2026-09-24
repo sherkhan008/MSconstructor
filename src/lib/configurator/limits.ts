@@ -1,0 +1,17 @@
+/**
+ * Section-count bounds for one shelving configuration — the single source
+ * shared by the server-side schema (src/lib/pricing/schema.ts, the
+ * authority), the configurator store/UI and the share-link parser.
+ */
+export const MIN_SECTIONS = 1;
+export const MAX_SECTIONS = 5;
+
+/**
+ * The maximum before it dropped to MAX_SECTIONS. Used only as a parse
+ * ceiling for data created under the old limit (persisted browser state,
+ * shared links): such a configuration is kept exactly as it was and shown
+ * as invalid until the customer removes sections — never silently
+ * truncated. It is never a valid size; the server rejects anything above
+ * MAX_SECTIONS.
+ */
+export const LEGACY_MAX_SECTIONS = 10;

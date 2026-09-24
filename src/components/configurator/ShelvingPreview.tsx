@@ -507,10 +507,10 @@ export function ShelvingPreview({
     () =>
       layout.map((section) =>
         shelfYs.map((y) => ({
-          frontLeft: { x: section.x, y: y - 2 },
-          frontRight: { x: section.x + section.width, y: y - 2 },
-          rearLeft: { x: section.x + depthVec.dx, y: y - 2 + depthVec.dy },
-          rearRight: { x: section.x + section.width + depthVec.dx, y: y - 2 + depthVec.dy },
+          frontLeft: { x: section.x, y: y - SHELF_FACE_OFFSET_PX },
+          frontRight: { x: section.x + section.width, y: y - SHELF_FACE_OFFSET_PX },
+          rearLeft: { x: section.x + depthVec.dx, y: y - SHELF_FACE_OFFSET_PX + depthVec.dy },
+          rearRight: { x: section.x + section.width + depthVec.dx, y: y - SHELF_FACE_OFFSET_PX + depthVec.dy },
         })),
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1128,11 +1128,25 @@ export function ShelvingPreview({
 // instead of re-deriving the spacing formula theoretically (see
 // shelf-depth-projection.ts, whose collision math is meant to consume these
 // exact coordinates).
+//
+// A shelf's upper face (its front lip's top edge and the front corners of its
+// receding top surface) is drawn SHELF_FACE_OFFSET_PX above its y. The top
+// shelf's y is placed exactly that far below `top`, so its upper face lies on
+// the rack's physical top — the same `top` every upright and wall panel
+// starts from — and nothing protrudes above it. Drawing only: the configured
+// height, the price and the BOM never read these coordinates. The bottom
+// shelf keeps its clearance above the floor.
+export const SHELF_FACE_OFFSET_PX = 2;
+const BOTTOM_SHELF_CLEARANCE_PX = 14;
+
 export function computeShelfYs(top: number, heightPx: number, shelves: number): number[] {
   const shelfCount = Math.max(1, shelves);
+  const firstY = top + SHELF_FACE_OFFSET_PX;
+  const lastY = top + heightPx - BOTTOM_SHELF_CLEARANCE_PX;
   return Array.from({ length: shelfCount }, (_, i) => {
-    const ratio = shelfCount === 1 ? 0.5 : i / (shelfCount - 1);
-    return top + 14 + ratio * (heightPx - 28);
+    // A single shelf is the top shelf: the uprights end flush with it too.
+    const ratio = shelfCount === 1 ? 0 : i / (shelfCount - 1);
+    return firstY + ratio * (lastY - firstY);
   });
 }
 

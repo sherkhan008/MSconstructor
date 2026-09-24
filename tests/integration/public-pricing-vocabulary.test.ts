@@ -344,7 +344,9 @@ describe('POST /api/orders — customer-facing text', () => {
           city: 'Алматы',
           customerType: 'INDIVIDUAL',
           paymentPreference: 'BANK_TRANSFER',
-          items: [{ configuration: config({ priceLevel: 'DEALER', quantity: 12 }) }],
+          // 5 = the order's physical-kit limit (src/lib/orders/limits.ts), and
+          // still a quantity-discount tier, so the discount text is exercised.
+          items: [{ configuration: config({ priceLevel: 'DEALER', quantity: 5 }) }],
         }),
       }),
     );

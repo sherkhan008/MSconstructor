@@ -11,13 +11,14 @@ import { configurationToShareQuery } from '@/lib/configurator/url';
 import { reconcileConfiguration } from '@/lib/configurator/reconcile';
 import { trackEvent } from '@/lib/analytics';
 import { shelvesLabel } from '@/lib/plural';
-import { useCartStore, type CartItem } from '@/store/cart-store';
+import { useCartStore, type CartItem, type CartMutationResult } from '@/store/cart-store';
 import type { ColorOption, DeliveryMethod } from '@/lib/types/domain';
 import type { PublicCatalog } from '@/lib/data/public-catalog';
 import { pick, t } from '@/lib/i18n/format';
 import { localizePath, type Locale } from '@/lib/i18n/locales';
 import { apiHeaders } from '@/lib/i18n/request';
-import { CF, CR, CT, ER, G, H } from '@/lib/i18n/strings';
+import { CF, CR, CT, ER, G, H, VL } from '@/lib/i18n/strings';
+import { exceedsKitLimit, getRemainingKitCapacity, MAX_KITS_PER_ORDER } from '@/lib/orders/limits';
 import { useLocale } from '@/components/i18n/LocaleProvider';
 
 /** Store bounds for a line quantity (see cart-store.setQuantity). */
@@ -40,6 +41,8 @@ export function CartClient({ catalog }: { catalog: PublicCatalog }) {
   const [mounted, setMounted] = useState(false);
   const [reconcileNotice, setReconcileNotice] = useState<string | null>(null);
   const [priceErrors, setPriceErrors] = useState<Record<string, string>>({});
+  /** Why the last duplicate/quantity change was refused (the cart itself is unchanged). */
+  const [limitNotice, setLimitNotice] = useState<string | null>(null);
   const router = useRouter();
   const locale = useLocale();
 
@@ -136,7 +139,19 @@ export function CartClient({ catalog }: { catalog: PublicCatalog }) {
   // other-language page never shows up in the wrong language.
   const hasIndividualDelivery = items.some((item) => Boolean(item.priceSnapshot?.deliveryNote));
 
+  // Physical-kit limit (src/lib/orders/limits.ts): quantity controls only
+  // offer what still fits; a cart persisted over the limit is kept as-is,
+  // explained, and cannot go to checkout until the customer reduces it.
+  const kitLimitMessage = t(VL['VL-018'], locale, { N: MAX_KITS_PER_ORDER });
+  const remainingKits = getRemainingKitCapacity(items);
+  const overKitLimit = exceedsKitLimit(items);
+
+  function applyLimited(result: CartMutationResult) {
+    setLimitNotice(!result.ok && result.reason === 'KIT_LIMIT' ? kitLimitMessage : null);
+  }
+
   function handleCheckout() {
+    if (overKitLimit) return;
     trackEvent('order_submitted', { stage: 'cart_to_checkout', items: items.length });
     router.push(localizePath('/order', locale));
   }
@@ -147,6 +162,11 @@ export function CartClient({ catalog }: { catalog: PublicCatalog }) {
         {reconcileNotice && (
           <p role="status" className="border border-line border-l-2 border-l-accent bg-surface px-4 py-3 text-sm text-steel">
             {reconcileNotice}
+          </p>
+        )}
+        {limitNotice && !overKitLimit && (
+          <p role="alert" className="border border-danger bg-danger-soft px-4 py-3 text-sm text-danger">
+            {limitNotice}
           </p>
         )}
         {/* Same rule as the summary beside it and the checkout form: the
@@ -162,9 +182,13 @@ export function CartClient({ catalog }: { catalog: PublicCatalog }) {
               color={catalog.colors.find((c) => c.id === item.configuration.colorId)}
               delivery={catalog.deliveryMethods.find((d) => d.id === item.configuration.deliveryId)}
               error={priceErrors[item.id]}
-              onRemove={() => removeItem(item.id)}
-              onDuplicate={() => duplicateItem(item.id)}
-              onQuantityChange={(q) => setQuantity(item.id, q)}
+              maxQuantity={Math.min(MAX_QUANTITY, item.configuration.quantity + remainingKits)}
+              onRemove={() => {
+                setLimitNotice(null);
+                removeItem(item.id);
+              }}
+              onDuplicate={() => applyLimited(duplicateItem(item.id))}
+              onQuantityChange={(q) => applyLimited(setQuantity(item.id, q))}
             />
           ))}
         </ul>
@@ -183,8 +207,15 @@ export function CartClient({ catalog }: { catalog: PublicCatalog }) {
           {recalculating && <p className="mt-1 text-[13px] text-steel">{t(CR['CR-007'], locale)}</p>}
         </div>
         {hasIndividualDelivery && <p className="mt-3 text-[13px] leading-snug text-blueprint">{t(ER['ER-024'], locale)}</p>}
+        {overKitLimit ? (
+          <p role="alert" data-testid="cart-kit-limit" className="mt-3 border border-danger bg-danger-soft px-3 py-2 text-[13px] leading-snug text-danger">
+            {kitLimitMessage} {t(CR['CR-018'], locale)}
+          </p>
+        ) : (
+          remainingKits === 0 && <p data-testid="cart-kit-limit" className="mt-3 text-[13px] leading-snug text-steel">{kitLimitMessage}</p>
+        )}
         <div className="mt-5 flex flex-col gap-2">
-          <Button onClick={handleCheckout} disabled={!allPriced} variant="accent" size="lg" className="min-h-12 w-full !whitespace-normal text-center">
+          <Button onClick={handleCheckout} disabled={!allPriced || overKitLimit} variant="accent" size="lg" className="min-h-12 w-full !whitespace-normal text-center">
             {t(CF['CF-067'], locale)}
           </Button>
           <LinkButton
@@ -247,6 +278,7 @@ function CartRow({
   color,
   delivery,
   error,
+  maxQuantity,
   onRemove,
   onDuplicate,
   onQuantityChange,
@@ -257,6 +289,8 @@ function CartRow({
   color?: ColorOption;
   delivery?: DeliveryMethod;
   error?: string;
+  /** Highest quantity this line may reach within the order's kit limit. */
+  maxQuantity: number;
   onRemove: () => void;
   onDuplicate: () => void;
   onQuantityChange: (quantity: number) => void;
@@ -336,7 +370,7 @@ function CartRow({
               type="number"
               inputMode="numeric"
               min={MIN_QUANTITY}
-              max={MAX_QUANTITY}
+              max={maxQuantity}
               value={configuration.quantity}
               onChange={(e) => onQuantityChange(Number(e.target.value) || 1)}
               className="mono h-full w-full border-x border-line bg-surface text-center text-sm font-semibold outline-none focus-visible:outline-2 focus-visible:-outline-offset-2"
@@ -346,7 +380,7 @@ function CartRow({
               aria-label={t(CF['CF-041'], locale)}
               aria-controls={quantityId}
               onClick={() => onQuantityChange(configuration.quantity + 1)}
-              disabled={configuration.quantity >= MAX_QUANTITY}
+              disabled={configuration.quantity >= maxQuantity}
               className="grid place-items-center text-base transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-30"
             >
               +

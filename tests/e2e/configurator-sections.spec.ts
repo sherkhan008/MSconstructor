@@ -147,7 +147,7 @@ test('multi-section row: independent widths, single-section drag, cart and check
   await expect(page).toHaveURL(/\/order\/success/, { timeout: 15_000 });
 });
 
-test('adding sections is capped at 10 and removing is capped at 1', async ({ page }) => {
+test('adding sections is capped at 5 and removing is capped at 1', async ({ page }) => {
   await page.goto('/ru/configurator');
 
   for (let i = 0; i < 12; i += 1) {
@@ -155,7 +155,7 @@ test('adding sections is capped at 10 and removing is capped at 1', async ({ pag
     if (await btn.isDisabled()) break;
     await btn.click();
   }
-  await expect(widthSelects(page)).toHaveCount(10);
+  await expect(widthSelects(page)).toHaveCount(5);
   await expect(addSectionButton(page)).toBeDisabled();
   await expect(page.getByText('Достигнуто максимальное количество секций.')).toBeVisible();
 

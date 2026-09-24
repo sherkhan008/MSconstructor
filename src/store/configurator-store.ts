@@ -5,6 +5,7 @@ import { persist } from 'zustand/middleware';
 import type { PriceFailure, ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
 import type { PublicPriceResult } from '@/lib/pricing/public-result';
 import { getAllowedWidthsForDepth, isValidMsStandardWidthDepth } from '@/lib/pricing/ms-standard-compatibility';
+import { LEGACY_MAX_SECTIONS, MAX_SECTIONS, MIN_SECTIONS } from '@/lib/configurator/limits';
 
 type PersistedConfiguratorState = { config: ShelvingConfiguration; activeSectionId: string };
 
@@ -19,8 +20,11 @@ type PersistedConfiguratorState = { config: ShelvingConfiguration; activeSection
  * is always exactly one shelving row made of one or more sections.
  */
 
-export const MIN_SECTIONS = 1;
-export const MAX_SECTIONS = 10;
+// Shared with the server schema — see src/lib/configurator/limits.ts. A
+// configuration persisted before the limit dropped may hold more sections:
+// it is kept as-is (addSection/duplicateSection refuse to grow it further,
+// removeSection still works) and the server rejects it until it is reduced.
+export { MAX_SECTIONS, MIN_SECTIONS };
 
 let sectionCounter = 0;
 function generateSectionId(): string {
@@ -239,9 +243,12 @@ export function migrateConfiguratorState(persistedState: unknown, version: numbe
     }
 
     const legacyWidth = typeof legacyConfig.width === 'number' && legacyConfig.width > 0 ? legacyConfig.width : 1000;
+    // Capped at the old parse ceiling, not MAX_SECTIONS: a legacy row of
+    // 6–10 sections is kept intact (and shown as over the limit), never
+    // silently cut down to the new maximum.
     const legacyCount =
       typeof legacyConfig.sections === 'number' && legacyConfig.sections >= 1
-        ? Math.min(legacyConfig.sections, MAX_SECTIONS)
+        ? Math.min(legacyConfig.sections, LEGACY_MAX_SECTIONS)
         : 1;
     const sections = Array.from({ length: legacyCount }, () => makeSection(legacyWidth));
 
