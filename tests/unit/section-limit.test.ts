@@ -22,7 +22,7 @@ import type { Locale } from '@/lib/i18n/locales';
  */
 
 function sections(n: number): ShelvingSection[] {
-  return Array.from({ length: n }, (_, i) => ({ id: `s${i}`, width: 1000, rearWall: false, leftWall: false, rightWall: false }));
+  return Array.from({ length: n }, (_, i) => ({ id: `s${i}`, width: 1000, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false }));
 }
 
 function config(n: number): ShelvingConfiguration {
@@ -76,10 +76,15 @@ describe('configurator store', () => {
     expect(useConfiguratorStore.getState().config.sections).toHaveLength(5);
   });
 
-  it('keeps a persisted (v2) 8-section configuration intact — not truncated', () => {
-    const persisted = { config: config(8), activeSectionId: 's3' };
-    const migrated = migrateConfiguratorState(persisted, 2);
-    expect(migrated.config.sections.map((s) => s.id)).toEqual(sections(8).map((s) => s.id));
+  it('keeps a persisted 8-section configuration intact — not truncated (v3 and migrated V2.1 v2)', () => {
+    const current = migrateConfiguratorState({ config: config(8), activeSectionId: 's3' }, 3);
+    expect(current.config.sections.map((s) => s.id)).toEqual(sections(8).map((s) => s.id));
+    expect(current.activeSectionId).toBe('s3');
+
+    const rowLevelSections = sections(8).map(({ height: _h, shelves: _s, ...rest }) => rest);
+    const v21 = { config: { ...DEFAULT_CONFIGURATION, height: 2000, shelves: 5, sections: rowLevelSections }, activeSectionId: 's3' };
+    const migrated = migrateConfiguratorState(v21, 2);
+    expect(migrated.config.sections).toEqual(sections(8));
     expect(migrated.activeSectionId).toBe('s3');
   });
 
@@ -102,10 +107,12 @@ describe('share links', () => {
     expect(parsed.sections).toHaveLength(7);
   });
 
-  it('still bounds a hand-edited link at the old parse ceiling', () => {
+  it('refuses a hand-edited link above the old parse ceiling outright (never a silent truncation)', () => {
+    const atCeiling = parseConfigurationFromSearchParams(new URLSearchParams(configurationToShareQuery(config(LEGACY_MAX_SECTIONS))));
+    expect(atCeiling.sections).toHaveLength(LEGACY_MAX_SECTIONS);
     const query = configurationToShareQuery(config(25));
     const parsed = parseConfigurationFromSearchParams(new URLSearchParams(query));
-    expect(parsed.sections).toHaveLength(LEGACY_MAX_SECTIONS);
+    expect(parsed.sections).toBeUndefined();
   });
 });
 

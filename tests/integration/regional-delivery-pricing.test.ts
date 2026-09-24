@@ -39,10 +39,8 @@ const postPricing = (body: unknown) => post(pricingPost, 'http://localhost/api/p
 
 const baseConfiguration = {
   modelSlug: 'ms-standard',
-  height: 2000,
   depth: 500,
-  shelves: 5,
-  sections: [{ id: 'sec-1', width: 1000, rearWall: false, leftWall: false, rightWall: false }],
+  sections: [{ id: 'sec-1', width: 1000, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false }],
   loadCapacity: 150,
   shelfType: 'STANDARD',
   colorId: 'color-grey',
@@ -248,10 +246,13 @@ describe('public order validation contract — structured field, clean message',
 
   it('engine validation failures: customer details carry no schema paths, the paths stay internal', async () => {
     const catalog = await getCatalog();
-    const failure = calculatePrice({ ...baseConfiguration, height: 'high' }, catalog);
+    const failure = calculatePrice(
+      { ...baseConfiguration, sections: baseConfiguration.sections.map((s) => ({ ...s, height: 'high' })) },
+      catalog,
+    );
     expect(failure.ok).toBe(false);
     if (failure.ok) return;
     for (const detail of failure.details ?? []) expect(detail).not.toMatch(RAW_FIELD_PREFIX);
-    expect(failure.internalDetails?.some((d) => d.startsWith('height:'))).toBe(true);
+    expect(failure.internalDetails?.some((d) => d.startsWith('sections.0.height:'))).toBe(true);
   });
 });

@@ -88,10 +88,8 @@ test('cross brace is only selectable for a 1000mm section, and enforced server-s
   const response = await page.request.post('/api/pricing/calculate', {
     data: {
       modelSlug: 'ms-standard',
-      height: 2000,
       depth: 400,
-      shelves: 5,
-      sections: [{ id: 's1', width: 1200, rearWall: false, leftWall: false, rightWall: false }],
+      sections: [{ id: 's1', width: 1200, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false }],
       loadCapacity: 150,
       shelfType: 'STANDARD',
       colorId: 'color-grey',

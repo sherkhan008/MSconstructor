@@ -95,12 +95,14 @@ export function splitLocalePath(pathname: string): { locale: Locale; path: strin
  */
 export const SWITCHABLE_QUERY_KEYS: Record<string, readonly string[]> = {
   '/configurator': [
+    // `v` is the share-link format version (v2: per-section height/shelves);
+    // `height`/`shelves` are only read from unversioned V2.1 links.
+    'v',
     'model',
     'height',
     'depth',
     'shelves',
     'sections',
-    'width',
     'load',
     'shelfType',
     'color',

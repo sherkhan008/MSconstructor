@@ -685,12 +685,10 @@ describe('historical immutability — an order placed through the real pricing p
   function shelvingConfiguration(): ShelvingConfiguration {
     return {
       modelSlug: 'ms-standard',
-      height: 2000,
       depth: 400,
-      shelves: 5,
       sections: [
-        { id: 'h-1', width: 1000, rearWall: false, leftWall: false, rightWall: false },
-        { id: 'h-2', width: 700, rearWall: false, leftWall: false, rightWall: false },
+        { id: 'h-1', width: 1000, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false },
+        { id: 'h-2', width: 700, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false },
       ],
       loadCapacity: 150,
       shelfType: 'STANDARD',

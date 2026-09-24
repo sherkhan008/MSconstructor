@@ -3,6 +3,7 @@ import { findAccessory, findComponent } from '@/lib/data/repository';
 import { evaluateCondition, evaluateQuantity, FormulaError, type FormulaScope } from '@/lib/formula';
 import { roundTenge } from '@/lib/money';
 import type { BomLine, ComponentType, ConfigurationRule, ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
+import { getUniformSectionHeight, getUniformSectionShelves } from '@/lib/configurator/section-dimensions';
 
 /** Component types whose absence means the configuration cannot be built at all. */
 const CRITICAL_COMPONENT_TYPES: ComponentType[] = [
@@ -46,14 +47,42 @@ export interface BomResult {
   rowLengthMm: number;
 }
 
+/**
+ * The height and shelf count the row-level (shared-upright) rules are
+ * evaluated with.
+ *
+ * TRANSITIONAL (V2.2A → V2.2B): the row-level rules still price a
+ * multi-section row with SHARED uprights, which describes a real rack only
+ * when every section has the same height and shelf count. Until V2.2B
+ * replaces them with per-section structural pricing (4 uprights per section),
+ * a row whose sections differ has no row-level reading at all: this returns
+ * undefined and buildBom fails closed instead of pricing it with invented
+ * row values. calculatePrice() already refuses such a configuration before
+ * it gets here (see engine.ts); this is the second, independent guard.
+ */
+interface UniformRowDimensions {
+  height: number;
+  shelves: number;
+}
+
+function readUniformRowDimensions(config: ShelvingConfiguration): UniformRowDimensions | undefined {
+  const height = getUniformSectionHeight(config.sections);
+  const shelves = getUniformSectionShelves(config.sections);
+  return height === undefined || shelves === undefined ? undefined : { height, shelves };
+}
+
+/** Server-only diagnostic for the transitional mixed-dimension refusal. */
+export const MIXED_SECTION_DIMENSIONS_DIAGNOSTIC =
+  'V2.2A: секции с разной высотой или количеством полок пока не рассчитываются автоматически (расчёт появится в V2.2B)';
+
 /** Row-level scope: describes the whole shelving row, not any one section. */
-function buildRowScope(config: ShelvingConfiguration, sharedUprights: 0 | 1): FormulaScope {
+function buildRowScope(config: ShelvingConfiguration, row: UniformRowDimensions, sharedUprights: 0 | 1): FormulaScope {
   return {
     sections: config.sections.length,
-    shelves: config.shelves,
+    shelves: row.shelves,
     width: 0,
     depth: config.depth,
-    height: config.height,
+    height: row.height,
     quantity: config.quantity,
     loadCapacity: config.loadCapacity,
     rearSolid: 0,
@@ -67,14 +96,15 @@ function buildRowScope(config: ShelvingConfiguration, sharedUprights: 0 | 1): Fo
   };
 }
 
-/** Section-level scope: describes exactly one section (`sections` is always 1). */
+/** Section-level scope: describes exactly one section (`sections` is always 1)
+ * with that section's own width, height and shelf count. */
 function buildSectionScope(config: ShelvingConfiguration, section: ShelvingSection): FormulaScope {
   return {
     sections: 1,
-    shelves: config.shelves,
+    shelves: section.shelves,
     width: section.width,
     depth: config.depth,
-    height: config.height,
+    height: section.height,
     quantity: config.quantity,
     loadCapacity: config.loadCapacity,
     rearSolid: section.rearWall ? 1 : 0,
@@ -105,6 +135,7 @@ function runRules(
   scope: FormulaScope,
   config: ShelvingConfiguration,
   catalog: Catalog,
+  height: number,
   width: number | undefined,
 ): { lines: BomLine[]; warnings: string[]; missingCritical: boolean } {
   const lines: BomLine[] = [];
@@ -134,7 +165,7 @@ function runRules(
       const component = findComponent(catalog, {
         type: rule.componentType,
         modelSlug: config.modelSlug,
-        height: config.height,
+        height,
         width,
         depth: config.depth,
         loadCapacity: config.loadCapacity,
@@ -245,7 +276,10 @@ function aggregateLines(lines: BomLine[]): BomLine[] {
  * Builds the bill of materials from the database-driven configuration rules.
  * Row-level components (uprights, ties, feet, connectors, depth beams, cross
  * braces) are priced once for the whole row so the shared-uprights saving is
- * preserved exactly as before. For a model priced from a two-position
+ * preserved exactly as before — TEMPORARILY: V2.2B replaces this with
+ * independent per-section uprights, and until then a row whose sections
+ * differ in height or shelf count is refused (see readUniformRowDimensions).
+ * For a model priced from a two-position
  * supplier list the structural helper parts then hand their price ownership
  * to the upright/shelf — see applySupplierKitPriceOwnership; quantities and
  * weights are never affected. Section-level components (shelves,
@@ -259,18 +293,24 @@ export function buildBom(config: ShelvingConfiguration, catalog: Catalog): BomRe
   let missingCritical = false;
   const rawLines: BomLine[] = [];
 
+  const rowLengthMm = config.sections.reduce((sum, s) => sum + s.width, 0);
+  const row = readUniformRowDimensions(config);
+  if (!row) {
+    return { lines: [], totalWeightKg: 0, warnings: [MIXED_SECTION_DIMENSIONS_DIAGNOSTIC], missingCritical: true, rowLengthMm };
+  }
+
   const activeRules = catalog.rules;
   const sharedUprights: 0 | 1 = config.sections.length > 1 ? 1 : 0;
 
-  const rowScope = buildRowScope(config, sharedUprights);
-  const rowResult = runRules(activeRules, ROW_LEVEL_TYPES, rowScope, config, catalog, undefined);
+  const rowScope = buildRowScope(config, row, sharedUprights);
+  const rowResult = runRules(activeRules, ROW_LEVEL_TYPES, rowScope, config, catalog, row.height, undefined);
   rawLines.push(...rowResult.lines);
   warnings.push(...rowResult.warnings);
   missingCritical = missingCritical || rowResult.missingCritical;
 
   for (const section of config.sections) {
     const sectionScope = buildSectionScope(config, section);
-    const sectionResult = runRules(activeRules, SECTION_LEVEL_TYPES, sectionScope, config, catalog, section.width);
+    const sectionResult = runRules(activeRules, SECTION_LEVEL_TYPES, sectionScope, config, catalog, section.height, section.width);
     rawLines.push(...sectionResult.lines);
     warnings.push(...sectionResult.warnings);
     missingCritical = missingCritical || sectionResult.missingCritical;
@@ -295,7 +335,6 @@ export function buildBom(config: ShelvingConfiguration, catalog: Catalog): BomRe
   }
 
   const totalWeightKg = Math.round(lines.reduce((sum, line) => sum + line.weightKg, 0) * 10) / 10;
-  const rowLengthMm = config.sections.reduce((sum, s) => sum + s.width, 0);
 
   return { lines, totalWeightKg, warnings, missingCritical, rowLengthMm };
 }

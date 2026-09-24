@@ -11,7 +11,7 @@ import { test, expect } from './helpers/test';
  */
 test('every order summary bar action stays inside the viewport at phone width', async ({ page }) => {
   await page.setViewportSize({ width: 412, height: 915 });
-  await page.goto('/ru/configurator?model=ms-standard&height=2500&depth=600&shelves=8&sections=1000:false:false:false');
+  await page.goto('/ru/configurator?v=2&model=ms-standard&depth=600&sections=1000:2500:8:0:0:0');
   await expect(page.locator('select[aria-label="Ширина секции 1"]')).toBeVisible();
 
   // The actions only become enabled once a server price has arrived.

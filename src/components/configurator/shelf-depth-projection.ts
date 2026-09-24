@@ -3,7 +3,7 @@
  * surface (and its side lips, which share the same rear-plane offset) rises
  * vertically, so consecutive shelf levels never visually collide — the
  * "solid grey staircase" bug at high shelf counts / large depths. Never
- * touches config.height/width/depth/shelves themselves — this only adjusts
+ * touches the configuration's dimensions or shelf counts — this only adjusts
  * how the existing depth vector is *drawn*.
  *
  * The horizontal component is deliberately left untouched (see

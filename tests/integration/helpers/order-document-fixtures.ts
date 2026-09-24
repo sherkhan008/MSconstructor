@@ -52,9 +52,7 @@ export const PUBLIC_KIT = [
 export function configuration(widths: number[], overrides: Record<string, unknown> = {}) {
   return {
     modelSlug: 'ms-standard',
-    height: 2000,
     depth: 400,
-    shelves: 5,
     loadCapacity: 150,
     shelfType: 'STANDARD',
     colorId: 'color-grey',
@@ -64,7 +62,7 @@ export function configuration(widths: number[], overrides: Record<string, unknow
     quantity: 1,
     metalFootPad: false,
     shelfCornerBrackets: false,
-    sections: widths.map((width, i) => ({ id: `sec-${i}`, width, rearWall: false, leftWall: false, rightWall: false })),
+    sections: widths.map((width, i) => ({ id: `sec-${i}`, width, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false })),
     ...overrides,
   };
 }

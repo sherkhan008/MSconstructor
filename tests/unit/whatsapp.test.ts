@@ -3,13 +3,14 @@ import { whatsAppConfiguratorUrl, whatsAppContactUrl, whatsAppOrderUrl, whatsApp
 import { site } from '@/lib/config/site';
 import type { PublicAccessory, ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
 import type { PublicPriceResult } from '@/lib/pricing/public-result';
+import { uniformRow, type LooseSection, type UniformRowInput } from '../helpers/uniform-row';
 
-function section(width: number, overrides: Partial<ShelvingSection> = {}): ShelvingSection {
+function section(width: number, overrides: Partial<ShelvingSection> = {}): LooseSection {
   return { id: `sec-${width}-${Math.random().toString(36).slice(2, 6)}`, width, rearWall: false, leftWall: false, rightWall: false, ...overrides };
 }
 
-function baseConfig(overrides: Partial<ShelvingConfiguration> = {}): ShelvingConfiguration {
-  return {
+function baseConfig(overrides: Partial<UniformRowInput> = {}): ShelvingConfiguration {
+  return uniformRow({
     modelSlug: 'ms-standard',
     height: 2000,
     depth: 500,
@@ -23,7 +24,7 @@ function baseConfig(overrides: Partial<ShelvingConfiguration> = {}): ShelvingCon
     deliveryId: 'delivery-pickup',
     quantity: 1,
     ...overrides,
-  };
+  });
 }
 
 function priceResult(config: ShelvingConfiguration, total = 374_859): PublicPriceResult {
@@ -111,6 +112,18 @@ describe('whatsAppConfiguratorUrl', () => {
   it('uses the configured company number and points at wa.me', () => {
     const url = whatsAppConfiguratorUrl(priceResult(baseConfig()), [], 'https://example.com/configurator?height=2000', 'ru');
     expect(url.startsWith(`https://wa.me/${site.whatsapp}?`)).toBe(true);
+  });
+
+  it('reads height/shelves from the sections: one value when uniform, each section’s own when not', () => {
+    const uniform = baseConfig({ sections: [section(1000), section(700)] });
+    const uniformMessage = decodeMessage(whatsAppConfiguratorUrl(priceResult(uniform), [], 'https://example.com/x', 'ru'));
+    expect(uniformMessage).toContain('Высота: 2000 мм');
+    expect(uniformMessage).toContain('Полок: 5');
+
+    const mixed = baseConfig({ sections: [section(1000, { height: 1500, shelves: 4 }), section(1000, { height: 2500, shelves: 6 })] });
+    const mixedMessage = decodeMessage(whatsAppConfiguratorUrl(priceResult(mixed), [], 'https://example.com/x', 'ru'));
+    expect(mixedMessage).toContain('Высота: 1500 / 2500 мм');
+    expect(mixedMessage).toContain('Полок: 4 / 6');
   });
 
   it('includes real height/depth/shelves/load for a single section', () => {

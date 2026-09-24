@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mmToPx } from '@/components/configurator/resize/dimension-scale';
 import { FLOOR_Y, RACK_SCALE, SHELF_FACE_OFFSET_PX, ShelvingPreview, computeShelfYs } from '@/components/configurator/ShelvingPreview';
 import type { ShelvingConfiguration } from '@/lib/types/domain';
+import { uniformRow, type UniformRowInput } from '../helpers/uniform-row';
 
 /**
  * V2.1 flush top: the uprights (front and rear) and any selected wall panel
@@ -14,8 +15,8 @@ import type { ShelvingConfiguration } from '@/lib/types/domain';
  * A drawing fix only: the configured height, price and BOM are untouched.
  */
 
-function baseConfig(overrides: Partial<ShelvingConfiguration> = {}): ShelvingConfiguration {
-  return {
+function baseConfig(overrides: Partial<UniformRowInput> = {}): ShelvingConfiguration {
+  return uniformRow({
     modelSlug: 'ms-standard',
     height: 2000,
     depth: 400,
@@ -29,7 +30,7 @@ function baseConfig(overrides: Partial<ShelvingConfiguration> = {}): ShelvingCon
     deliveryId: 'delivery-pickup',
     quantity: 1,
     ...overrides,
-  };
+  });
 }
 
 const num = (el: Element, attr: string) => Number(el.getAttribute(attr));
@@ -56,7 +57,7 @@ describe('computeShelfYs — the top shelf sits on the physical top', () => {
 });
 
 describe('ShelvingPreview — uprights and walls end flush with the top shelf', () => {
-  const cases: Partial<ShelvingConfiguration>[] = [
+  const cases: Partial<UniformRowInput>[] = [
     { height: 1500, depth: 300, shelves: 2 },
     { height: 2000, depth: 400, shelves: 5 },
     { height: 2500, depth: 600, shelves: 6 },
@@ -83,7 +84,7 @@ describe('ShelvingPreview — uprights and walls end flush with the top shelf', 
     const frontTops = posts.slice(half).map((r) => num(r, 'y'));
 
     const shelfTops = Array.from(svg.querySelectorAll('polygon[data-shelf-part="top-surface"]'));
-    expect(shelfTops.length).toBe(config.shelves * config.sections.length);
+    expect(shelfTops.length).toBe(config.sections.reduce((n, s) => n + s.shelves, 0));
     // Top surface points: frontLeft, frontRight, rearRight, rearLeft.
     const topFrontY = Math.min(...shelfTops.flatMap((p) => points(p).slice(0, 2).map(([, y]) => y)));
     const topRearY = Math.min(...shelfTops.flatMap((p) => points(p).slice(2, 4).map(([, y]) => y)));

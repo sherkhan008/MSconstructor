@@ -30,6 +30,7 @@ import { OrderManagerForm, type OrderManagerMode } from '@/components/admin/Orde
 import { OrderInternalNotes } from '@/components/admin/OrderInternalNotes';
 import { OrderDocuments } from '@/components/admin/OrderDocuments';
 import { getOrderDocumentStatuses } from '@/lib/documents/readiness';
+import { sectionHeightsSummary, sectionShelvesSummary } from '@/lib/configurator/section-dimensions';
 
 /**
  * One order, as it was saved.
@@ -84,9 +85,9 @@ function ConfigurationSummary({ item }: { item: AdminOrderItem }) {
   return (
     <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-4">
       <Field label="Модель">{c.modelSlug}</Field>
-      <Field label="Высота">{c.height} мм</Field>
+      <Field label="Высота">{sectionHeightsSummary(c.sections)} мм</Field>
       <Field label="Глубина">{c.depth} мм</Field>
-      <Field label="Полок">{c.shelves}</Field>
+      <Field label="Полок">{sectionShelvesSummary(c.sections)}</Field>
       <Field label="Нагрузка">{c.loadCapacity} кг/полку</Field>
       <Field label="Количество">{item.quantity}</Field>
       <div className="col-span-2 sm:col-span-2">

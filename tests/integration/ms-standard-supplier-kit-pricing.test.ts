@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { getCatalog, resetCatalogCache, type Catalog } from '@/lib/data/repository';
 import { calculatePrice } from '@/lib/pricing';
 import type { BomLine, ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
+import { uniformRow, type LooseSection, type UniformRowInput } from '../helpers/uniform-row';
 
 /**
  * MS Standard core price identity.
@@ -25,13 +26,13 @@ import type { BomLine, ShelvingConfiguration, ShelvingSection } from '@/lib/type
  */
 
 let sectionCounter = 0;
-function section(width: number, overrides: Partial<ShelvingSection> = {}): ShelvingSection {
+function section(width: number, overrides: Partial<ShelvingSection> = {}): LooseSection {
   sectionCounter += 1;
   return { id: `kit-sec-${sectionCounter}`, width, rearWall: false, leftWall: false, rightWall: false, ...overrides };
 }
 
-function config(overrides: Partial<ShelvingConfiguration> = {}): ShelvingConfiguration {
-  return {
+function config(overrides: Partial<UniformRowInput> = {}): ShelvingConfiguration {
+  return uniformRow({
     modelSlug: 'ms-standard',
     height: 2000,
     depth: 400,
@@ -45,7 +46,7 @@ function config(overrides: Partial<ShelvingConfiguration> = {}): ShelvingConfigu
     deliveryId: 'delivery-pickup',
     quantity: 1,
     ...overrides,
-  };
+  });
 }
 
 /** The structural helper parts whose price the upright and the shelf own. */

@@ -4,7 +4,8 @@ import { filterPubliclyVisibleModels, filterPubliclyVisibleProducts } from '@/li
 import { calculatePrice } from '@/lib/pricing';
 import { catalogProductToConfiguration } from '@/lib/catalog-product-configuration';
 import { formatPrice } from '@/lib/money';
-import { shelvesLabel } from '@/lib/plural';
+import { sectionShelvesLabel } from '@/lib/plural';
+import { getMaxSectionHeight } from '@/lib/configurator/section-dimensions';
 import { siteCopy } from '@/lib/config/site';
 import { buildMetadata, breadcrumbJsonLd, jsonLdScriptProps } from '@/lib/seo';
 import { Container } from '@/components/ui/Container';
@@ -208,8 +209,8 @@ export default async function CatalogPage({
                     <figcaption className="hidden flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-line px-5 py-3 lg:flex">
                       <span className="font-display text-lg">{model.name}</span>
                       <span className="mono text-sm text-steel">
-                        {model.configuration.height}×{model.configuration.sections.map((section) => section.width).join('+')}×{model.configuration.depth} {mm} ·{' '}
-                        {shelvesLabel(model.configuration.shelves, locale)}
+                        {getMaxSectionHeight(model.configuration.sections)}×{model.configuration.sections.map((section) => section.width).join('+')}×{model.configuration.depth} {mm} ·{' '}
+                        {sectionShelvesLabel(model.configuration.sections, locale)}
                       </span>
                     </figcaption>
                   </figure>

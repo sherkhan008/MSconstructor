@@ -4,8 +4,13 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { PriceFailure, ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
 import type { PublicPriceResult } from '@/lib/pricing/public-result';
-import { getAllowedWidthsForDepth, isValidMsStandardWidthDepth } from '@/lib/pricing/ms-standard-compatibility';
-import { LEGACY_MAX_SECTIONS, MAX_SECTIONS, MIN_SECTIONS } from '@/lib/configurator/limits';
+import {
+  getAllowedWidthsForDepth,
+  getMaxShelvesForHeight,
+  isValidMsStandardWidthDepth,
+} from '@/lib/pricing/ms-standard-compatibility';
+import { MAX_SECTIONS, MIN_SECTIONS } from '@/lib/configurator/limits';
+import { readPersistedConfiguration, upgradeRowLevelConfiguration } from '@/lib/configurator/persisted-configuration';
 
 type PersistedConfiguratorState = { config: ShelvingConfiguration; activeSectionId: string };
 
@@ -33,16 +38,25 @@ function generateSectionId(): string {
   return `sec-${Date.now()}-${sectionCounter}`;
 }
 
-function makeSection(width: number): ShelvingSection {
-  return { id: generateSectionId(), width, rearWall: false, leftWall: false, rightWall: false };
+/** A new section with the given dimensions and no wall panels. */
+function makeSection(dimensions: Pick<ShelvingSection, 'width' | 'height' | 'shelves'>): ShelvingSection {
+  return {
+    id: generateSectionId(),
+    width: dimensions.width,
+    height: dimensions.height,
+    shelves: dimensions.shelves,
+    rearWall: false,
+    leftWall: false,
+    rightWall: false,
+  };
 }
 
+/** Every section owns its width, height and shelves — there is no row-level
+ * height/shelf count (V2.2A). */
 export const DEFAULT_CONFIGURATION: ShelvingConfiguration = {
   modelSlug: 'ms-standard',
-  height: 2000,
   depth: 400,
-  shelves: 5,
-  sections: [makeSection(1000)],
+  sections: [makeSection({ width: 1000, height: 2000, shelves: 5 })],
   loadCapacity: 150,
   shelfType: 'STANDARD',
   colorId: 'color-grey',
@@ -75,6 +89,13 @@ interface ConfiguratorState {
   duplicateSection: (id: string) => void;
   updateSection: (id: string, patch: Partial<Omit<ShelvingSection, 'id'>>) => void;
   setSectionWidth: (id: string, width: number) => void;
+  /** TRANSITIONAL (V2.2A): today's single height control applies one height
+   * to every section. Per-section controls come in a later UI phase. */
+  setAllSectionHeights: (height: number) => void;
+  /** TRANSITIONAL (V2.2A): today's single shelf control applies one shelf
+   * count to every section, never above that section's own MS Standard
+   * ceiling for its own height. */
+  setAllSectionShelves: (shelves: number) => void;
 
   loadFromPartial: (partial: Partial<ShelvingConfiguration>) => void;
   reset: () => void;
@@ -83,6 +104,9 @@ interface ConfiguratorState {
   setIsPricing: (value: boolean) => void;
   setHydrated: (value: boolean) => void;
 }
+
+/** Persisted draft version — see migrateConfiguratorState. */
+export const CONFIGURATOR_STATE_VERSION = 3;
 
 export const useConfiguratorStore = create<ConfiguratorState>()(
   persist(
@@ -129,7 +153,9 @@ export const useConfiguratorStore = create<ConfiguratorState>()(
             state.config.modelSlug === 'ms-standard' && !isValidMsStandardWidthDepth(template.width, state.config.depth)
               ? (getAllowedWidthsForDepth(state.config.depth)[0] ?? template.width)
               : template.width;
-          const next = makeSection(templateWidth);
+          // The new section copies the template's own height and shelf
+          // count too (each section owns them); walls start off, as before.
+          const next = makeSection({ width: templateWidth, height: template.height, shelves: template.shelves });
           const nextSections = [...sections.slice(0, insertAfter + 1), next, ...sections.slice(insertAfter + 1)];
           return { config: { ...state.config, sections: nextSections }, activeSectionId: next.id };
         }),
@@ -155,6 +181,7 @@ export const useConfiguratorStore = create<ConfiguratorState>()(
           const index = sections.findIndex((s) => s.id === id);
           if (index === -1) return state;
           const source = sections[index];
+          // Width, height, shelves and walls are all copied; only the id is new.
           const copy: ShelvingSection = { ...source, id: generateSectionId() };
           const nextSections = [...sections.slice(0, index + 1), copy, ...sections.slice(index + 1)];
           return { config: { ...state.config, sections: nextSections }, activeSectionId: copy.id };
@@ -169,6 +196,21 @@ export const useConfiguratorStore = create<ConfiguratorState>()(
         })),
 
       setSectionWidth: (id, width) => get().updateSection(id, { width }),
+
+      setAllSectionHeights: (height) =>
+        set((state) => ({
+          config: { ...state.config, sections: state.config.sections.map((s) => ({ ...s, height })) },
+        })),
+
+      setAllSectionShelves: (shelves) =>
+        set((state) => {
+          const isMsStandard = state.config.modelSlug === 'ms-standard';
+          const sections = state.config.sections.map((s) => {
+            const ceiling = isMsStandard ? getMaxShelvesForHeight(s.height) : undefined;
+            return { ...s, shelves: ceiling === undefined ? shelves : Math.min(shelves, ceiling) };
+          });
+          return { config: { ...state.config, sections } };
+        }),
 
       loadFromPartial: (partial) =>
         set((state) => {
@@ -195,9 +237,18 @@ export const useConfiguratorStore = create<ConfiguratorState>()(
     }),
     {
       name: 'ms-shelving-configurator',
-      version: 2,
+      // v3 (V2.2A): height and shelves moved from the configuration onto
+      // every section. See migrateConfiguratorState for what is migrated.
+      version: CONFIGURATOR_STATE_VERSION,
       partialize: (state) => ({ config: state.config, activeSectionId: state.activeSectionId }),
       migrate: (persistedState, version) => migrateConfiguratorState(persistedState, version),
+      // Runs on every hydration, including a same-version one (migrate only
+      // runs on a version change): browser storage is untrusted, so a
+      // malformed current-version draft resets instead of crashing the page.
+      merge: (persistedState, currentState) => ({
+        ...currentState,
+        ...readPersistedConfiguratorState(persistedState),
+      }),
       onRehydrateStorage: () => (state) => {
         state?.setHydrated(true);
       },
@@ -205,62 +256,44 @@ export const useConfiguratorStore = create<ConfiguratorState>()(
   ),
 );
 
+
+function defaultPersistedState(): PersistedConfiguratorState {
+  return { config: DEFAULT_CONFIGURATION, activeSectionId: DEFAULT_CONFIGURATION.sections[0].id };
+}
+
+/** A current-shape (v3) persisted draft, or the default when malformed. */
+export function readPersistedConfiguratorState(persistedState: unknown): PersistedConfiguratorState {
+  const state = persistedState as { config?: unknown; activeSectionId?: unknown } | null | undefined;
+  const config = readPersistedConfiguration(state?.config);
+  if (!config) return defaultPersistedState();
+  const activeSectionId = config.sections.some((s) => s.id === state?.activeSectionId)
+    ? (state!.activeSectionId as string)
+    : config.sections[0].id;
+  return { config, activeSectionId };
+}
+
 /**
- * v1 stored `{ config: { width, sections: <count>, rear, side,
- * configurationType, ... }, step }`. v2 replaces `width` + `sections` (a
- * count) with `sections: ShelvingSection[]`, and drops the step wizard.
- * Anything that fails to migrate safely falls back to DEFAULT_CONFIGURATION
- * rather than crashing the configurator.
+ * Persisted-draft policy (pre-launch project, no real customer data):
+ *
+ *   v3 (current)   loaded as-is after a structural check; malformed → default.
+ *   v2 (V2.1)      MIGRATED: its one row-level height/shelf count is copied
+ *                  into every section (lossless — every section had exactly
+ *                  those values). Malformed → default.
+ *   v1 / none      RESET to DEFAULT_CONFIGURATION (the pre-sections shape;
+ *                  obsolete test-only state, not worth converting).
+ *
+ * Never throws, never partially reinterprets a malformed value.
  */
 export function migrateConfiguratorState(persistedState: unknown, version: number): PersistedConfiguratorState {
   try {
-    if (version >= 2) {
-      const state = persistedState as { config?: ShelvingConfiguration; activeSectionId?: string };
-      const sections = Array.isArray(state.config?.sections) && state.config.sections.length > 0
-        ? state.config.sections
-        : DEFAULT_CONFIGURATION.sections;
-      const config = state.config ? { ...state.config, sections } : DEFAULT_CONFIGURATION;
-      const activeSectionId = sections.some((s) => s.id === state.activeSectionId)
-        ? state.activeSectionId!
-        : sections[0].id;
-      return { config, activeSectionId };
+    if (version >= CONFIGURATOR_STATE_VERSION) return readPersistedConfiguratorState(persistedState);
+    if (version === 2) {
+      const state = persistedState as { config?: unknown; activeSectionId?: unknown } | null | undefined;
+      const config = upgradeRowLevelConfiguration(state?.config);
+      return config ? readPersistedConfiguratorState({ config, activeSectionId: state?.activeSectionId }) : defaultPersistedState();
     }
-
-    // v1 (or unversioned): legacy shape with a single global width + section count.
-    const legacy = persistedState as {
-      config?: {
-        width?: unknown;
-        sections?: unknown;
-        rear?: unknown;
-        side?: unknown;
-        configurationType?: unknown;
-        [key: string]: unknown;
-      };
-    };
-    const legacyConfig = legacy?.config;
-    if (!legacyConfig || typeof legacyConfig !== 'object') {
-      return { config: DEFAULT_CONFIGURATION, activeSectionId: DEFAULT_CONFIGURATION.sections[0].id };
-    }
-
-    const legacyWidth = typeof legacyConfig.width === 'number' && legacyConfig.width > 0 ? legacyConfig.width : 1000;
-    // Capped at the old parse ceiling, not MAX_SECTIONS: a legacy row of
-    // 6–10 sections is kept intact (and shown as over the limit), never
-    // silently cut down to the new maximum.
-    const legacyCount =
-      typeof legacyConfig.sections === 'number' && legacyConfig.sections >= 1
-        ? Math.min(legacyConfig.sections, LEGACY_MAX_SECTIONS)
-        : 1;
-    const sections = Array.from({ length: legacyCount }, () => makeSection(legacyWidth));
-
-    const { width: _w, sections: _s, rear: _r, side: _side, configurationType: _ct, ...rest } = legacyConfig;
-    const config: ShelvingConfiguration = {
-      ...DEFAULT_CONFIGURATION,
-      ...(rest as Partial<ShelvingConfiguration>),
-      sections,
-    };
-
-    return { config, activeSectionId: sections[0].id };
+    return defaultPersistedState();
   } catch {
-    return { config: DEFAULT_CONFIGURATION, activeSectionId: DEFAULT_CONFIGURATION.sections[0].id };
+    return defaultPersistedState();
   }
 }

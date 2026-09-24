@@ -9,7 +9,7 @@ import { PriceTag } from '@/components/ui/PriceTag';
 import { Dimensions, EmptyCart } from '@/components/cart/CartClient';
 import { formatPrice } from '@/lib/money';
 import { trackEvent } from '@/lib/analytics';
-import { shelvesLabel } from '@/lib/plural';
+import { sectionShelvesLabel } from '@/lib/plural';
 import { CUSTOMER_PAYMENT_METHODS, schemasFor, type OrderFormInput } from '@/lib/pricing/schema';
 import { paymentMethodDescription, paymentMethodLabel } from '@/lib/orders/payment-methods';
 import { useCartStore } from '@/store/cart-store';
@@ -322,7 +322,7 @@ export function OrderForm({
                   <Dimensions configuration={item.configuration} unit={t(G['G-008'], locale)} />
                 </p>
                 <p className="mt-0.5 text-xs text-steel">
-                  {shelvesLabel(item.configuration.shelves, locale)} · {t(CR['CR-009'], locale, { N: item.configuration.sections.length })}
+                  {sectionShelvesLabel(item.configuration.sections, locale)} · {t(CR['CR-009'], locale, { N: item.configuration.sections.length })}
                 </p>
               </div>
               <span className="mono shrink-0 text-sm font-semibold">{item.priceSnapshot ? formatPrice(item.priceSnapshot.breakdown.total) : '…'}</span>

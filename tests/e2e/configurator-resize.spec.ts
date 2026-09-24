@@ -135,7 +135,7 @@ test('width resize can start from near the top or near the bottom of the right u
     // re-seeds the store on every load regardless of what's persisted, so
     // every iteration starts from the same known 1000mm baseline.
     await page.goto(
-      '/ru/configurator?model=ms-standard&height=2000&depth=400&shelves=3&sections=1000:false:false:false,1000:false:false:false',
+      '/ru/configurator?v=2&model=ms-standard&depth=400&sections=1000:2000:3:0:0:0,1000:2000:3:0:0:0',
     );
     await expect(widthSelects).toHaveCount(2);
     await expect(widthSelects.first()).toHaveValue('1000');
@@ -212,7 +212,7 @@ test('height resize can start from multiple points across the top rack edge — 
     // default. An explicit share-link URL (see url.ts) deterministically
     // re-seeds the store on every load regardless of what's persisted, so
     // every iteration starts from the same known baseline height.
-    await page.goto('/ru/configurator?model=ms-standard&height=2000&depth=400&shelves=3&sections=1000:false:false:false');
+    await page.goto('/ru/configurator?v=2&model=ms-standard&depth=400&sections=1000:2000:3:0:0:0');
     const heightHandle = page.locator('button[data-axis="height"]');
     // The persisted store renders first and the share link is applied one
     // commit later, so an immediate read can still see the previous

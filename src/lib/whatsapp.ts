@@ -6,6 +6,7 @@ import type { PublicPriceResult } from '@/lib/pricing/public-result';
 import type { Locale } from '@/lib/i18n/locales';
 import { pick, t } from '@/lib/i18n/format';
 import { WA } from '@/lib/i18n/strings';
+import { sectionHeightsSummary, sectionShelvesSummary } from '@/lib/configurator/section-dimensions';
 
 /**
  * WhatsApp deep links for the MVP. `https://wa.me/<phone>?text=<message>` needs
@@ -97,11 +98,11 @@ export function whatsAppConfiguratorUrl(
     t(WA['WA-003'], locale),
     '',
     t(WA['WA-004'], locale),
-    t(WA['WA-005'], locale, { H: c.height }),
+    t(WA['WA-005'], locale, { H: sectionHeightsSummary(c.sections) }),
     t(WA['WA-006'], locale, { D: c.depth }),
     t(WA['WA-007'], locale, { N: c.sections.length }),
     t(WA['WA-008'], locale, { W: widths }),
-    t(WA['WA-009'], locale, { N: c.shelves }),
+    t(WA['WA-009'], locale, { N: sectionShelvesSummary(c.sections) }),
     t(WA['WA-010'], locale, { N: c.loadCapacity }),
     ...wallSummaryLines(c, locale),
   ];

@@ -60,9 +60,10 @@ describe('reconcileConfiguration — repairs a persisted config against the curr
   });
 
   it('never touches dimensions, sections, or quantity', () => {
-    const config = { ...DEFAULT_CONFIGURATION, colorId: 'stale', height: 2500, quantity: 3 };
+    const sections = DEFAULT_CONFIGURATION.sections.map((s) => ({ ...s, height: 2500, shelves: 7 }));
+    const config = { ...DEFAULT_CONFIGURATION, colorId: 'stale', sections, quantity: 3 };
     const result = reconcileConfiguration(config, catalog);
-    expect(result.config.height).toBe(2500);
+    expect(result.config.sections.map((s) => [s.height, s.shelves])).toEqual([[2500, 7]]);
     expect(result.config.quantity).toBe(3);
     expect(result.config.sections).toBe(config.sections);
   });

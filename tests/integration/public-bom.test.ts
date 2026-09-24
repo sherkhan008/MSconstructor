@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { getCatalog, resetCatalogCache, type Catalog } from '@/lib/data/repository';
 import { calculatePrice, stripBomCosts, toPublicBom } from '@/lib/pricing';
 import type { BomLine, ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
+import { uniformRow, type LooseSection, type UniformRowInput } from '../helpers/uniform-row';
 
 /**
  * Customer-visible kit composition: MS Standard ships as one complete shelf
@@ -19,13 +20,13 @@ import type { BomLine, ShelvingConfiguration, ShelvingSection } from '@/lib/type
  */
 
 let sectionCounter = 0;
-function section(width: number, overrides: Partial<ShelvingSection> = {}): ShelvingSection {
+function section(width: number, overrides: Partial<ShelvingSection> = {}): LooseSection {
   sectionCounter += 1;
   return { id: `pub-sec-${sectionCounter}`, width, rearWall: false, leftWall: false, rightWall: false, ...overrides };
 }
 
-function config(overrides: Partial<ShelvingConfiguration> = {}): ShelvingConfiguration {
-  return {
+function config(overrides: Partial<UniformRowInput> = {}): ShelvingConfiguration {
+  return uniformRow({
     modelSlug: 'ms-standard',
     height: 2000,
     depth: 400,
@@ -39,7 +40,7 @@ function config(overrides: Partial<ShelvingConfiguration> = {}): ShelvingConfigu
     deliveryId: 'delivery-pickup',
     quantity: 1,
     ...overrides,
-  };
+  });
 }
 
 /**
@@ -118,7 +119,7 @@ describe('public (customer-visible) BOM', () => {
       const publicBom = toPublicBom(internalBom(baseline.config), 'ms-standard');
       const shelves = publicBom.filter((l) => l.type === 'SHELF');
       expect(shelves).toHaveLength(1);
-      expect(shelves[0].quantity).toBe(baseline.config.shelves);
+      expect(shelves[0].quantity).toBe(baseline.config.sections[0].shelves);
       expect(publicBom.some((l) => l.type === 'UPRIGHT')).toBe(true);
       expect(publicBom.some((l) => l.type === 'FASTENER')).toBe(true);
     });

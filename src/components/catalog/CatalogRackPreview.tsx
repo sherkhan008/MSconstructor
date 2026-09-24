@@ -1,4 +1,5 @@
 import type { ColorOption, ShelvingConfiguration } from '@/lib/types/domain';
+import { getMaxSectionHeight, getMaxSectionShelves, sectionHeightsSummary, sectionShelvesSummary } from '@/lib/configurator/section-dimensions';
 import { computeSectionLayout, computeBoundaryXs } from '@/components/configurator/resize/section-geometry';
 import { mmToPx, DEPTH_ANGLE_DEG } from '@/components/configurator/resize/dimension-scale';
 import { computeRenderDepthVec } from '@/components/configurator/shelf-depth-projection';
@@ -20,10 +21,15 @@ export function CatalogRackPreview({ config, color, modelName, locale, className
 }) {
   const layout = computeSectionLayout(config.sections, 300, 420, 260);
   const posts = computeBoundaryXs(layout);
-  const height = mmToPx('height', config.height);
+  // Catalog products are uniform (every section shares the product's height
+  // and shelf count); the drawing uses the row's envelope, which is exactly
+  // that value. Per-section drawing comes with the per-section UI phase.
+  const rowHeight = getMaxSectionHeight(config.sections);
+  const rowShelves = getMaxSectionShelves(config.sections);
+  const height = mmToPx('height', rowHeight);
   const bottom = 350;
   const top = bottom - height;
-  const ys = Array.from({ length: config.shelves }, (_, i) => top + 14 + i / Math.max(1, config.shelves - 1) * (height - 28));
+  const ys = Array.from({ length: rowShelves }, (_, i) => top + 14 + i / Math.max(1, rowShelves - 1) * (height - 28));
   const depth = mmToPx('depth', config.depth);
   const angle = DEPTH_ANGLE_DEG * Math.PI / 180;
   const { dx, dy } = computeRenderDepthVec({ dx: depth * Math.cos(angle), dy: -depth * Math.sin(angle) }, ys);
@@ -32,10 +38,10 @@ export function CatalogRackPreview({ config, color, modelName, locale, className
   const light = shade(fill, 4);
   const label = t(CT['CT-025'], locale, {
     model: modelName,
-    height: config.height,
+    height: sectionHeightsSummary(config.sections),
     width: config.sections.map(s => s.width).join('+'),
     depth: config.depth,
-    N: config.shelves,
+    N: sectionShelvesSummary(config.sections),
   });
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 390" role="img" aria-label={label} className={`bg-white ${className}`}>

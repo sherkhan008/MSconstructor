@@ -5,7 +5,8 @@ import { getOrderByNumber, clearMemoryOrders, saveOrder } from '@/lib/orders/sto
 import type { OrderRecord } from '@/lib/orders/types';
 import { buildBom, calculatePrice, toPublicBom } from '@/lib/pricing';
 import { MS_STANDARD_MIN_SHELVES } from '@/lib/pricing/ms-standard-compatibility';
-import type { BomLine, ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
+import type { BomLine, ShelvingConfiguration } from '@/lib/types/domain';
+import { uniformRow, type LooseSection, type UniformRowInput } from '../helpers/uniform-row';
 
 /**
  * MS Standard fastener rule: one fastener unit = one bolt + nut pair.
@@ -15,13 +16,13 @@ import type { BomLine, ShelvingConfiguration, ShelvingSection } from '@/lib/type
 const FASTENER_KIT_NAME = 'Комплект крепежа (болт + гайка)';
 
 let sectionCounter = 0;
-function section(width: number): ShelvingSection {
+function section(width: number): LooseSection {
   sectionCounter += 1;
   return { id: `fst-sec-${sectionCounter}`, width, rearWall: false, leftWall: false, rightWall: false };
 }
 
-function config(overrides: Partial<ShelvingConfiguration> = {}): ShelvingConfiguration {
-  return {
+function config(overrides: Partial<UniformRowInput> = {}): ShelvingConfiguration {
+  return uniformRow({
     modelSlug: 'ms-standard',
     height: 2000,
     depth: 400,
@@ -35,7 +36,7 @@ function config(overrides: Partial<ShelvingConfiguration> = {}): ShelvingConfigu
     deliveryId: 'delivery-pickup',
     quantity: 1,
     ...overrides,
-  };
+  });
 }
 
 describe('MS Standard fasteners', () => {

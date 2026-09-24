@@ -129,10 +129,8 @@ function nextIp(): string {
 function config(overrides: Partial<ShelvingConfiguration> = {}): ShelvingConfiguration {
   return {
     modelSlug: 'ms-standard',
-    height: 2000,
     depth: 500,
-    shelves: 5,
-    sections: [{ id: 'sec-1', width: 1000, rearWall: false, leftWall: false, rightWall: false }],
+    sections: [{ id: 'sec-1', width: 1000, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false }],
     loadCapacity: 150,
     shelfType: 'STANDARD',
     colorId: 'color-grey',
@@ -319,7 +317,7 @@ describe('POST /api/orders — customer-facing text', () => {
           paymentPreference: 'BANK_TRANSFER',
           // Height 9000 fails compatibility: a real, reachable rejection whose
           // details must stay commercial.
-          items: [{ configuration: config({ height: 9000 }) }],
+          items: [{ configuration: config({ sections: config().sections.map((s) => ({ ...s, height: 9000 })) }) }],
         }),
       }),
     );

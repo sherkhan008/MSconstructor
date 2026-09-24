@@ -9,7 +9,7 @@ import type { Page } from '@playwright/test';
  */
 
 async function addRack(page: Page, delivery = 'delivery-city') {
-  await page.goto(`/ru/configurator?model=ms-standard&height=2000&depth=400&shelves=5&sections=1000:0:0:0&delivery=${delivery}`);
+  await page.goto(`/ru/configurator?v=2&model=ms-standard&depth=400&sections=1000:2000:5:0:0:0&delivery=${delivery}`);
   const add = page.getByRole('button', { name: 'Добавить в корзину' });
   await expect(add).toBeEnabled({ timeout: 15_000 });
   await add.click();

@@ -11,6 +11,7 @@ import {
 import { calculatePrice } from '@/lib/pricing';
 import { catalogProductToConfiguration } from '@/lib/catalog-product-configuration';
 import type { CatalogProduct, ShelvingComponent, ShelvingConfiguration } from '@/lib/types/domain';
+import { uniformRow, type UniformRowInput } from '../helpers/uniform-row';
 
 /**
  * Model-scoped components — a price that belongs to ONE model.
@@ -32,8 +33,8 @@ import type { CatalogProduct, ShelvingComponent, ShelvingConfiguration } from '@
 const SCOPED_PRICE = 1;
 const SCOPED_COST = 1;
 
-function config(overrides: Partial<ShelvingConfiguration>): ShelvingConfiguration {
-  return {
+function config(overrides: Partial<UniformRowInput>): ShelvingConfiguration {
+  return uniformRow({
     modelSlug: 'ms-standard',
     height: 2000,
     depth: 400,
@@ -47,7 +48,7 @@ function config(overrides: Partial<ShelvingConfiguration>): ShelvingConfiguratio
     deliveryId: 'delivery-pickup',
     quantity: 1,
     ...overrides,
-  };
+  });
 }
 
 /** A scoped copy of the generic row a query resolves to, with invented prices. */
@@ -322,12 +323,13 @@ describe('model-scoped components', () => {
 
     /** Scoped copies of the upright and shelf a configuration resolves to. */
     function scopedRowsFor(cfg: ShelvingConfiguration): ShelvingComponent[] {
-      const width = cfg.sections[0].width;
-      const common = { modelSlug: cfg.modelSlug, height: cfg.height, width, depth: cfg.depth, loadCapacity: cfg.loadCapacity, shelfType: cfg.shelfType };
+      // Catalog products are uniform: every section shares these values.
+      const { width, height } = cfg.sections[0];
+      const common = { modelSlug: cfg.modelSlug, height, width, depth: cfg.depth, loadCapacity: cfg.loadCapacity, shelfType: cfg.shelfType };
       const upright = findComponent(base, { ...common, type: 'UPRIGHT' })!;
       const shelf = findComponent(base, { ...common, type: 'SHELF' })!;
       return [
-        scopedCopy(upright, `MSS-UPR-H${cfg.height}`),
+        scopedCopy(upright, `MSS-UPR-H${height}`),
         scopedCopy(shelf, `MSS-SHF-${width}X${cfg.depth}`),
       ];
     }

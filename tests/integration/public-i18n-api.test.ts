@@ -26,12 +26,10 @@ const order = (body: unknown, locale?: Locale) => post(ordersPost, '/api/orders'
 
 const configuration = (extra: Record<string, unknown> = {}) => ({
   modelSlug: 'ms-standard',
-  height: 2000,
   depth: 400,
-  shelves: 5,
   sections: [
-    { id: 'a', width: 1000, rearWall: true, leftWall: false, rightWall: true },
-    { id: 'b', width: 700, rearWall: false, leftWall: false, rightWall: false },
+    { id: 'a', width: 1000, height: 2000, shelves: 5, rearWall: true, leftWall: false, rightWall: true },
+    { id: 'b', width: 700, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false },
   ],
   loadCapacity: 150,
   shelfType: 'STANDARD',
@@ -80,7 +78,7 @@ describe('/api/pricing/calculate', () => {
   });
 
   it('answers compatibility errors in the active locale', async () => {
-    const bad = configuration({ height: 2345 });
+    const bad = configuration({ sections: configuration().sections.map((s) => ({ ...s, height: 2345 })) });
     const kk = await (await price(bad, 'kk')).json();
     const ru = await (await price(bad, 'ru')).json();
     expect(kk).toMatchObject({ ok: false, code: 'INCOMPATIBLE_CONFIGURATION', message: t(ER['ER-036'], 'kk', { H: 2345 }) });
@@ -97,7 +95,7 @@ describe('/api/pricing/calculate', () => {
   });
 
   it('ignores an unknown locale value and answers in Russian (the API default)', async () => {
-    const response = await price(configuration({ height: 2345 }), 'en' as Locale);
+    const response = await price(configuration({ sections: configuration().sections.map((s) => ({ ...s, height: 2345 })) }), 'en' as Locale);
     expect((await response.json()).message).toBe('Высота 2345 мм недоступна');
   });
 });
@@ -130,7 +128,7 @@ describe('/api/orders', () => {
   });
 
   it('reports a cart configuration that cannot be priced in the active locale', async () => {
-    const body = orderBody({ items: [{ configuration: configuration({ height: 2345 }) }] });
+    const body = orderBody({ items: [{ configuration: configuration({ sections: configuration().sections.map((s) => ({ ...s, height: 2345 })) }) }] });
     const kk = await (await order(body, 'kk')).json();
     expect(kk.message).toBe(t(ER['ER-006'], 'kk', { reason: t(ER['ER-036'], 'kk', { H: 2345 }) }));
   });
