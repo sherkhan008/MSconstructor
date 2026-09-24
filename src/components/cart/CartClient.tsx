@@ -10,7 +10,8 @@ import { formatPrice } from '@/lib/money';
 import { configurationToShareQuery } from '@/lib/configurator/url';
 import { reconcileConfiguration } from '@/lib/configurator/reconcile';
 import { trackEvent } from '@/lib/analytics';
-import { shelvesLabel } from '@/lib/plural';
+import { sectionShelvesLabel } from '@/lib/plural';
+import { getMaxSectionHeight } from '@/lib/configurator/section-dimensions';
 import { useCartStore, type CartItem, type CartMutationResult } from '@/store/cart-store';
 import type { ColorOption, DeliveryMethod } from '@/lib/types/domain';
 import type { PublicCatalog } from '@/lib/data/public-catalog';
@@ -249,9 +250,15 @@ export function EmptyCart({ message, locale }: { message: string; locale: Locale
 }
 
 /** H×W+W×D mm on one line where it fits; on a narrow screen it wraps only
- * after a separator, never inside a number. Text content is unchanged. */
+ * after a separator, never inside a number. Text content is unchanged. H is
+ * the row's overall height (its tallest section — with today's uniform
+ * sections, every section's height). */
 export function Dimensions({ configuration, unit }: { configuration: CartItem['configuration']; unit: string }) {
-  const parts = [String(configuration.height), ...configuration.sections.map((s) => String(s.width)), String(configuration.depth)];
+  const parts = [
+    String(getMaxSectionHeight(configuration.sections)),
+    ...configuration.sections.map((s) => String(s.width)),
+    String(configuration.depth),
+  ];
   const last = parts.length - 1;
   return (
     <>
@@ -299,7 +306,7 @@ function CartRow({
   const { configuration, priceSnapshot } = item;
   const quantityId = `cart-qty-${item.id}`;
   const specs = [
-    shelvesLabel(configuration.shelves, locale),
+    sectionShelvesLabel(configuration.sections, locale),
     t(CR['CR-009'], locale, { N: configuration.sections.length }),
     t(CT['CT-024'], locale, { N: configuration.loadCapacity }),
     color ? pick(color.name, locale) : null,

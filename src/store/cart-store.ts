@@ -5,6 +5,7 @@ import { persist } from 'zustand/middleware';
 import type { ShelvingConfiguration } from '@/lib/types/domain';
 import type { PublicPriceResult } from '@/lib/pricing/public-result';
 import { canAddKits } from '@/lib/orders/limits';
+import { upgradeRowLevelConfiguration } from '@/lib/configurator/persisted-configuration';
 
 /**
  * Cart state. Persisted to localStorage so a customer's cart survives a
@@ -23,6 +24,8 @@ import { canAddKits } from '@/lib/orders/limits';
  */
 
 export const CART_STORAGE_KEY = 'ms-shelving-cart';
+/** Persisted cart version — see migrateCartState. */
+export const CART_STATE_VERSION = 2;
 
 /** Why a cart mutation was refused. The cart is unchanged whenever `ok` is false. */
 export type CartMutationFailure = { ok: false; reason: 'KIT_LIMIT' | 'NOT_FOUND' };
@@ -139,9 +142,54 @@ export const useCartStore = create<CartState>()(
 
       count: () => get().items.length,
     }),
-    { name: CART_STORAGE_KEY, version: 1 },
+    {
+      name: CART_STORAGE_KEY,
+      // v2 (V2.2A): configurations carry height/shelves per section.
+      version: CART_STATE_VERSION,
+      migrate: (persistedState, version) => migrateCartState(persistedState, version),
+    },
   ),
 );
+
+/**
+ * Persisted-cart policy (pre-launch project, no real customer carts):
+ *
+ *   v2 (current)  loaded as-is.
+ *   v1 (V2.1)     MIGRATED item by item: each configuration's one row-level
+ *                 height/shelf count is copied into every section (lossless),
+ *                 and the price snapshot is cleared so the cart re-prices
+ *                 against the server. If ANY item is malformed the whole
+ *                 test cart is RESET to empty — never partially kept.
+ *   anything else RESET to empty.
+ *
+ * Quantities are carried over unchanged, so the Σ quantity ≤ 5 limit is
+ * neither weakened nor silently enforced here (the cart UI and the order API
+ * keep enforcing it). Never throws.
+ */
+export function migrateCartState(persistedState: unknown, version: number): { items: CartItem[] } {
+  try {
+    if (version !== 1) return { items: [] };
+    const rawItems = (persistedState as { items?: unknown } | null | undefined)?.items;
+    if (!Array.isArray(rawItems)) return { items: [] };
+    const items: CartItem[] = [];
+    for (const raw of rawItems) {
+      const item = raw as Partial<CartItem> | null;
+      const configuration = upgradeRowLevelConfiguration(item?.configuration);
+      if (!item || !configuration || typeof item.id !== 'string' || typeof item.modelSlug !== 'string') return { items: [] };
+      items.push({
+        id: item.id,
+        modelSlug: item.modelSlug,
+        modelName: typeof item.modelName === 'string' ? item.modelName : item.modelSlug,
+        configuration,
+        priceSnapshot: null,
+        addedAt: typeof item.addedAt === 'string' ? item.addedAt : new Date().toISOString(),
+      });
+    }
+    return { items };
+  } catch {
+    return { items: [] };
+  }
+}
 
 /**
  * Cross-tab freshness. persist() reads localStorage once, at start-up, so a

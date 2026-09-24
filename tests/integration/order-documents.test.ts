@@ -344,16 +344,20 @@ describe('multiple items and multiple shelving sections', () => {
           id: 'a',
           configuration: configuration([1000, 700, 1200], {
             sections: [
-              { id: 's1', width: 1000, rearWall: true, leftWall: false, rightWall: false },
-              { id: 's2', width: 700, rearWall: false, leftWall: false, rightWall: false },
-              { id: 's3', width: 1200, rearWall: false, leftWall: false, rightWall: true },
+              { id: 's1', width: 1000, height: 2000, shelves: 5, rearWall: true, leftWall: false, rightWall: false },
+              { id: 's2', width: 700, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false },
+              { id: 's3', width: 1200, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: true },
             ],
             metalFootPad: true,
           }),
           snapshot: { options: ['Металлический подпятник'] },
           unit: 484962,
         }),
-        item({ id: 'b', configuration: configuration([800], { height: 2500, depth: 600, shelves: 6, quantity: 2 }), unit: 150000, quantity: 2 }),
+        item({ id: 'b', configuration: configuration([800], {
+            depth: 600,
+            quantity: 2,
+            sections: [{ id: 'sec-0', width: 800, height: 2500, shelves: 6, rearWall: false, leftWall: false, rightWall: false }],
+          }), unit: 150000, quantity: 2 }),
       ],
     });
     for (const kind of ['commercial-proposal', 'invoice'] as const) {

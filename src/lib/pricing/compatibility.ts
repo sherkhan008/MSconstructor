@@ -32,9 +32,14 @@ export function validateCompatibility(
   // The GLOBAL dimension row must exist and be active regardless of model —
   // an admin deactivating a HeightOption/WidthOption/DepthOption row blocks
   // it everywhere, independent of whichever model-specific rules run below.
-  const heightOption = catalog.heights.find((h) => h.value === config.height && h.active);
-  if (!heightOption) {
-    issues.push({ field: 'height', message: t(ER['ER-036'], locale, { H: config.height }) });
+  // Heights are per section (V2.2A): each distinct section height must be
+  // an active row; a height shared by several sections is reported once.
+  const sectionHeights = [...new Set(config.sections.map((s) => s.height))];
+  for (const height of sectionHeights) {
+    const heightOption = catalog.heights.find((h) => h.value === height && h.active);
+    if (!heightOption) {
+      issues.push({ field: 'sections', message: t(ER['ER-036'], locale, { H: height }) });
+    }
   }
   for (const section of config.sections) {
     const widthOption = catalog.widths.find((w) => w.value === section.width && w.active);
@@ -49,8 +54,8 @@ export function validateCompatibility(
 
   if (model.slug === 'ms-standard') {
     // The authoritative MS Standard matrix — cross-dimensional rules (which
-    // depths a section width supports, which heights allow how many
-    // shelves) that a flat ProductModel.heights/widths/depths list cannot
+    // depths a section width supports, how many shelves each section's own
+    // height allows) that a flat ProductModel.heights/widths/depths list cannot
     // express. Single source of truth shared with the customer UI's
     // dimension selects, width/height drag allowedValues, and editable-state
     // normalization — see ms-standard-compatibility.ts.
@@ -60,8 +65,10 @@ export function validateCompatibility(
   } else {
     // Every other model still uses its own flat per-model lists — no
     // cross-dimensional rules exist for them today.
-    if (!model.heights.includes(config.height)) {
-      issues.push({ field: 'height', message: t(ER['ER-039'], locale, { H: config.height, model: modelName }) });
+    for (const height of sectionHeights) {
+      if (!model.heights.includes(height)) {
+        issues.push({ field: 'sections', message: t(ER['ER-039'], locale, { H: height, model: modelName }) });
+      }
     }
     for (const section of config.sections) {
       if (!model.widths.includes(section.width)) {
@@ -74,9 +81,9 @@ export function validateCompatibility(
     if (!model.depths.includes(config.depth)) {
       issues.push({ field: 'depth', message: t(ER['ER-041'], locale, { D: config.depth, model: modelName }) });
     }
-    if (config.shelves < model.minShelves || config.shelves > model.maxShelves) {
+    if (config.sections.some((s) => s.shelves < model.minShelves || s.shelves > model.maxShelves)) {
       issues.push({
-        field: 'shelves',
+        field: 'sections',
         message: t(ER['ER-042'], locale, { min: model.minShelves, max: model.maxShelves }),
       });
     }

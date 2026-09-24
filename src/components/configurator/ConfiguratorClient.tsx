@@ -8,12 +8,13 @@ import { DEFAULT_CONFIGURATION, useConfiguratorStore } from '@/store/configurato
 import type { PublicCatalog } from '@/lib/data/public-catalog';
 import {
   getAllowedDepthsForSections,
-  getAllowedHeightsForShelfCount,
+  getAllowedHeightsForSections,
   getAllowedWidthsForDepth,
-  getMaxShelvesForHeight,
+  getSharedMaxShelvesForSections,
   MS_STANDARD_MIN_SHELVES,
   normalizeMsStandardConfiguration,
 } from '@/lib/pricing/ms-standard-compatibility';
+import { getMaxSectionShelves } from '@/lib/configurator/section-dimensions';
 import { ShelvingPreview } from './ShelvingPreview';
 import { TopShelvingPreview } from './TopShelvingPreview';
 import { ParametersSectionsTable } from './ParametersSectionsTable';
@@ -37,6 +38,8 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
   const removeSection = useConfiguratorStore((s) => s.removeSection);
   const updateSection = useConfiguratorStore((s) => s.updateSection);
   const setField = useConfiguratorStore((s) => s.setField);
+  const setAllSectionHeights = useConfiguratorStore((s) => s.setAllSectionHeights);
+  const setAllSectionShelves = useConfiguratorStore((s) => s.setAllSectionShelves);
   const setMany = useConfiguratorStore((s) => s.setMany);
   const loadFromPartial = useConfiguratorStore((s) => s.loadFromPartial);
   const reset = useConfiguratorStore((s) => s.reset);
@@ -135,18 +138,18 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
     // flat-list checks: an old persisted config or share link may carry an
     // obsolete height, a depth no longer valid for its own section widths,
     // or a shelf count too high for its height, none of which a simple
-    // per-field `standard.heights.includes(...)` check would catch.
+    // per-field `standard.heights.includes(...)` check would catch. Each
+    // section is normalized with its own height/shelves only.
     const normalizedDims = normalizeMsStandardConfiguration({
-      height: config.height,
       depth: config.depth,
-      shelves: config.shelves,
       sections: config.sections,
     });
     const dimsNeedFix =
-      normalizedDims.height !== config.height ||
       normalizedDims.depth !== config.depth ||
-      normalizedDims.shelves !== config.shelves ||
-      normalizedDims.sections.some((s, i) => s.width !== config.sections[i]?.width);
+      normalizedDims.sections.some((s, i) => {
+        const current = config.sections[i];
+        return s.width !== current?.width || s.height !== current?.height || s.shelves !== current?.shelves;
+      });
 
     const needsFix =
       config.modelSlug !== standard.slug ||
@@ -161,9 +164,7 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
 
     setMany({
       modelSlug: standard.slug,
-      height: normalizedDims.height,
       depth: normalizedDims.depth,
-      shelves: normalizedDims.shelves,
       sections: normalizedDims.sections,
       shelfType: standard.shelfTypes.includes(config.shelfType) ? config.shelfType : standard.shelfTypes[0],
       loadCapacity: standard.loadCapacities.includes(config.loadCapacity) ? config.loadCapacity : standard.loadCapacities[0],
@@ -180,21 +181,31 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
 
   // Same cross-dimensional MS Standard rules the parameter selects use (see
   // ms-standard-compatibility.ts): height drag may only snap to a height
-  // whose own shelf ceiling fits the CURRENT shelf count, width drag may
-  // only snap to a width valid for the CURRENT global depth, and the
-  // preview's own shelf +/- controls follow the CURRENT height's ceiling.
-  // Every other model keeps its flat model.heights/widths/minShelves/
-  // maxShelves — it has no cross-rules today.
+  // whose own shelf ceiling fits every section's CURRENT shelf count, width
+  // drag may only snap to a width valid for the CURRENT shared depth, and
+  // the preview's own shelf +/- controls stay within every section's own
+  // height ceiling. Every other model keeps its flat model.heights/widths/
+  // minShelves/maxShelves — it has no cross-rules today.
+  //
+  // TRANSITIONAL (V2.2A): height and shelves are stored per section, but the
+  // current UI still has one height control and one shelf control; each
+  // applies its value to ALL sections (setAllSectionHeights /
+  // setAllSectionShelves). Per-section controls arrive in a later UI phase.
   const isMsStandard = model?.slug === 'ms-standard';
-  const allowedHeights = isMsStandard ? getAllowedHeightsForShelfCount(config.shelves) : (model?.heights ?? []);
+  const allowedHeights = isMsStandard ? getAllowedHeightsForSections(config.sections) : (model?.heights ?? []);
   const allowedWidths = isMsStandard ? getAllowedWidthsForDepth(config.depth) : (model?.widths ?? []);
   const allowedDepths = isMsStandard ? getAllowedDepthsForSections(config.sections) : (model?.depths ?? []);
   const shelvesMin = isMsStandard ? MS_STANDARD_MIN_SHELVES : (model?.minShelves ?? 2);
-  const shelvesMax = isMsStandard ? (getMaxShelvesForHeight(config.height) ?? model?.maxShelves ?? 8) : (model?.maxShelves ?? 8);
+  const shelvesMax = isMsStandard
+    ? (getSharedMaxShelvesForSections(config.sections) ?? model?.maxShelves ?? 8)
+    : (model?.maxShelves ?? 8);
+  const rowShelves = getMaxSectionShelves(config.sections);
 
   function handleCommitDimension(axis: DimensionAxis, value: number) {
     if (axis === 'width') {
       updateSection(activeSectionId, { width: value });
+    } else if (axis === 'height') {
+      setAllSectionHeights(value);
     } else {
       setField(axis, value);
     }
@@ -253,8 +264,8 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
                 onCommitDimension={handleCommitDimension}
                 minShelves={shelvesMin}
                 maxShelves={shelvesMax}
-                onIncreaseShelves={() => setField('shelves', Math.min(shelvesMax, config.shelves + 1))}
-                onDecreaseShelves={() => setField('shelves', Math.max(shelvesMin, config.shelves - 1))}
+                onIncreaseShelves={() => setAllSectionShelves(Math.min(shelvesMax, rowShelves + 1))}
+                onDecreaseShelves={() => setAllSectionShelves(Math.max(shelvesMin, rowShelves - 1))}
               />
             ) : (
               <div>

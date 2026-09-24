@@ -100,7 +100,7 @@ describe('"Популярные конфигурации"', () => {
     expect(cardPreviewConfigs.map((c) => c.depth)).toEqual([300, 400, 600]);
     for (const [index, config] of cardPreviewConfigs.entries()) {
       expect(config).toBe(cards[index].configuration);
-      expect(config.shelves).toBe(4);
+      expect(config.sections.every((s) => s.shelves === 4)).toBe(true);
     }
   });
 
@@ -114,14 +114,18 @@ describe('"Популярные конфигурации"', () => {
   it('every card configuration matches its own product exactly', () => {
     for (const { product, configuration } of cards) {
       expect(configuration.modelSlug).toBe(product.modelSlug);
-      expect(configuration.height).toBe(product.height);
       expect(configuration.depth).toBe(product.depth);
-      expect(configuration.shelves).toBe(product.shelves);
       expect(configuration.loadCapacity).toBe(product.loadCapacity);
       expect(configuration.shelfType).toBe(product.shelfType);
       expect(configuration.colorId).toBe(product.color);
       expect(configuration.sections).toHaveLength(product.sections);
+      // Uniform catalog product: every section carries the product's own
+      // width, height and shelf count (V2.2A — no row-level height/shelves).
       expect(configuration.sections.every((s) => s.width === product.width)).toBe(true);
+      expect(configuration.sections.every((s) => s.height === product.height)).toBe(true);
+      expect(configuration.sections.every((s) => s.shelves === product.shelves)).toBe(true);
+      expect(configuration).not.toHaveProperty('height');
+      expect(configuration).not.toHaveProperty('shelves');
     }
   });
 
@@ -143,10 +147,10 @@ describe('"Популярные конфигурации"', () => {
 
       const parsed = parseConfigurationFromSearchParams(new URLSearchParams(query));
       expect(parsed.modelSlug).toBe(configuration.modelSlug);
-      expect(parsed.height).toBe(configuration.height);
       expect(parsed.depth).toBe(configuration.depth);
-      expect(parsed.shelves).toBe(configuration.shelves);
-      expect(parsed.sections?.map((s) => s.width)).toEqual(configuration.sections.map((s) => s.width));
+      const dims = (sections: { width: number; height: number; shelves: number }[] | undefined) =>
+        sections?.map(({ width, height, shelves }) => ({ width, height, shelves }));
+      expect(dims(parsed.sections)).toEqual(dims(configuration.sections));
     }
   });
 

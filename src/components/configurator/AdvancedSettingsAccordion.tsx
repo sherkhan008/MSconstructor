@@ -9,6 +9,7 @@ import { METAL_FOOT_PAD_OPTION, SHELF_CORNER_BRACKETS_OPTION } from '@/lib/confi
 import { t } from '@/lib/i18n/format';
 import { CF } from '@/lib/i18n/strings';
 import { useLocale } from '@/components/i18n/LocaleProvider';
+import { getTotalSectionShelves } from '@/lib/configurator/section-dimensions';
 
 /**
  * Accessory ids the *customer* configurator may select — a small curated
@@ -88,8 +89,9 @@ export function AdvancedSettingsAccordion({ catalog }: { catalog: PublicCatalog 
   function toggleShelfReinforcement(checked: boolean) {
     // "В каждую полку" — one reinforcement rib per shelf across the whole
     // row, matching this accessory's own maxQuantityPerSection (8, i.e. the
-    // model's own maxShelves) rather than a number invented here.
-    const quantity = config.shelves * config.sections.length;
+    // model's own maxShelves) rather than a number invented here. Each
+    // section counts its own shelves.
+    const quantity = getTotalSectionShelves(config.sections);
     setAccessoryQuantity('acc-shelf-reinforcement', checked ? quantity : 0);
   }
 

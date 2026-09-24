@@ -310,6 +310,7 @@ describe('useDimensionDrag — configurator store synchronization', () => {
         containerRef: CONTAINER,
         onCommit: (axis, value) => {
           if (axis === 'width') useConfiguratorStore.getState().updateSection(activeId, { width: value });
+          else if (axis === 'height') useConfiguratorStore.getState().setAllSectionHeights(value);
           else useConfiguratorStore.getState().setField(axis, value);
         },
       }),
@@ -323,7 +324,8 @@ describe('useDimensionDrag — configurator store synchronization', () => {
 
     expect(useConfiguratorStore.getState().config.sections[0].width).toBe(1200);
     // Every other field must be preserved untouched.
-    expect(useConfiguratorStore.getState().config.height).toBe(DEFAULT_CONFIGURATION.height);
+    expect(useConfiguratorStore.getState().config.sections[0].height).toBe(DEFAULT_CONFIGURATION.sections[0].height);
+    expect(useConfiguratorStore.getState().config.sections[0].shelves).toBe(DEFAULT_CONFIGURATION.sections[0].shelves);
     expect(useConfiguratorStore.getState().config.depth).toBe(DEFAULT_CONFIGURATION.depth);
     expect(useConfiguratorStore.getState().config.sections.length).toBe(1);
   });

@@ -100,9 +100,7 @@ function fixturePhone(prefix: string, index: number): string {
 function configurationJson(width: number): Prisma.InputJsonValue {
   return {
     modelSlug: 'ms-standard',
-    height: 2000,
     depth: 500,
-    shelves: 5,
     loadCapacity: 150,
     shelfType: 'STANDARD',
     colorId: 'color-grey',
@@ -112,7 +110,7 @@ function configurationJson(width: number): Prisma.InputJsonValue {
     quantity: 1,
     metalFootPad: false,
     shelfCornerBrackets: false,
-    sections: [{ id: 'sec-1', width, rearWall: false, leftWall: false, rightWall: false }],
+    sections: [{ id: 'sec-1', width, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false }],
   };
 }
 

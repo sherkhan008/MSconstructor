@@ -17,11 +17,13 @@ import { ER } from '@/lib/i18n/strings';
  * ProductModel.heights/widths/depths lists (they have no cross-dimensional
  * restrictions of this kind today), so nothing here is invoked for them.
  *
- * Width is per-section; height, depth, and shelf count are global to the
- * whole row (see ShelvingConfiguration). The matrix has exactly two kinds
- * of cross-dimensional rule:
+ * Width, height and shelf count are per-section (V2.2A); depth is shared by
+ * the whole kit (see ShelvingConfiguration). The matrix has exactly two kinds
+ * of cross-dimensional rule, both evaluated for each section on its own:
  *   - depth compatibility depends on section WIDTH (never on height);
- *   - maximum shelf count depends on HEIGHT (never on depth or width).
+ *   - maximum shelf count depends on the section's own HEIGHT (never on
+ *     depth, width, or any other section's height).
+ * There is no rule between neighbouring sections' heights.
  * Nothing here invents a rule connecting height and depth directly — the
  * task this module was built for is explicit that no such rule exists.
  */
@@ -126,51 +128,67 @@ export function isValidMsStandardWidthDepth(width: number, depth: number): boole
 }
 
 export interface MsStandardCompatibilityIssue {
-  field: 'height' | 'depth' | 'shelves' | 'sections';
+  /** Height and shelf problems belong to a section (each section owns its
+   * height/shelves), so they are reported on `sections`, like width. */
+  field: 'depth' | 'sections';
   message: string;
 }
+
+type MsStandardSectionDimensions = Pick<ShelvingSection, 'width' | 'height' | 'shelves'>;
 
 /**
  * The authoritative cross-dimensional check for one MS Standard
  * configuration. Deliberately narrow: it only ever reports the rules this
- * module owns (height validity, per-height shelf ceiling, width validity,
- * width×depth compatibility per section). Anything else about a
- * configuration (model existence, load capacity, accessories, colour, ...)
- * is validateCompatibility's job, not this module's — see compatibility.ts,
+ * module owns (each section's height validity and that height's own shelf
+ * ceiling, each section's width validity, and width×depth compatibility
+ * against the shared depth). Anything else about a configuration (model
+ * existence, load capacity, accessories, colour, ...) is
+ * validateCompatibility's job, not this module's — see compatibility.ts,
  * which calls this for the ms-standard-specific rules and keeps running its
  * own checks for everything else.
+ *
+ * Every section is checked independently: a 1000 mm section is held to the
+ * 1000 mm shelf ceiling even when its neighbour is 3000 mm tall. Identical
+ * height/shelf problems shared by several sections are reported once.
  */
 export function isValidMsStandardConfiguration(
   config: {
-    height: number;
     depth: number;
-    shelves: number;
-    sections: readonly Pick<ShelvingSection, 'width'>[];
+    sections: readonly MsStandardSectionDimensions[];
   },
   /** Language of the customer-facing messages; the rules never depend on it. */
   locale: Locale = 'ru',
 ): MsStandardCompatibilityIssue[] {
   const issues: MsStandardCompatibilityIssue[] = [];
 
-  if (!isMsStandardHeight(config.height)) {
-    issues.push({ field: 'height', message: t(ER['ER-054'], locale, { H: config.height }) });
-  } else {
-    const maxShelves = HEIGHT_MAX_SHELVES[config.height];
-    if (config.shelves > maxShelves) {
+  const checkedHeightShelves = new Set<string>();
+  for (const section of config.sections) {
+    const key = `${section.height}:${section.shelves}`;
+    if (checkedHeightShelves.has(key)) continue;
+    checkedHeightShelves.add(key);
+
+    // 1. this section's own height; 2. that height's own shelf ceiling.
+    if (!isMsStandardHeight(section.height)) {
+      issues.push({ field: 'sections', message: t(ER['ER-054'], locale, { H: section.height }) });
+    } else {
+      const maxShelves = HEIGHT_MAX_SHELVES[section.height];
+      if (section.shelves > maxShelves) {
+        issues.push({
+          field: 'sections',
+          message: t(ER['ER-055'], locale, { H: section.height, N: maxShelves }),
+        });
+      }
+    }
+
+    if (section.shelves < MS_STANDARD_MIN_SHELVES || section.shelves > MS_STANDARD_ABSOLUTE_MAX_SHELVES) {
       issues.push({
-        field: 'shelves',
-        message: t(ER['ER-055'], locale, { H: config.height, N: maxShelves }),
+        field: 'sections',
+        message: t(ER['ER-042'], locale, { min: MS_STANDARD_MIN_SHELVES, max: MS_STANDARD_ABSOLUTE_MAX_SHELVES }),
       });
     }
   }
 
-  if (config.shelves < MS_STANDARD_MIN_SHELVES || config.shelves > MS_STANDARD_ABSOLUTE_MAX_SHELVES) {
-    issues.push({
-      field: 'shelves',
-      message: t(ER['ER-042'], locale, { min: MS_STANDARD_MIN_SHELVES, max: MS_STANDARD_ABSOLUTE_MAX_SHELVES }),
-    });
-  }
-
+  // 3. each section's width against the kit's shared depth.
   for (const section of config.sections) {
     if (!isMsStandardWidth(section.width)) {
       issues.push({ field: 'sections', message: t(ER['ER-056'], locale, { W: section.width }) });
@@ -257,10 +275,24 @@ export function nearestValidMsStandardWidth(width: number): number {
 }
 
 export interface NormalizableMsStandardConfig {
-  height: number;
   depth: number;
-  shelves: number;
   sections: readonly ShelvingSection[];
+}
+
+/**
+ * Repairs one section's own dimensions, using only that section's values:
+ * height first (the shelf ceiling depends on it), then the shelf count
+ * clamped to THAT height's ceiling, then the width (only ever touched when
+ * it is not a real MS Standard width at all). Returns the same object when
+ * nothing changed.
+ */
+export function normalizeMsStandardSection<T extends MsStandardSectionDimensions>(section: T): T {
+  const height = nearestValidMsStandardHeight(section.height);
+  const maxShelves = getMaxShelvesForHeight(height) ?? MS_STANDARD_ABSOLUTE_MAX_SHELVES;
+  const shelves = Math.min(Math.max(section.shelves, MS_STANDARD_MIN_SHELVES), maxShelves);
+  const width = isMsStandardWidth(section.width) ? section.width : nearestValidMsStandardWidth(section.width);
+  if (height === section.height && shelves === section.shelves && width === section.width) return section;
+  return { ...section, height, shelves, width };
 }
 
 /**
@@ -271,23 +303,49 @@ export interface NormalizableMsStandardConfig {
  * historical order/snapshot records, which must keep displaying exactly
  * what was actually ordered.
  *
- * Order matters and mirrors the matrix's own dependency direction (see the
- * module doc comment): height is fixed first (shelf count depends on it),
- * then each section's own width (only ever touched if it isn't a real MS
- * Standard width at all), then depth is re-picked to fit the resulting
- * widths (width is preserved; depth is what adapts), then shelves are
- * clamped to the now-known height's own ceiling.
+ * Section by section (normalizeMsStandardSection — never using another
+ * section's values): height, then that height's shelf ceiling, then the
+ * shelf count, then the width. Only then is the kit's shared depth
+ * re-picked to fit every resulting width (width is preserved; depth is what
+ * adapts).
  */
 export function normalizeMsStandardConfiguration<T extends NormalizableMsStandardConfig>(config: T): T {
-  const height = nearestValidMsStandardHeight(config.height);
-  const sections = config.sections.map((section) =>
-    isMsStandardWidth(section.width) ? section : { ...section, width: nearestValidMsStandardWidth(section.width) },
-  );
+  const sections = config.sections.map((section) => normalizeMsStandardSection(section));
   const depth = getAllowedDepthsForSections(sections).includes(config.depth)
     ? config.depth
     : (nearestValidMsStandardDepth(config.depth, sections) ?? config.depth);
-  const maxShelves = getMaxShelvesForHeight(height) ?? MS_STANDARD_ABSOLUTE_MAX_SHELVES;
-  const shelves = Math.min(Math.max(config.shelves, MS_STANDARD_MIN_SHELVES), maxShelves);
 
-  return { ...config, height, depth, shelves, sections };
+  return { ...config, depth, sections };
+}
+
+/**
+ * TRANSITIONAL UI ADAPTER (V2.2A). Today's configurator still has ONE height
+ * select and ONE shelf stepper that apply to every section at once; the
+ * per-section controls arrive in a later UI phase. These two helpers give
+ * that single control a range that is valid for every section:
+ *
+ *   - heights offered: those whose own ceiling fits every section's current
+ *     shelf count;
+ *   - shelf maximum: the lowest of the sections' own ceilings, so applying
+ *     one count to all sections never breaks any section's limit.
+ *
+ * With uniform sections (the only state the current UI produces) both are
+ * exactly the V2.1 values for the shared height/shelves.
+ */
+export function getAllowedHeightsForSections(sections: readonly Pick<ShelvingSection, 'shelves'>[]): number[] {
+  const mostShelves = sections.reduce((max, s) => Math.max(max, s.shelves), 0);
+  return getAllowedHeightsForShelfCount(mostShelves);
+}
+
+/** See getAllowedHeightsForSections. `undefined` when any section's height
+ * is not a real MS Standard height (never guesses a ceiling). */
+export function getSharedMaxShelvesForSections(sections: readonly Pick<ShelvingSection, 'height'>[]): number | undefined {
+  if (sections.length === 0) return undefined;
+  let lowest = Number.POSITIVE_INFINITY;
+  for (const section of sections) {
+    const ceiling = getMaxShelvesForHeight(section.height);
+    if (ceiling === undefined) return undefined;
+    lowest = Math.min(lowest, ceiling);
+  }
+  return lowest;
 }

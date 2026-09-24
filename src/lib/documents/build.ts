@@ -11,6 +11,7 @@ import {
   type OrderBuyerSnapshot,
   type OrderItemDocumentSnapshot,
 } from './snapshots';
+import { getMaxSectionHeight, sectionHeightsSummary, sectionShelvesSummary } from '@/lib/configurator/section-dimensions';
 
 /**
  * Persisted order + issuance → document model. Pure functions, no I/O.
@@ -194,17 +195,19 @@ export function formatDocumentDate(date: Date): string {
 /* Items                                                                       */
 /* -------------------------------------------------------------------------- */
 
+/** A section as stored on the order (V2.2A shape: each section owns its
+ * width, height and shelf count). */
 interface PersistedSection {
   width: number;
+  height: number;
+  shelves: number;
   rearWall?: boolean;
   leftWall?: boolean;
   rightWall?: boolean;
 }
 
 interface PersistedConfiguration {
-  height: number;
   depth: number;
-  shelves: number;
   loadCapacity?: number;
   sections: PersistedSection[];
 }
@@ -216,24 +219,26 @@ function readConfiguration(raw: unknown, index: number): PersistedConfiguration 
   const fail = () => new DocumentIntegrityError(`Позиция ${index}: сохранённая конфигурация не распознана.`);
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw fail();
   const c = raw as Record<string, unknown>;
-  if (typeof c.modelSlug !== 'string' || !isPositiveInt(c.height) || !isPositiveInt(c.depth) || !isPositiveInt(c.shelves)) {
+  if (typeof c.modelSlug !== 'string' || !isPositiveInt(c.depth)) {
     throw fail();
   }
   if (!Array.isArray(c.sections) || c.sections.length === 0) throw fail();
   const sections = c.sections.map((s) => {
-    if (!s || typeof s !== 'object' || !isPositiveInt((s as PersistedSection).width)) throw fail();
     const section = s as PersistedSection;
+    if (!s || typeof s !== 'object' || !isPositiveInt(section.width) || !isPositiveInt(section.height) || !isPositiveInt(section.shelves)) {
+      throw fail();
+    }
     return {
       width: section.width,
+      height: section.height,
+      shelves: section.shelves,
       rearWall: section.rearWall === true,
       leftWall: section.leftWall === true,
       rightWall: section.rightWall === true,
     };
   });
   return {
-    height: c.height,
     depth: c.depth,
-    shelves: c.shelves,
     loadCapacity: isPositiveInt(c.loadCapacity) ? c.loadCapacity : undefined,
     sections,
   };
@@ -314,6 +319,12 @@ function buildItem(
   const options = snapshot.options.map((o) => cleanText(o, 120)).filter(Boolean);
 
   const totalWidth = config.sections.reduce((sum, s) => sum + s.width, 0);
+  // Height/shelves are per section: one value when every section agrees,
+  // otherwise each section's own value in row order. The overall В×Ш×Г uses
+  // the row's tallest section.
+  const heights = sectionHeightsSummary(config.sections);
+  const shelves = sectionShelvesSummary(config.sections);
+  const overallHeight = getMaxSectionHeight(config.sections);
   const sectionWidths = config.sections.map((s) => s.width).join(' + ');
   const anyWalls = config.sections.some((s) => wallsText(s));
   const wallsSummary = anyWalls
@@ -324,12 +335,12 @@ function buildItem(
 
   const specs: DocumentField[] = [
     { label: 'Модель', value: modelName },
-    { label: 'Высота', value: `${config.height} мм` },
+    { label: 'Высота', value: `${heights} мм` },
     { label: 'Ширина', value: `${totalWidth} мм` },
     { label: 'Глубина', value: `${config.depth} мм` },
     { label: 'Секций', value: String(config.sections.length) },
     { label: config.sections.length > 1 ? 'Ширина секций' : 'Ширина секции', value: `${sectionWidths} мм` },
-    { label: 'Полок', value: String(config.shelves) },
+    { label: 'Полок', value: shelves },
   ];
   if (config.loadCapacity) specs.push({ label: 'Нагрузка на полку', value: `до ${config.loadCapacity} кг` });
   if (colorName) specs.push({ label: 'Цвет', value: colorName });
@@ -339,9 +350,9 @@ function buildItem(
   if (deliveryName) specs.push({ label: 'Доставка', value: deliveryName });
 
   const descriptionParts = [
-    `В×Ш×Г ${config.height}×${totalWidth}×${config.depth} мм`,
+    `В×Ш×Г ${overallHeight}×${totalWidth}×${config.depth} мм`,
     config.sections.length > 1 ? `секций: ${config.sections.length} (${sectionWidths} мм)` : 'секций: 1',
-    `полок: ${config.shelves}`,
+    `полок: ${shelves}`,
     config.loadCapacity ? `нагрузка на полку до ${config.loadCapacity} кг` : undefined,
     colorName ? `цвет: ${colorName}` : undefined,
     wallsSummary ? `стенки: ${wallsSummary}` : undefined,

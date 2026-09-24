@@ -4,6 +4,7 @@ import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { ShelvingPreview } from '@/components/configurator/ShelvingPreview';
 import type { ShelvingConfiguration } from '@/lib/types/domain';
+import { uniformRow, type UniformRowInput } from '../helpers/uniform-row';
 
 /**
  * Regression test for the "8 shelves look like one solid grey panel with
@@ -21,8 +22,8 @@ import type { ShelvingConfiguration } from '@/lib/types/domain';
  * top-surface polygon in DOM order.
  */
 
-function baseConfig(overrides: Partial<ShelvingConfiguration> = {}): ShelvingConfiguration {
-  return {
+function baseConfig(overrides: Partial<UniformRowInput> = {}): ShelvingConfiguration {
+  return uniformRow({
     modelSlug: 'ms-standard',
     height: 2000,
     depth: 400,
@@ -36,7 +37,7 @@ function baseConfig(overrides: Partial<ShelvingConfiguration> = {}): ShelvingCon
     deliveryId: 'delivery-pickup',
     quantity: 1,
     ...overrides,
-  };
+  });
 }
 
 /** Front-lip rects are the only `height="5"` rects in the whole render

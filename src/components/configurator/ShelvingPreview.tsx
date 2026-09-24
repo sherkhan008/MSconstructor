@@ -14,6 +14,7 @@ import { computeRowScale, layoutSectionsWithScale, computeBoundaryXs, applyLiveA
 import { useDimensionDrag } from './resize/useDimensionDrag';
 import { ResizeHandle } from './resize/ResizeHandle';
 import { MAX_SECTIONS, MIN_SECTIONS } from '@/store/configurator-store';
+import { getMaxSectionHeight, getMaxSectionShelves } from '@/lib/configurator/section-dimensions';
 import { resolveRackFill, shade } from './rack-colors';
 import { computeRenderDepthVec, SHELF_LIP_HEIGHT_PX } from './shelf-depth-projection';
 import { t } from '@/lib/i18n/format';
@@ -25,8 +26,9 @@ import { useLocale } from '@/components/i18n/LocaleProvider';
  * Built entirely from primitive shapes scaled to the customer's selections —
  * there is no per-configuration static image to keep in sync.
  *
- * Height and depth are global to the whole row; width and wall panels are
- * independent per section. Adjacent sections share a single pair of
+ * Depth is global to the whole row; width, height, shelves and wall panels
+ * belong to each section (the drawing still uses one row height/shelf set —
+ * see rowHeight/rowShelves below). Adjacent sections share a single pair of
  * front/rear posts at their boundary (the real product's bolt-on
  * construction), so an N-section row always draws N+1 post pairs, never 2N.
  * Rear posts are always drawn — they are the physical steel frame, not the
@@ -373,10 +375,18 @@ export function ShelvingPreview({
   const commit = onCommitDimension ?? noop;
 
   const activeSection = config.sections.find((s) => s.id === activeSectionId) ?? config.sections[0];
+  // TRANSITIONAL (V2.2A): height and shelves live on each section, but this
+  // preview still draws the row with one height and one shelf set (the
+  // per-section drawing comes with the per-section UI phase). It draws the
+  // tallest section and the most shelves — the row's envelope; the customer
+  // UI only produces uniform sections, where these equal every section's own
+  // values. A mixed configuration cannot be priced yet (see engine.ts).
+  const rowHeight = getMaxSectionHeight(config.sections);
+  const rowShelves = getMaxSectionShelves(config.sections);
 
   const heightDrag = useDimensionDrag({
     axis: 'height',
-    committedValue: config.height,
+    committedValue: rowHeight,
     allowedValues: allowedDimensions?.heights ?? NO_ALLOWED,
     containerRef,
     onCommit: commit,
@@ -462,7 +472,7 @@ export function ShelvingPreview({
 
   const heightPx = mmToPx('height', visualHeight) * RACK_SCALE;
   const top = FLOOR_Y - heightPx;
-  const shelfYs = useMemo(() => computeShelfYs(top, heightPx, config.shelves), [top, heightPx, config.shelves]);
+  const shelfYs = useMemo(() => computeShelfYs(top, heightPx, rowShelves), [top, heightPx, rowShelves]);
   const boundaryXs = useMemo(() => computeBoundaryXs(layout), [layout]);
   const frontHoleYs = useMemo(() => perforationYs(top, FLOOR_Y), [top]);
 
@@ -572,7 +582,7 @@ export function ShelvingPreview({
   // Both profiles are computed and published as custom properties; a media
   // query in globals.css decides which one the stage actually uses, so the
   // component never reads the viewport and there is nothing to hydrate.
-  const committedTop = FLOOR_Y - mmToPx('height', config.height) * RACK_SCALE;
+  const committedTop = FLOOR_Y - mmToPx('height', rowHeight) * RACK_SCALE;
   const cropTopEdge = Math.min(committedTop, top);
   const cropFor = (profile: FrameProfile) =>
     computeFramedCrop(
@@ -908,7 +918,7 @@ export function ShelvingPreview({
                from the front upright back to the rear plane. */}
           <line x1={depthOrigin.x} y1={depthOrigin.y} x2={depthEnd.x} y2={depthEnd.y} stroke={DRAW_LINE} strokeWidth={0.75} />
         </g>
-        <DimensionTag x={heightLabelPoint.x} y={heightLabelPoint.y} label={`${Math.round(heightDrag.snapTarget ?? config.height)}`} active={heightDrag.isDragging} orientation="vertical" />
+        <DimensionTag x={heightLabelPoint.x} y={heightLabelPoint.y} label={`${Math.round(heightDrag.snapTarget ?? rowHeight)}`} active={heightDrag.isDragging} orientation="vertical" />
         <DimensionTag x={depthEnd.x} y={depthEnd.y} label={`${config.depth}`} active={false} orientation="horizontal" testId="depth-dimension-tag" />
 
         {layout.map((section) => {
@@ -931,8 +941,8 @@ export function ShelvingPreview({
         <>
           <ResizeHandle
             axis="height"
-            ariaLabel={t(CF['CF-009'], locale, { H: config.height })}
-            value={config.height}
+            ariaLabel={t(CF['CF-009'], locale, { H: rowHeight })}
+            value={rowHeight}
             min={heightDrag.min}
             max={heightDrag.max}
             xPercent={(heightHandlePoint.x / VIEWBOX_W) * 100}
@@ -1046,13 +1056,13 @@ export function ShelvingPreview({
               top: `${(((top + FLOOR_Y) / 2) / VIEWBOX_H) * 100}%`,
             }}
           >
-            <button type="button" aria-label={t(CF['CF-019'], locale)} onClick={onIncreaseShelves} disabled={config.shelves >= maxShelves} className={CIRCLE_HIT}>
+            <button type="button" aria-label={t(CF['CF-019'], locale)} onClick={onIncreaseShelves} disabled={rowShelves >= maxShelves} className={CIRCLE_HIT}>
               <span aria-hidden="true" className={`${CIRCLE_DISC} ${DISC_SMALL} border-line-strong bg-surface`}>
                 +
               </span>
             </button>
-            <span className="mono relative z-10 text-xs font-semibold leading-none text-foreground">{config.shelves}</span>
-            <button type="button" aria-label={t(CF['CF-020'], locale)} onClick={onDecreaseShelves} disabled={config.shelves <= minShelves} className={CIRCLE_HIT}>
+            <span className="mono relative z-10 text-xs font-semibold leading-none text-foreground">{rowShelves}</span>
+            <button type="button" aria-label={t(CF['CF-020'], locale)} onClick={onDecreaseShelves} disabled={rowShelves <= minShelves} className={CIRCLE_HIT}>
               <span aria-hidden="true" className={`${CIRCLE_DISC} ${DISC_SMALL} border-line-strong bg-surface`}>
                 −
               </span>

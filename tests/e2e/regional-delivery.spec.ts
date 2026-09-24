@@ -18,10 +18,8 @@ const RAW_PREFIX = /\b(city|deliveryAddress|email|phone|items)\s*:/;
 
 const configuration = (deliveryId: string) => ({
   modelSlug: 'ms-standard',
-  height: 2000,
   depth: 500,
-  shelves: 5,
-  sections: [{ id: 'sec-1', width: 1000, rearWall: false, leftWall: false, rightWall: false }],
+  sections: [{ id: 'sec-1', width: 1000, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false }],
   loadCapacity: 150,
   shelfType: 'STANDARD',
   colorId: 'color-grey',
@@ -37,7 +35,7 @@ async function openConfiguratorWithDelivery(page: Page, deliveryId: string) {
   await page.evaluate((config) => {
     localStorage.setItem(
       'ms-shelving-configurator',
-      JSON.stringify({ state: { config, activeSectionId: config.sections[0].id }, version: 2 }),
+      JSON.stringify({ state: { config, activeSectionId: config.sections[0].id }, version: 3 }),
     );
   }, configuration(deliveryId));
   await page.reload();

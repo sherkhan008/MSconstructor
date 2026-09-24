@@ -35,7 +35,12 @@ async function gotoConfig(
   page: Page,
   { height = 2000, depth = 400, shelves = 5, sections = '1000:false:false:false' }: { height?: number; depth?: number; shelves?: number; sections?: string } = {},
 ) {
-  await page.goto(`/ru/configurator?model=ms-standard&height=${height}&depth=${depth}&shelves=${shelves}&sections=${sections}`);
+  // v2 share link: every section carries its own height and shelf count.
+  const v2Sections = sections
+    .split(',')
+    .map((token) => `${token.split(':')[0]}:${height}:${shelves}:0:0:0`)
+    .join(',');
+  await page.goto(`/ru/configurator?v=2&model=ms-standard&depth=${depth}&sections=${v2Sections}`);
   await expect(widthSelect(page)).toBeVisible();
 }
 

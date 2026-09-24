@@ -7,7 +7,7 @@ import {
   getRemainingKitCapacity,
   MAX_KITS_PER_ORDER,
 } from '@/lib/orders/limits';
-import { CART_STORAGE_KEY, useCartStore, type CartItem } from '@/store/cart-store';
+import { CART_STATE_VERSION, CART_STORAGE_KEY, migrateCartState, useCartStore, type CartItem } from '@/store/cart-store';
 import { DEFAULT_CONFIGURATION } from '@/store/configurator-store';
 import type { PublicPriceResult } from '@/lib/pricing/public-result';
 
@@ -147,7 +147,7 @@ describe('cart store — cross-tab freshness', () => {
 
   /** What another tab's persist() write looks like from this tab. */
   function otherTabWrites(items: CartItem[]) {
-    const value = JSON.stringify({ state: { items }, version: 1 });
+    const value = JSON.stringify({ state: { items }, version: CART_STATE_VERSION });
     window.localStorage.setItem(CART_STORAGE_KEY, value);
     window.dispatchEvent(new StorageEvent('storage', { key: CART_STORAGE_KEY, newValue: value, storageArea: window.localStorage }));
   }
@@ -166,5 +166,67 @@ describe('cart store — cross-tab freshness', () => {
     add(1);
     window.dispatchEvent(new StorageEvent('storage', { key: 'something-else', newValue: '{}', storageArea: window.localStorage }));
     expect(useCartStore.getState().items).toHaveLength(1);
+  });
+});
+
+describe('cart store — persisted cart policy (V2.2A, version 2)', () => {
+  /** A cart line as V2.1 (cart version 1) stored it: row-level height/shelves. */
+  function v1Item(id: string, quantity: number, overrides: Record<string, unknown> = {}) {
+    const { sections, ...rest } = DEFAULT_CONFIGURATION;
+    return {
+      id,
+      modelSlug: 'ms-standard',
+      modelName: 'MS Стандарт',
+      configuration: {
+        ...rest,
+        height: 2200,
+        shelves: 6,
+        quantity,
+        sections: sections.map(({ height: _h, shelves: _s, ...section }) => ({ ...section, id: `${id}-s` })),
+        ...overrides,
+      },
+      priceSnapshot: { breakdown: { total: 1 } },
+      addedAt: '2026-09-01T00:00:00.000Z',
+    };
+  }
+
+  it('is version 2', () => {
+    expect(CART_STATE_VERSION).toBe(2);
+  });
+
+  it('MIGRATES a V2.1 cart: height/shelves copied into every section, snapshot cleared for a server re-price', () => {
+    const migrated = migrateCartState({ items: [v1Item('a', 2), v1Item('b', 3)] }, 1);
+    expect(migrated.items.map((i) => i.id)).toEqual(['a', 'b']);
+    for (const item of migrated.items) {
+      expect(item.configuration).not.toHaveProperty('height');
+      expect(item.configuration).not.toHaveProperty('shelves');
+      expect(item.configuration.sections.every((s) => s.height === 2200 && s.shelves === 6)).toBe(true);
+      expect(item.priceSnapshot).toBeNull();
+    }
+    // Quantities are untouched: Σ quantity = 5, the limit is neither weakened nor re-applied here.
+    expect(getPhysicalKitCount(migrated.items)).toBe(5);
+  });
+
+  it('RESETS the whole test cart when any line is malformed (never partially kept)', () => {
+    expect(migrateCartState({ items: [v1Item('a', 1), v1Item('b', 1, { height: 'x' })] }, 1)).toEqual({ items: [] });
+    expect(migrateCartState({ items: [v1Item('a', 1, { shelves: undefined })] }, 1)).toEqual({ items: [] });
+    expect(migrateCartState({ items: 'garbage' }, 1)).toEqual({ items: [] });
+    expect(migrateCartState(null, 1)).toEqual({ items: [] });
+    expect(migrateCartState({ items: [v1Item('a', 1)] }, 0)).toEqual({ items: [] });
+  });
+
+  it('keeps an over-limit V2.1 cart intact after migration (the UI and order API still enforce Σ ≤ 5)', () => {
+    const migrated = migrateCartState({ items: [v1Item('a', 4), v1Item('b', 3)] }, 1);
+    expect(getPhysicalKitCount(migrated.items)).toBe(7);
+    expect(exceedsKitLimit(migrated.items)).toBe(true);
+  });
+
+  it('hydrates a V2.1 cart from storage through the migration', async () => {
+    window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify({ state: { items: [v1Item('a', 1)] }, version: 1 }));
+    await useCartStore.persist.rehydrate();
+    const [item] = useCartStore.getState().items;
+    expect(item.id).toBe('a');
+    expect(item.configuration.sections[0]).toMatchObject({ height: 2200, shelves: 6 });
+    expect(JSON.parse(window.localStorage.getItem(CART_STORAGE_KEY) ?? '{}').version).toBe(CART_STATE_VERSION);
   });
 });

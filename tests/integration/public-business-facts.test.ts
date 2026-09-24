@@ -191,10 +191,8 @@ describe('configurator first-run hint', () => {
     const { ShelvingPreview } = await import('@/components/configurator/ShelvingPreview');
     const config: ShelvingConfiguration = {
       modelSlug: 'ms-standard',
-      height: 2000,
       depth: 400,
-      shelves: 4,
-      sections: [{ id: 'sec-1', width: 1000, rearWall: false, leftWall: false, rightWall: false }],
+      sections: [{ id: 'sec-1', width: 1000, height: 2000, shelves: 4, rearWall: false, leftWall: false, rightWall: false }],
       loadCapacity: 150,
       shelfType: 'STANDARD',
       colorId: 'color-grey',

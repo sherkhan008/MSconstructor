@@ -4,6 +4,7 @@ import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { ShelvingPreview } from '@/components/configurator/ShelvingPreview';
 import type { ShelvingConfiguration } from '@/lib/types/domain';
+import { uniformRow, type UniformRowInput } from '../helpers/uniform-row';
 
 /**
  * Regression test for the "shelf stops short of the rear uprights" bug: the
@@ -15,8 +16,8 @@ import type { ShelvingConfiguration } from '@/lib/types/domain';
  * depth, not a hardcoded pixel value tuned for one case.
  */
 
-function baseConfig(overrides: Partial<ShelvingConfiguration> = {}): ShelvingConfiguration {
-  return {
+function baseConfig(overrides: Partial<UniformRowInput> = {}): ShelvingConfiguration {
+  return uniformRow({
     modelSlug: 'ms-standard',
     height: 2000,
     depth: 400,
@@ -30,7 +31,7 @@ function baseConfig(overrides: Partial<ShelvingConfiguration> = {}): ShelvingCon
     deliveryId: 'delivery-pickup',
     quantity: 1,
     ...overrides,
-  };
+  });
 }
 
 function num(el: Element, attr: string): number {

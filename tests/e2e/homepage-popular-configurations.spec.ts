@@ -84,11 +84,11 @@ for (const [index, depth] of [300, 400, 600].entries()) {
     await page.waitForURL(/\/configurator\?/);
 
     const params = new URL(page.url()).searchParams;
+    expect(params.get('v')).toBe('2');
     expect(params.get('model')).toBe('ms-standard');
-    expect(params.get('height')).toBe(dims.height);
     expect(params.get('depth')).toBe(dims.depth);
-    expect(params.get('shelves')).toBe(dims.shelves);
-    expect(params.get('sections')).toContain(dims.width);
+    // Each section carries its own width:height:shelves (V2.2A share-link format).
+    expect(params.get('sections')).toBe(`${dims.width}:${dims.height}:${dims.shelves}:0:0:0`);
   });
 }
 

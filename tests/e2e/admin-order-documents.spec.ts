@@ -347,10 +347,8 @@ test('a later order from the same customer with new details does not change an e
           {
             configuration: {
               modelSlug: 'ms-standard',
-              height: 2000,
               depth: 500,
-              shelves: 5,
-              sections: [{ id: 'sec-1', width: 1000, rearWall: false, leftWall: false, rightWall: false }],
+              sections: [{ id: 'sec-1', width: 1000, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false }],
               loadCapacity: 150,
               shelfType: 'STANDARD',
               colorId: 'color-grey',

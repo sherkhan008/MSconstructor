@@ -6,11 +6,12 @@ import type { PublicCatalog } from '@/lib/data/public-catalog';
 import type { ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
 import {
   getAllowedDepthsForSections,
-  getAllowedHeightsForShelfCount,
+  getAllowedHeightsForSections,
   getAllowedWidthsForDepth,
-  getMaxShelvesForHeight,
+  getSharedMaxShelvesForSections,
   MS_STANDARD_MIN_SHELVES,
 } from '@/lib/pricing/ms-standard-compatibility';
+import { getMaxSectionHeight, getMaxSectionShelves } from '@/lib/configurator/section-dimensions';
 import { t } from '@/lib/i18n/format';
 import { dimensionOptionLabel, loadCapacityOptionLabel } from '@/lib/i18n/catalog-labels';
 import { CF } from '@/lib/i18n/strings';
@@ -36,6 +37,8 @@ export function ParametersSectionsTable({ catalog, onReset }: { catalog: PublicC
   const removeSection = useConfiguratorStore((s) => s.removeSection);
   const updateSection = useConfiguratorStore((s) => s.updateSection);
   const setField = useConfiguratorStore((s) => s.setField);
+  const setAllSectionHeights = useConfiguratorStore((s) => s.setAllSectionHeights);
+  const setAllSectionShelves = useConfiguratorStore((s) => s.setAllSectionShelves);
   const locale = useLocale();
 
   const model = catalog.models.find((m) => m.slug === config.modelSlug);
@@ -67,7 +70,14 @@ export function ParametersSectionsTable({ catalog, onReset }: { catalog: PublicC
     <div className="border border-line bg-surface text-sm">
       <div className="p-4">
         <h2 className="font-display text-lg leading-tight">{t(CF['CF-024'], locale)}</h2>
-        <RowParamsFields config={config} model={model} catalog={catalog} setField={setField} />
+        <RowParamsFields
+          config={config}
+          model={model}
+          catalog={catalog}
+          setField={setField}
+          setAllSectionHeights={setAllSectionHeights}
+          setAllSectionShelves={setAllSectionShelves}
+        />
       </div>
 
       <ul className="border-t border-line">
@@ -164,23 +174,36 @@ function RowParamsFields({
   model,
   catalog,
   setField,
+  setAllSectionHeights,
+  setAllSectionShelves,
 }: {
   config: ShelvingConfiguration;
   model: ProductModel;
   catalog: PublicCatalog;
   setField: <K extends keyof ShelvingConfiguration>(key: K, value: ShelvingConfiguration[K]) => void;
+  setAllSectionHeights: (height: number) => void;
+  setAllSectionShelves: (shelves: number) => void;
 }) {
   // MS Standard's height/depth/shelf controls are cross-dimensional (see
   // ms-standard-compatibility.ts): the height select only offers heights
   // whose own shelf ceiling can fit the CURRENT shelf count, the depth
   // select only offers depths valid for EVERY current section's width, and
-  // the shelf stepper's own max follows the CURRENT height. Every other
-  // model keeps its simple flat-list behaviour — it has none of these
+  // the shelf stepper's own max follows every section's CURRENT height. Every
+  // other model keeps its simple flat-list behaviour — it has none of these
   // cross-rules today.
+  //
+  // TRANSITIONAL (V2.2A): height and shelves live on each section, but this
+  // panel still offers one height select and one shelf stepper; each applies
+  // its value to ALL sections. The row's height/shelf count shown here is the
+  // tallest section / most shelves — with the uniform sections this UI
+  // produces, that is simply every section's value. Per-section controls
+  // come in a later UI phase.
   const isMsStandard = model.slug === 'ms-standard';
-  const allowedHeights = isMsStandard ? getAllowedHeightsForShelfCount(config.shelves) : model.heights;
+  const rowHeight = getMaxSectionHeight(config.sections);
+  const rowShelves = getMaxSectionShelves(config.sections);
+  const allowedHeights = isMsStandard ? getAllowedHeightsForSections(config.sections) : model.heights;
   const allowedDepths = isMsStandard ? getAllowedDepthsForSections(config.sections) : model.depths;
-  const shelvesMax = isMsStandard ? (getMaxShelvesForHeight(config.height) ?? model.maxShelves) : model.maxShelves;
+  const shelvesMax = isMsStandard ? (getSharedMaxShelvesForSections(config.sections) ?? model.maxShelves) : model.maxShelves;
   const shelvesMin = isMsStandard ? MS_STANDARD_MIN_SHELVES : model.minShelves;
   const locale = useLocale();
 
@@ -188,7 +211,7 @@ function RowParamsFields({
     <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-3">
       <label className="flex min-w-0 flex-col gap-1.5">
         <span className={FIELD_LABEL}>{t(CF['CF-030'], locale)}</span>
-        <select value={config.height} onChange={(e) => setField('height', Number(e.target.value))} className={SELECT_CLASS}>
+        <select value={rowHeight} onChange={(e) => setAllSectionHeights(Number(e.target.value))} className={SELECT_CLASS}>
           {catalog.heights
             .filter((h) => allowedHeights.includes(h.value))
             .map((h) => (
@@ -214,7 +237,7 @@ function RowParamsFields({
 
       <div className="flex min-w-0 flex-col gap-1.5">
         <span className={FIELD_LABEL}>{t(CF['CF-032'], locale)}</span>
-        <NumberStepper value={config.shelves} min={shelvesMin} max={shelvesMax} onChange={(v) => setField('shelves', v)} testId="shelf-count" />
+        <NumberStepper value={rowShelves} min={shelvesMin} max={shelvesMax} onChange={(v) => setAllSectionShelves(v)} testId="shelf-count" />
       </div>
 
       {/* Load options are words, not a bare number: sans face, and a full

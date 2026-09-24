@@ -39,8 +39,8 @@ test('each popular price and cart item matches its exact four-shelf server confi
     const card = page.locator(cardSelector).nth(index);
     const href = await card.getByRole('link', { name: 'Настроить', exact: true }).getAttribute('href');
     const config = parseConfigurationFromSearchParams(new URL(href!, page.url()).searchParams);
-    expect(config).toMatchObject({ modelSlug: 'ms-standard', height: 2000, depth, shelves: 4 });
-    expect(config.sections?.map(section => section.width)).toEqual([1000]);
+    expect(config).toMatchObject({ modelSlug: 'ms-standard', depth });
+    expect(config.sections?.map(({ width, height, shelves }) => ({ width, height, shelves }))).toEqual([{ width: 1000, height: 2000, shelves: 4 }]);
     const response = await request.post('/api/pricing/calculate', { data: { accessories: [], ...config } });
     const price = await response.json();
     expect(price.ok).toBe(true);
@@ -49,13 +49,21 @@ test('each popular price and cart item matches its exact four-shelf server confi
     totals.push(rendered);
     const submitted = page.waitForRequest(req => req.url().endsWith('/api/pricing/calculate') && req.method() === 'POST');
     await card.getByRole('button', { name: 'В корзину' }).click();
-    expect((await submitted).postDataJSON()).toMatchObject({ height: 2000, depth, shelves: 4, sections: [{ width: 1000 }] });
+    const submittedConfig = (await submitted).postDataJSON();
+    expect(submittedConfig).toMatchObject({ depth, sections: [{ width: 1000, height: 2000, shelves: 4 }] });
+    expect(submittedConfig).not.toHaveProperty('height');
+    expect(submittedConfig).not.toHaveProperty('shelves');
     await expect(card.getByRole('button', { name: 'Добавлено ✓' })).toBeVisible();
   }
   console.info(`Authoritative rendered popular prices: ${totals.join(', ')}`);
   const items = await page.evaluate(() => JSON.parse(localStorage.getItem('ms-shelving-cart')!).state.items);
   expect(items).toHaveLength(3);
-  expect(items.map((item: { configuration: { depth: number; shelves: number } }) => [item.configuration.depth, item.configuration.shelves])).toEqual([[300, 4], [400, 4], [600, 4]]);
+  expect(
+    items.map((item: { configuration: { depth: number; sections: { shelves: number }[] } }) => [
+      item.configuration.depth,
+      item.configuration.sections.map((s) => s.shelves),
+    ]),
+  ).toEqual([[300, [4]], [400, [4]], [600, [4]]]);
   for (const route of ['/ru/cart', '/ru/order']) {
     await page.goto(route);
     if (route === '/ru/cart') await expect(page.locator('main').getByText('4 полки').first()).toBeVisible();

@@ -12,9 +12,11 @@ function generateSectionId(): string {
  * CatalogProduct only stores the dimensions/shelves/load a card displays —
  * this fills in the remaining defaults (assembly, delivery, walls, quantity)
  * so the result can be run through the same calculatePrice() every other
- * entry point uses. `product.sections` is a plain count (identical-width
- * sections) here — the live configurator's independent per-section widths
- * only start diverging once the customer opens "Настроить".
+ * entry point uses. `product.sections` is a plain count here: today's
+ * catalog products are uniform, so the product's width, height and shelf
+ * count are copied into every generated section (each section owns its own
+ * values — there is no row-level height/shelves). Per-section values only
+ * start diverging once the customer opens "Настроить".
  */
 export function catalogProductToConfiguration(
   product: CatalogProduct,
@@ -22,12 +24,12 @@ export function catalogProductToConfiguration(
 ): ShelvingConfiguration {
   return {
     modelSlug: product.modelSlug,
-    height: product.height,
     depth: product.depth,
-    shelves: product.shelves,
     sections: Array.from({ length: Math.max(1, product.sections) }, () => ({
       id: generateSectionId(),
       width: product.width,
+      height: product.height,
+      shelves: product.shelves,
       rearWall: false,
       leftWall: false,
       rightWall: false,

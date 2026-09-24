@@ -5,6 +5,7 @@ import { calculatePrice } from '@/lib/pricing';
 import type { ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
 import { POST as postOrder } from '@/app/api/orders/route';
 import { clearMemoryOrders, countMemoryOrders } from '@/lib/orders/store';
+import { uniformRow, type LooseSection, type UniformRowInput } from '../helpers/uniform-row';
 
 /**
  * Proves the authoritative MS Standard matrix is enforced *server-side*,
@@ -17,13 +18,13 @@ import { clearMemoryOrders, countMemoryOrders } from '@/lib/orders/store';
  */
 
 let sectionCounter = 0;
-function section(width: number, overrides: Partial<ShelvingSection> = {}): ShelvingSection {
+function section(width: number, overrides: Partial<ShelvingSection> = {}): LooseSection {
   sectionCounter += 1;
   return { id: `sec-${sectionCounter}`, width, rearWall: false, leftWall: false, rightWall: false, ...overrides };
 }
 
-function baseConfig(overrides: Partial<ShelvingConfiguration>): ShelvingConfiguration {
-  return {
+function baseConfig(overrides: Partial<UniformRowInput>): ShelvingConfiguration {
+  return uniformRow({
     modelSlug: 'ms-standard',
     height: 2000,
     depth: 400,
@@ -37,7 +38,7 @@ function baseConfig(overrides: Partial<ShelvingConfiguration>): ShelvingConfigur
     deliveryId: 'delivery-pickup',
     quantity: 1,
     ...overrides,
-  };
+  });
 }
 
 describe('server-authoritative MS Standard compatibility', () => {
@@ -214,7 +215,7 @@ describe('invalid order submissions create zero Order rows (task §21)', () => {
     return postOrder(request);
   }
 
-  function orderBodyWithConfig(configOverrides: Partial<ShelvingConfiguration>) {
+  function orderBodyWithConfig(configOverrides: Partial<UniformRowInput>) {
     return {
       fullName: 'Тест Тестов',
       phone: '+77001234567',

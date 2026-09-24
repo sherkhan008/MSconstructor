@@ -4,9 +4,13 @@ import {
   DEFAULT_CONFIGURATION,
   MAX_SECTIONS,
   MIN_SECTIONS,
+  CONFIGURATOR_STATE_VERSION,
   migrateConfiguratorState,
+  readPersistedConfiguratorState,
   useConfiguratorStore,
 } from '@/store/configurator-store';
+import { isValidMsStandardConfiguration } from '@/lib/pricing/ms-standard-compatibility';
+import { shelvingConfigurationSchema } from '@/lib/pricing/schema';
 import { LEGACY_MAX_SECTIONS } from '@/lib/configurator/limits';
 
 function resetStore() {
@@ -94,7 +98,7 @@ describe('configurator store — section actions', () => {
     expect(state.config.sections.find((s) => s.id === first.id)?.width).toBe(first.width);
   });
 
-  it('duplicateSection copies wall selections and width, not the id', () => {
+  it('duplicateSection copies wall selections and width, not the id (V2.1 behaviour kept)', () => {
     const { updateSection, duplicateSection } = useConfiguratorStore.getState();
     const originalId = useConfiguratorStore.getState().config.sections[0].id;
     updateSection(originalId, { width: 1200, leftWall: true });
@@ -107,74 +111,176 @@ describe('configurator store — section actions', () => {
   });
 });
 
-describe('configurator store — persistence migration', () => {
-  it('migrates a legacy v1 state (global width + section count) into per-section widths', () => {
-    const legacy = {
+describe('configurator store — per-section height and shelves (V2.2A)', () => {
+  beforeEach(resetStore);
+
+  it('DEFAULT_CONFIGURATION: the section owns width/height/shelves, no row-level values', () => {
+    expect(DEFAULT_CONFIGURATION).not.toHaveProperty('height');
+    expect(DEFAULT_CONFIGURATION).not.toHaveProperty('shelves');
+    expect(DEFAULT_CONFIGURATION.sections).toHaveLength(1);
+    const [section] = DEFAULT_CONFIGURATION.sections;
+    expect(section).toMatchObject({ width: 1000, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false });
+    expect(isValidMsStandardConfiguration(DEFAULT_CONFIGURATION)).toEqual([]);
+    expect(shelvingConfigurationSchema.safeParse(DEFAULT_CONFIGURATION).success).toBe(true);
+  });
+
+  it('addSection copies the template section’s width, height and shelves (walls start off)', () => {
+    const id = useConfiguratorStore.getState().config.sections[0].id;
+    useConfiguratorStore.getState().updateSection(id, { width: 700, height: 1500, shelves: 6, rearWall: true });
+    useConfiguratorStore.getState().addSection();
+    const [, added] = useConfiguratorStore.getState().config.sections;
+    expect(added).toMatchObject({ width: 700, height: 1500, shelves: 6, rearWall: false, leftWall: false, rightWall: false });
+    expect(added.id).not.toBe(id);
+  });
+
+  it('addSection copies from the ACTIVE section, not always the first', () => {
+    const { addSection, updateSection } = useConfiguratorStore.getState();
+    addSection();
+    const second = useConfiguratorStore.getState().config.sections[1];
+    updateSection(second.id, { height: 3000, shelves: 8 });
+    useConfiguratorStore.getState().setActiveSectionId(second.id);
+    useConfiguratorStore.getState().addSection();
+    const third = useConfiguratorStore.getState().config.sections[2];
+    expect([third.height, third.shelves]).toEqual([3000, 8]);
+  });
+
+  it('duplicateSection copies width, height, shelves and walls with a new id', () => {
+    const id = useConfiguratorStore.getState().config.sections[0].id;
+    useConfiguratorStore.getState().updateSection(id, { width: 1200, height: 1000, shelves: 3, leftWall: true });
+    useConfiguratorStore.getState().duplicateSection(id);
+    const [original, copy] = useConfiguratorStore.getState().config.sections;
+    const { id: _a, ...originalRest } = original;
+    const { id: _b, ...copyRest } = copy;
+    expect(copyRest).toEqual(originalRest);
+    expect(copy.id).not.toBe(original.id);
+  });
+
+  it('no action creates a sixth section', () => {
+    const state = () => useConfiguratorStore.getState();
+    for (let i = 0; i < 10; i += 1) state().addSection();
+    for (let i = 0; i < 10; i += 1) state().duplicateSection(state().config.sections[0].id);
+    expect(state().config.sections).toHaveLength(MAX_SECTIONS);
+  });
+
+  it('setAllSectionHeights applies one height to every section (transitional single control)', () => {
+    const { addSection, setAllSectionHeights } = useConfiguratorStore.getState();
+    addSection();
+    addSection();
+    setAllSectionHeights(2500);
+    expect(useConfiguratorStore.getState().config.sections.map((s) => s.height)).toEqual([2500, 2500, 2500]);
+    expect(useConfiguratorStore.getState().config).not.toHaveProperty('height');
+  });
+
+  it('setAllSectionShelves applies one count, never above each section’s own height ceiling', () => {
+    const { addSection, updateSection, setAllSectionShelves } = useConfiguratorStore.getState();
+    addSection();
+    const [a, b] = useConfiguratorStore.getState().config.sections;
+    updateSection(a.id, { height: 1000, shelves: 4 });
+    updateSection(b.id, { height: 3000, shelves: 4 });
+    setAllSectionShelves(7);
+    // 1000 mm keeps its own ceiling (4); it never borrows 3000 mm's 8.
+    expect(useConfiguratorStore.getState().config.sections.map((s) => s.shelves)).toEqual([4, 7]);
+    expect(useConfiguratorStore.getState().config).not.toHaveProperty('shelves');
+  });
+});
+
+function v3State(overrides: Record<string, unknown> = {}) {
+  return { config: { ...DEFAULT_CONFIGURATION, ...overrides }, activeSectionId: DEFAULT_CONFIGURATION.sections[0].id };
+}
+
+describe('configurator store — persisted state policy (v3)', () => {
+  it('uses version 3', () => {
+    expect(CONFIGURATOR_STATE_VERSION).toBe(3);
+  });
+
+  it('round-trips a current v3 state unchanged', () => {
+    const sections = [
+      { id: 'p', width: 700, height: 1500, shelves: 4, rearWall: true, leftWall: false, rightWall: false },
+      { id: 'q', width: 1000, height: 1500, shelves: 4, rearWall: false, leftWall: false, rightWall: true },
+    ];
+    const stored = JSON.parse(JSON.stringify({ config: { ...DEFAULT_CONFIGURATION, depth: 500, sections }, activeSectionId: 'q' }));
+    const loaded = readPersistedConfiguratorState(stored);
+    expect(loaded).toEqual(stored);
+    expect(migrateConfiguratorState(stored, 3)).toEqual(stored);
+  });
+
+  it('keeps a valid activeSectionId and repairs a stale one', () => {
+    expect(readPersistedConfiguratorState({ ...v3State(), activeSectionId: 'gone' }).activeSectionId).toBe(
+      DEFAULT_CONFIGURATION.sections[0].id,
+    );
+  });
+
+  it('MIGRATES a V2.1 (v2) state: its row-level height/shelves are copied into every section', () => {
+    const v2 = {
       config: {
-        modelSlug: 'ms-standard',
-        configurationType: 'STARTER_WITH_EXTENSIONS',
-        height: 2200,
-        width: 1200,
-        depth: 500,
-        shelves: 4,
-        sections: 3,
-        loadCapacity: 150,
-        shelfType: 'STANDARD',
-        colorId: 'color-grey',
-        rear: 'CROSS_BRACE',
-        side: 'NONE',
-        accessories: [],
-        assemblyId: 'assembly-self',
-        deliveryId: 'delivery-pickup',
-        quantity: 1,
+        ...DEFAULT_CONFIGURATION,
+        height: 2500,
+        shelves: 6,
+        depth: 600,
+        sections: [
+          { id: 'a', width: 1000, rearWall: true, leftWall: false, rightWall: false },
+          { id: 'b', width: 700, rearWall: false, leftWall: false, rightWall: true },
+        ],
       },
-      step: 3,
+      activeSectionId: 'b',
     };
-
-    const migrated = migrateConfiguratorState(legacy, 1);
-    expect(migrated.config.sections.length).toBe(3);
-    expect(migrated.config.sections.every((s) => s.width === 1200)).toBe(true);
-    expect(migrated.config.height).toBe(2200);
-    expect(migrated.config.depth).toBe(500);
-    expect(migrated.activeSectionId).toBe(migrated.config.sections[0].id);
-    // Legacy-only fields must not leak into the new shape.
-    expect('width' in migrated.config).toBe(false);
-    expect('rear' in migrated.config).toBe(false);
-    expect('configurationType' in migrated.config).toBe(false);
+    const migrated = migrateConfiguratorState(v2, 2);
+    expect(migrated.config).not.toHaveProperty('height');
+    expect(migrated.config).not.toHaveProperty('shelves');
+    expect(migrated.config.depth).toBe(600);
+    expect(migrated.config.sections).toEqual([
+      { id: 'a', width: 1000, height: 2500, shelves: 6, rearWall: true, leftWall: false, rightWall: false },
+      { id: 'b', width: 700, height: 2500, shelves: 6, rearWall: false, leftWall: false, rightWall: true },
+    ]);
+    expect(migrated.activeSectionId).toBe('b');
   });
 
-  it('caps an impossible legacy section count at the old parse ceiling instead of crashing', () => {
-    const legacy = { config: { width: 1000, sections: 25 } };
-    const migrated = migrateConfiguratorState(legacy, 1);
-    expect(migrated.config.sections.length).toBe(LEGACY_MAX_SECTIONS);
-  });
-
-  it('keeps a legacy 6–10 section row intact instead of truncating it to MAX_SECTIONS', () => {
-    const migrated = migrateConfiguratorState({ config: { width: 1000, sections: 8 } }, 1);
-    expect(migrated.config.sections.length).toBe(8);
+  it('keeps a V2.1 row of 6–10 sections intact (shown as over the limit, never truncated)', () => {
+    const sections = Array.from({ length: 8 }, (_, i) => ({ id: `s${i}`, width: 1000, rearWall: false, leftWall: false, rightWall: false }));
+    const migrated = migrateConfiguratorState({ config: { ...DEFAULT_CONFIGURATION, height: 2000, shelves: 5, sections } }, 2);
+    expect(migrated.config.sections).toHaveLength(8);
     expect(migrated.config.sections.length).toBeGreaterThan(MAX_SECTIONS);
+    expect(migrated.config.sections.length).toBeLessThanOrEqual(LEGACY_MAX_SECTIONS);
   });
 
-  it('falls back to the default configuration for garbage persisted state rather than throwing', () => {
-    expect(() => migrateConfiguratorState(null, 1)).not.toThrow();
-    expect(() => migrateConfiguratorState(undefined, 1)).not.toThrow();
-    expect(() => migrateConfiguratorState('not an object', 1)).not.toThrow();
-    expect(() => migrateConfiguratorState({ config: { sections: 'garbage' } }, 1)).not.toThrow();
-
-    const migrated = migrateConfiguratorState({ nonsense: true }, 1);
-    expect(migrated.config.sections.length).toBeGreaterThanOrEqual(1);
+  it('RESETS a malformed V2.1 state instead of guessing', () => {
+    for (const config of [
+      { ...DEFAULT_CONFIGURATION, height: 'tall', shelves: 5 },
+      { ...DEFAULT_CONFIGURATION, height: 2000 },
+      { ...DEFAULT_CONFIGURATION, height: 2000, shelves: 5, sections: 'garbage' },
+      { ...DEFAULT_CONFIGURATION, height: 2000, shelves: 5, sections: [{ id: 'a', width: -1, rearWall: false, leftWall: false, rightWall: false }] },
+    ]) {
+      expect(migrateConfiguratorState({ config }, 2).config).toBe(DEFAULT_CONFIGURATION);
+    }
   });
 
-  it('is a no-op for an already-current v2 state', () => {
-    const current = { config: DEFAULT_CONFIGURATION, activeSectionId: DEFAULT_CONFIGURATION.sections[0].id };
-    const migrated = migrateConfiguratorState(current, 2);
-    expect(migrated.config.sections.length).toBe(1);
-    expect(migrated.activeSectionId).toBe(DEFAULT_CONFIGURATION.sections[0].id);
+  it('RESETS a pre-sections v1 / unversioned state to the default', () => {
+    const legacy = { config: { modelSlug: 'ms-standard', height: 2200, width: 1200, depth: 500, shelves: 4, sections: 3 }, step: 3 };
+    expect(migrateConfiguratorState(legacy, 1).config).toBe(DEFAULT_CONFIGURATION);
+    expect(migrateConfiguratorState(legacy, 0).config).toBe(DEFAULT_CONFIGURATION);
   });
 
-  it('repairs a v2 state whose activeSectionId no longer matches any section', () => {
-    const stale = { config: DEFAULT_CONFIGURATION, activeSectionId: 'does-not-exist' };
-    const migrated = migrateConfiguratorState(stale, 2);
-    expect(migrated.activeSectionId).toBe(migrated.config.sections[0].id);
+  it('RESETS a malformed current-version state (merge runs on every hydration)', () => {
+    const bad = [
+      null,
+      undefined,
+      'not an object',
+      { nonsense: true },
+      v3State({ sections: [] }),
+      v3State({ sections: [{ id: 'a', width: 1000, rearWall: false, leftWall: false, rightWall: false }] }), // no height/shelves
+      v3State({ sections: [{ ...DEFAULT_CONFIGURATION.sections[0], height: 2000.5 }] }),
+      v3State({ sections: [{ ...DEFAULT_CONFIGURATION.sections[0], shelves: '5' }] }),
+      v3State({ sections: [DEFAULT_CONFIGURATION.sections[0], DEFAULT_CONFIGURATION.sections[0]] }), // duplicate ids
+      v3State({ height: 2000 }), // a stale row-level value is not silently mixed in
+      v3State({ depth: null }),
+      v3State({ accessories: 'x' }),
+      v3State({ accessories: [{ accessoryId: 'acc-cross-brace', quantity: 1, sectionId: 7 }] }),
+      v3State({ metalFootPad: 'yes' }),
+      v3State({ promoCode: 42 }),
+    ];
+    for (const state of bad) {
+      expect(() => migrateConfiguratorState(state, 3)).not.toThrow();
+      expect(readPersistedConfiguratorState(state).config).toBe(DEFAULT_CONFIGURATION);
+    }
   });
 });

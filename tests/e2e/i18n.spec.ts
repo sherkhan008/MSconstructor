@@ -93,7 +93,7 @@ test('Kazakh pages use Kazakh chrome and Russian pages Russian chrome', async ({
 
 test('a configured rack, its price and every setting survive a language switch', async ({ page }) => {
   const query =
-    'model=ms-standard&height=1800&depth=400&shelves=4&sections=1000:1:0:0,700:0:1:1&load=150&shelfType=STANDARD&color=color-grey&assembly=assembly-professional&delivery=delivery-pickup&qty=2';
+    'v=2&model=ms-standard&depth=400&sections=1000:1800:4:1:0:0,700:1800:4:0:1:1&load=150&shelfType=STANDARD&color=color-grey&assembly=assembly-professional&delivery=delivery-pickup&qty=2';
   await page.goto(`/configurator?${query}`);
   const kkTotal = await configuratorTotal(page);
   // An edit made on the page (not in the URL) must survive too.
@@ -187,7 +187,7 @@ test.describe('checkout in Kazakh', () => {
 
   test('the four-city delivery rule is explained in Kazakh', async ({ page }, testInfo) => {
     await isolateOrderRequests(page, prefix, testInfo);
-    await page.goto('/configurator?model=ms-standard&height=2000&depth=400&shelves=5&sections=1000:0:0:0&delivery=delivery-city');
+    await page.goto('/configurator?v=2&model=ms-standard&depth=400&sections=1000:2000:5:0:0:0&delivery=delivery-city');
     await configuratorTotal(page);
     await page.getByRole('button', { name: kk(CF['CF-066']) }).click();
     await page.goto('/order');

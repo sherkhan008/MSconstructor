@@ -284,32 +284,40 @@ export interface ConfigurationAccessorySelection {
 }
 
 /**
- * One section of the shelving row. Width is independent per section; wall
- * panels are independent per section too. Height and depth are deliberately
- * NOT here — they are global to the whole row (see ShelvingConfiguration).
+ * One physically independent section of the shelving row. Every section owns
+ * its own width, height, shelf count and wall panels (Configurator V2.2A).
+ * Depth, load capacity, shelf type and colour stay kit-wide — see
+ * ShelvingConfiguration.
+ *
+ * Pricing note (transitional, V2.2A → V2.2B): the domain can describe
+ * sections of different heights/shelf counts, but the BOM still prices a
+ * multi-section row with shared uprights, which is only meaningful when every
+ * section has the same height and shelf count. Until V2.2B replaces that with
+ * per-section structural pricing, calculatePrice() refuses mixed values —
+ * see src/lib/pricing/engine.ts.
  */
 export interface ShelvingSection {
   id: string;
   width: number;
+  height: number;
+  shelves: number;
   rearWall: boolean;
   leftWall: boolean;
   rightWall: boolean;
 }
 
 /**
- * The complete, serialisable description of what the customer configured.
- * A configuration is a single shelving row made of one or more sections that
- * share a common height and depth. When more than one section is present the
- * row is always built with shared uprights between adjacent sections — this
- * mirrors the real product (a starter section plus bolt-on extensions) and
- * is what makes multi-section pricing cheaper than independent stand-alone
- * units. Multi-row layouts are reserved for a future iteration.
+ * The complete, serialisable description of what the customer configured:
+ * one shelving row (kit) made of one or more sections. Kit-wide values —
+ * model, depth, load capacity, shelf type, colour, kit accessories and
+ * quantity — live here; everything that can differ between sections
+ * (width, height, shelves, walls) lives on ShelvingSection. There is no
+ * row-level height or shelf count. Multi-row layouts are reserved for a
+ * future iteration.
  */
 export interface ShelvingConfiguration {
   modelSlug: string;
-  height: number;
   depth: number;
-  shelves: number;
   sections: ShelvingSection[];
   loadCapacity: number;
   shelfType: ShelfType;

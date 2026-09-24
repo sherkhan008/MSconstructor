@@ -105,7 +105,7 @@ test('cart quantity controls stop at the remaining capacity and a refused duplic
 
 test('the configurator refuses an add that would make 6 kits and says why', async ({ page }) => {
   await seedCart(page, [5]);
-  await page.goto('/ru/configurator?model=ms-standard&height=2000&depth=400&shelves=5&sections=1000:0:0:0');
+  await page.goto('/ru/configurator?v=2&model=ms-standard&depth=400&sections=1000:2000:5:0:0:0');
   await expect(page.getByTestId('configurator-kit-limit')).toHaveText(LIMIT_TEXT, { timeout: 15_000 });
   await expect(page.getByRole('button', { name: 'Добавить в корзину' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Оформить заказ' })).toBeDisabled();
@@ -113,8 +113,8 @@ test('the configurator refuses an add that would make 6 kits and says why', asyn
 });
 
 test('an older 7-section link opens intact, is explained, and cannot be ordered until reduced to 5', async ({ page }) => {
-  const sections = Array.from({ length: 7 }, () => '700:0:0:0').join(',');
-  await page.goto(`/ru/configurator?model=ms-standard&height=2000&depth=400&shelves=5&sections=${sections}`);
+  const sections = Array.from({ length: 7 }, () => '700:2000:5:0:0:0').join(',');
+  await page.goto(`/ru/configurator?v=2&model=ms-standard&depth=400&sections=${sections}`);
 
   const widths = page.locator('select[aria-label^="Ширина секции"]');
   await expect(widths).toHaveCount(7);

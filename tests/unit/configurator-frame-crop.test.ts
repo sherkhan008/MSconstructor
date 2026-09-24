@@ -17,7 +17,8 @@ import {
 } from '@/components/configurator/ShelvingPreview';
 import { VIEWBOX_H, VIEWBOX_W, mmToPx } from '@/components/configurator/resize/dimension-scale';
 import { computeRowScale, layoutSectionsWithScale } from '@/components/configurator/resize/section-geometry';
-import type { ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
+import type { ShelvingConfiguration } from '@/lib/types/domain';
+import { uniformRow, type LooseSection, type UniformRowInput } from '../helpers/uniform-row';
 
 /**
  * The configurator workspace crops the 640×480 viewBox down to the part the
@@ -40,8 +41,8 @@ import type { ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain'
  *     framing is the larger rack it is meant to be.
  */
 
-function baseConfig(overrides: Partial<ShelvingConfiguration> = {}): ShelvingConfiguration {
-  return {
+function baseConfig(overrides: Partial<UniformRowInput> = {}): ShelvingConfiguration {
+  return uniformRow({
     modelSlug: 'ms-standard',
     height: 2000,
     depth: 400,
@@ -55,10 +56,10 @@ function baseConfig(overrides: Partial<ShelvingConfiguration> = {}): ShelvingCon
     deliveryId: 'delivery-pickup',
     quantity: 1,
     ...overrides,
-  };
+  });
 }
 
-function sections(widths: number[]): ShelvingSection[] {
+function sections(widths: number[]): LooseSection[] {
   return widths.map((width, i) => ({ id: `sec-${i + 1}`, width, rearWall: false, leftWall: false, rightWall: false }));
 }
 
@@ -150,7 +151,7 @@ describe('framed workspace crop', () => {
         for (const count of [1, 2, 3, 5, 10]) {
           const cropRight = profile.left + framedCropWidth(profile, count, dx);
           const rowWidths = Array.from({ length: count }, (_, i) => CATALOG_WIDTHS[i % CATALOG_WIDTHS.length]);
-          const row = sections(rowWidths);
+          const row = baseConfig({ sections: sections(rowWidths) }).sections;
           const scale = computeRowScale(row, MAX_ROW_WIDTH_PX, TARGET_FILL_PX);
           const laid = layoutSectionsWithScale(row, scale, VIEWBOX_W);
           const rowEnd = RACK_LEFT_MARGIN + (laid[laid.length - 1].x + laid[laid.length - 1].width - laid[0].x);

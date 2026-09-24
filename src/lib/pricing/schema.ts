@@ -38,9 +38,14 @@ export const configurationAccessorySchema = z.object({
 
 export { MAX_SECTIONS, MIN_SECTIONS };
 
+/** Every section owns its own width, height and shelf count (V2.2A). There
+ * is no row-level height/shelves field; the per-model matrix (which heights,
+ * how many shelves for that height) is checked in compatibility.ts. */
 export const shelvingSectionSchema = z.object({
   id: z.string().min(1).max(64),
   width: z.number().int().min(300).max(6000),
+  height: z.number().int().min(500).max(6000),
+  shelves: z.number().int().min(1).max(20),
   rearWall: z.boolean(),
   leftWall: z.boolean(),
   rightWall: z.boolean(),
@@ -92,9 +97,7 @@ function buildSchemas(locale: Locale) {
       .min(1)
       .max(100)
       .regex(/^[a-z0-9-]+$/, t(VL['VL-009'], locale)),
-    height: z.number().int().min(500).max(6000),
     depth: z.number().int().min(150).max(2000),
-    shelves: z.number().int().min(1).max(20),
     sections: z
       .array(shelvingSectionSchema)
       .min(MIN_SECTIONS, t(VL['VL-010'], locale))

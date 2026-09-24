@@ -4,15 +4,16 @@ import { CATALOG_PRODUCTS } from '@/lib/data/seed-data';
 import { calculatePrice } from '@/lib/pricing';
 import { getMaxShelvesForHeight } from '@/lib/pricing/ms-standard-compatibility';
 import type { ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
+import { uniformRow, type LooseSection, type UniformRowInput } from '../helpers/uniform-row';
 
 let sectionCounter = 0;
-function section(width: number, overrides: Partial<ShelvingSection> = {}): ShelvingSection {
+function section(width: number, overrides: Partial<ShelvingSection> = {}): LooseSection {
   sectionCounter += 1;
   return { id: `sec-${sectionCounter}`, width, rearWall: false, leftWall: false, rightWall: false, ...overrides };
 }
 
-function baseConfig(overrides: Partial<ShelvingConfiguration>): ShelvingConfiguration {
-  return {
+function baseConfig(overrides: Partial<UniformRowInput>): ShelvingConfiguration {
+  return uniformRow({
     modelSlug: 'ms-standard',
     height: 2000,
     depth: 400,
@@ -26,7 +27,7 @@ function baseConfig(overrides: Partial<ShelvingConfiguration>): ShelvingConfigur
     deliveryId: 'delivery-pickup',
     quantity: 1,
     ...overrides,
-  };
+  });
 }
 
 describe('pricing engine', () => {

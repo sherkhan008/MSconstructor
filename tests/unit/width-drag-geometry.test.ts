@@ -60,7 +60,7 @@ function mmToPxWidth(mm: number): number {
 }
 
 function section(id: string, width: number): ShelvingSection {
-  return { id, width, rearWall: false, leftWall: false, rightWall: false };
+  return { id, width, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false };
 }
 
 /** Reproduces ShelvingPreview's committed/idle layout exactly. */

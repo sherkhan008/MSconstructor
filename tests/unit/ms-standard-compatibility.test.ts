@@ -17,7 +17,10 @@ import {
   nearestValidMsStandardDepth,
   nearestValidMsStandardHeight,
   nearestValidMsStandardWidth,
+  getAllowedHeightsForSections,
+  getSharedMaxShelvesForSections,
   normalizeMsStandardConfiguration,
+  normalizeMsStandardSection,
 } from '@/lib/pricing/ms-standard-compatibility';
 import type { ShelvingSection } from '@/lib/types/domain';
 
@@ -28,8 +31,27 @@ import type { ShelvingSection } from '@/lib/types/domain';
  * hand-picked few cases).
  */
 
-function section(width: number, overrides: Partial<ShelvingSection> = {}): ShelvingSection {
+type RowSection = Omit<ShelvingSection, 'height' | 'shelves'> & Partial<Pick<ShelvingSection, 'height' | 'shelves'>>;
+
+function section(width: number, overrides: Partial<ShelvingSection> = {}): RowSection {
   return { id: `sec-${width}-${Math.random()}`, width, rearWall: false, leftWall: false, rightWall: false, ...overrides };
+}
+
+/** A UNIFORM row stated the V2.1 way (one height/shelf count) → the V2.2A
+ * shape the module takes: that height/shelf count on every section. */
+function row({ height, depth, shelves, sections }: { height: number; depth: number; shelves: number; sections: RowSection[] }) {
+  return { depth, sections: sections.map((s) => ({ height, shelves, ...s }) as ShelvingSection) };
+}
+
+/** Normalizes a uniform row and reads it back as one height/shelf count
+ * (asserting the result is still uniform). */
+function normalizeRow(input: Parameters<typeof row>[0]) {
+  const result = normalizeMsStandardConfiguration(row(input));
+  const heights = new Set(result.sections.map((s) => s.height));
+  const shelves = new Set(result.sections.map((s) => s.shelves));
+  expect(heights.size).toBe(1);
+  expect(shelves.size).toBe(1);
+  return { ...result, height: result.sections[0].height, shelves: result.sections[0].shelves };
 }
 
 describe('the matrix constants', () => {
@@ -180,13 +202,13 @@ describe('isValidMsStandardConfiguration — valid combinations (task-supplied e
   ];
 
   it.each(validCases)('$widths × $height × $depth, $shelves shelves is valid', ({ height, depth, shelves, widths }) => {
-    const issues = isValidMsStandardConfiguration({ height, depth, shelves, sections: widths.map((w) => section(w)) });
+    const issues = isValidMsStandardConfiguration(row({ height, depth, shelves, sections: widths.map((w) => section(w)) }));
     expect(issues).toEqual([]);
   });
 });
 
 describe('isValidMsStandardConfiguration — invalid combinations (task-supplied examples)', () => {
-  const invalidCases: { name: string; height: number; depth: number; shelves: number; sections: ShelvingSection[] }[] = [
+  const invalidCases: { name: string; height: number; depth: number; shelves: number; sections: RowSection[] }[] = [
     { name: '700 width + 700 depth', height: 2000, depth: 700, shelves: 4, sections: [section(700)] },
     { name: '1200 width + 700 depth', height: 2000, depth: 700, shelves: 4, sections: [section(1200)] },
     { name: '1200 width + 800 depth', height: 2000, depth: 800, shelves: 4, sections: [section(1200)] },
@@ -217,7 +239,7 @@ describe('isValidMsStandardConfiguration — invalid combinations (task-supplied
   ];
 
   it.each(invalidCases)('$name is rejected', ({ height, depth, shelves, sections }) => {
-    const issues = isValidMsStandardConfiguration({ height, depth, shelves, sections });
+    const issues = isValidMsStandardConfiguration(row({ height, depth, shelves, sections }));
     expect(issues.length).toBeGreaterThan(0);
   });
 });
@@ -272,7 +294,7 @@ describe('nearestValidMsStandardDepth', () => {
 
 describe('normalizeMsStandardConfiguration — deterministic end-to-end repair', () => {
   it('old height 2400 normalizes to 2500 and clamps shelves to the new ceiling', () => {
-    const result = normalizeMsStandardConfiguration({
+    const result = normalizeRow({
       height: 2400,
       depth: 400,
       shelves: 8,
@@ -286,7 +308,7 @@ describe('normalizeMsStandardConfiguration — deterministic end-to-end repair',
     // Force the nearest-height result into the low-ceiling tier by asking
     // for a value that resolves to 1800 (nearest to 1900 is a tie -> 2000
     // per the tie-break, so use a value unambiguously nearest to 1800).
-    const result = normalizeMsStandardConfiguration({
+    const result = normalizeRow({
       height: 1700,
       depth: 400,
       shelves: 8,
@@ -297,7 +319,7 @@ describe('normalizeMsStandardConfiguration — deterministic end-to-end repair',
   });
 
   it('width 1200 + depth 800 preserves width 1200, changes depth to 600', () => {
-    const result = normalizeMsStandardConfiguration({
+    const result = normalizeRow({
       height: 2000,
       depth: 800,
       shelves: 4,
@@ -308,7 +330,7 @@ describe('normalizeMsStandardConfiguration — deterministic end-to-end repair',
   });
 
   it('width 700 + depth 700 preserves width 700, changes depth to 600 (tie-break smaller)', () => {
-    const result = normalizeMsStandardConfiguration({
+    const result = normalizeRow({
       height: 2000,
       depth: 700,
       shelves: 4,
@@ -319,7 +341,7 @@ describe('normalizeMsStandardConfiguration — deterministic end-to-end repair',
   });
 
   it('multi-section 1000+1200 at depth 800 normalizes depth to the intersection (600)', () => {
-    const result = normalizeMsStandardConfiguration({
+    const result = normalizeRow({
       height: 2000,
       depth: 800,
       shelves: 4,
@@ -330,7 +352,7 @@ describe('normalizeMsStandardConfiguration — deterministic end-to-end repair',
   });
 
   it('height 1000 is preserved (never normalized away to 1500) and its shelves clamp to 4', () => {
-    const result = normalizeMsStandardConfiguration({
+    const result = normalizeRow({
       height: 1000,
       depth: 400,
       shelves: 8,
@@ -341,7 +363,7 @@ describe('normalizeMsStandardConfiguration — deterministic end-to-end repair',
   });
 
   it('a fully valid height-1000 configuration passes through untouched', () => {
-    const result = normalizeMsStandardConfiguration({
+    const result = normalizeRow({
       height: 1000,
       depth: 700,
       shelves: 3,
@@ -354,15 +376,15 @@ describe('normalizeMsStandardConfiguration — deterministic end-to-end repair',
 
   it('2000 -> 1000 clamps 8 shelves to 4; 1000 -> 2000 keeps 4 (never raises it)', () => {
     const base = { depth: 400, sections: [section(1000)] };
-    const down = normalizeMsStandardConfiguration({ ...base, height: 1000, shelves: 8 });
+    const down = normalizeRow({ ...base, height: 1000, shelves: 8 });
     expect(down).toMatchObject({ height: 1000, shelves: 4 });
-    const up = normalizeMsStandardConfiguration({ ...base, height: 2000, shelves: 4 });
+    const up = normalizeRow({ ...base, height: 2000, shelves: 4 });
     expect(up).toMatchObject({ height: 2000, shelves: 4 });
   });
 
   it('an already-fully-valid configuration is returned unchanged in value', () => {
     const input = { height: 2000, depth: 400, shelves: 5, sections: [section(1000)] };
-    const result = normalizeMsStandardConfiguration(input);
+    const result = normalizeRow(input);
     expect(result.height).toBe(2000);
     expect(result.depth).toBe(400);
     expect(result.shelves).toBe(5);
@@ -380,8 +402,90 @@ describe('normalizeMsStandardConfiguration — deterministic end-to-end repair',
       { height: 2300, depth: 700, shelves: 6, sections: [section(700)] },
     ];
     for (const input of messyInputs) {
-      const result = normalizeMsStandardConfiguration(input);
+      const result = normalizeRow(input);
       expect(isValidMsStandardConfiguration(result), JSON.stringify({ input, result })).toEqual([]);
     }
+  });
+});
+
+describe('V2.2A — every section is validated with its OWN height and shelf limit', () => {
+  const s = (width: number, height: number, shelves: number): ShelvingSection => ({
+    id: `s-${width}-${height}-${shelves}-${Math.random()}`,
+    width,
+    height,
+    shelves,
+    rearWall: false,
+    leftWall: false,
+    rightWall: false,
+  });
+
+  it.each(MS_STANDARD_HEIGHTS.map((h) => [h] as const))('height %d is valid on its own section', (height) => {
+    expect(isValidMsStandardConfiguration({ depth: 400, sections: [s(1000, height, 2)] })).toEqual([]);
+  });
+
+  it('rejects an invalid height on one section only', () => {
+    const issues = isValidMsStandardConfiguration({ depth: 400, sections: [s(1000, 2000, 5), s(1000, 2400, 5)] });
+    expect(issues).toEqual([{ field: 'sections', message: 'Высота 2400 мм недоступна для MS Стандарт' }]);
+  });
+
+  it('shelf limits: 1000 → 4, 1500 → 6, 3000 → 8, each checked on its own', () => {
+    for (const [height, max] of [[1000, 4], [1500, 6], [3000, 8]] as const) {
+      expect(isValidMsStandardConfiguration({ depth: 400, sections: [s(1000, height, max)] })).toEqual([]);
+      if (max < MS_STANDARD_ABSOLUTE_MAX_SHELVES) {
+        expect(isValidMsStandardConfiguration({ depth: 400, sections: [s(1000, height, max + 1)] })).toEqual([
+          { field: 'sections', message: `При высоте ${height} мм максимум ${max} полок` },
+        ]);
+      }
+    }
+    expect(isValidMsStandardConfiguration({ depth: 400, sections: [s(1000, 3000, 9)] }).length).toBeGreaterThan(0);
+  });
+
+  it('a 1000 mm section cannot borrow a 3000 mm neighbour’s shelf limit', () => {
+    const issues = isValidMsStandardConfiguration({ depth: 400, sections: [s(1000, 3000, 8), s(1000, 1000, 8)] });
+    expect(issues).toEqual([{ field: 'sections', message: 'При высоте 1000 мм максимум 4 полок' }]);
+  });
+
+  it('any valid heights may sit next to each other (no neighbouring-height rule)', () => {
+    const sections = [s(1000, 1500, 6), s(1000, 2500, 8), s(1000, 1000, 4), s(700, 3000, 2), s(1200, 1800, 3)];
+    expect(isValidMsStandardConfiguration({ depth: 400, sections })).toEqual([]);
+  });
+
+  it('width/depth compatibility still uses the kit’s shared depth, whatever the heights', () => {
+    expect(isValidMsStandardConfiguration({ depth: 800, sections: [s(1000, 1000, 4), s(1200, 3000, 8)] })).toEqual([
+      { field: 'depth', message: 'Глубина 800 мм недоступна при ширине секции 1200 мм' },
+    ]);
+  });
+
+  it('identical problems shared by several sections are reported once', () => {
+    const issues = isValidMsStandardConfiguration({ depth: 400, sections: [s(1000, 1000, 6), s(700, 1000, 6), s(1200, 1000, 6)] });
+    expect(issues).toEqual([{ field: 'sections', message: 'При высоте 1000 мм максимум 4 полок' }]);
+  });
+
+  it('normalizeMsStandardSection uses only that section: height, then its ceiling, then shelves, then width', () => {
+    expect(normalizeMsStandardSection(s(900, 2400, 9))).toMatchObject({ width: 1000, height: 2500, shelves: 8 });
+    expect(normalizeMsStandardSection(s(1000, 1100, 7))).toMatchObject({ height: 1000, shelves: 4 });
+    expect(normalizeMsStandardSection(s(1000, 3000, 1))).toMatchObject({ height: 3000, shelves: MS_STANDARD_MIN_SHELVES });
+    const valid = s(1000, 2000, 5);
+    expect(normalizeMsStandardSection(valid)).toBe(valid);
+  });
+
+  it('normalizeMsStandardConfiguration normalizes each section independently, then the shared depth', () => {
+    const result = normalizeMsStandardConfiguration({ depth: 800, sections: [s(1000, 3000, 8), s(1200, 1000, 8)] });
+    expect(result.sections.map((x) => [x.width, x.height, x.shelves])).toEqual([
+      [1000, 3000, 8],
+      [1200, 1000, 4],
+    ]);
+    expect(result.depth).toBe(600);
+    expect(isValidMsStandardConfiguration(result)).toEqual([]);
+  });
+
+  it('transitional single-control range is valid for every section', () => {
+    const sections = [s(1000, 3000, 7), s(1000, 1500, 3)];
+    expect(getSharedMaxShelvesForSections(sections)).toBe(6);
+    expect(getAllowedHeightsForSections(sections)).toEqual([2000, 2200, 2500, 3000]);
+    expect(getSharedMaxShelvesForSections([s(1000, 2400, 3)])).toBeUndefined();
+    // Uniform sections: exactly the V2.1 values for the shared height/shelves.
+    expect(getSharedMaxShelvesForSections([s(1000, 1800, 5), s(700, 1800, 5)])).toBe(getMaxShelvesForHeight(1800));
+    expect(getAllowedHeightsForSections([s(1000, 1800, 5)])).toEqual(getAllowedHeightsForShelfCount(5));
   });
 });
