@@ -116,7 +116,8 @@ test('an older 7-section link opens intact, is explained, and cannot be ordered 
   const sections = Array.from({ length: 7 }, () => '700:2000:5:0:0:0').join(',');
   await page.goto(`/ru/configurator?v=2&model=ms-standard&depth=400&sections=${sections}`);
 
-  const widths = page.locator('select[aria-label^="Ширина секции"]');
+  // Every section of the old link is listed (one row each), none trimmed.
+  const widths = page.getByRole('button', { name: /^Секция \d+$/ });
   await expect(widths).toHaveCount(7);
   await expect(page.getByTestId('sections-over-limit')).toHaveText('В одном стеллаже не более 5 секций. Удалите лишние секции.');
   await expect(page.getByRole('button', { name: 'Добавить в корзину' })).toBeDisabled();

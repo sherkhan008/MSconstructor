@@ -204,13 +204,28 @@
     }
   }
 
-  /* Configurator rack frame (4:3). On desktop the workspace fits one screen
-     below the header and the 5rem page title, so the frame is capped to the
-     height left after the preview's toolbar and caption strip (~6rem) and
-     the bottom margin — the whole rack and its controls stay in view. */
+  /* The workspace frame's ratio follows the rack envelope it shows (V2.4):
+     ShelvingPreview publishes a compact (phone) and a wide ratio for the
+     current section count, and both preview modes' frames read them, so the
+     workspace keeps one size across modes. The fallbacks are the pre-V2.4
+     fixed ratios. */
+  .configurator-frame-box {
+    aspect-ratio: var(--frame-c-aspect, 6 / 5);
+  }
+
+  @media (min-width: 40rem) {
+    .configurator-frame-box {
+      aspect-ratio: var(--frame-w-aspect, 4 / 3);
+    }
+  }
+
+  /* Configurator rack frame. On desktop the workspace fits one screen below
+     the header and the 5rem page title, so the frame is capped to the height
+     left after the preview's toolbar and caption strip (~6rem) and the bottom
+     margin — the whole rack and its controls stay in view. */
   @media (min-width: 1024px) {
     .configurator-frame {
-      max-width: max(22rem, calc((100dvh - var(--header-height) - 12.5rem) * 4 / 3));
+      max-width: max(22rem, calc((100dvh - var(--header-height) - 12.5rem) * var(--frame-w-aspect, 4 / 3)));
     }
   }
 

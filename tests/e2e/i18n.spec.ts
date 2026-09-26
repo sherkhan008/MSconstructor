@@ -3,6 +3,7 @@ import type { PrismaClient } from '@prisma/client';
 import { test, expect } from './helpers/test';
 import { createPrismaClient } from './helpers/admin-order-fixtures';
 import { checkoutFixturePrefix, checkoutIdentity, isolateOrderRequests, removeCheckoutFixtures } from './helpers/checkout-order-fixtures';
+import { storedWidths } from './helpers/sections';
 import { t } from '../../src/lib/i18n/format';
 import { CF, CK, CN, CR, CT, DL, F, H, HM, OS, VL } from '../../src/lib/i18n/strings';
 
@@ -96,7 +97,9 @@ test('a configured rack, its price and every setting survive a language switch',
     'v=2&model=ms-standard&depth=400&sections=1000:1800:4:1:0:0,700:1800:4:0:1:1&load=150&shelfType=STANDARD&color=color-grey&assembly=assembly-professional&delivery=delivery-pickup&qty=2';
   await page.goto(`/configurator?${query}`);
   const kkTotal = await configuratorTotal(page);
-  // An edit made on the page (not in the URL) must survive too.
+  // An edit made on the page (not in the URL) must survive too — section 2's
+  // own controls expand once it is selected (V2.4).
+  await page.getByRole('button', { name: t(CF['CF-025'], 'kk', { N: 2 }), exact: true }).click();
   await page.locator(`select[aria-label="${t(CF['CF-036'], 'kk', { N: 2 })}"]`).selectOption('1000');
   await expect.poll(() => configuratorTotal(page), { timeout: 15_000 }).not.toBe(kkTotal);
   const kkEditedTotal = await configuratorTotal(page);
@@ -106,8 +109,10 @@ test('a configured rack, its price and every setting survive a language switch',
   const ruTotal = await configuratorTotal(page);
   expect(ruTotal).toBe(kkEditedTotal);
   expect(kkEditedTotal).not.toBe(kkTotal);
+  // The switch re-applies the configuration as a share link, which opens on
+  // section 1; both sections' widths survive.
   await expect(page.locator('select[aria-label="Ширина секции 1"]')).toHaveValue('1000');
-  await expect(page.locator('select[aria-label="Ширина секции 2"]')).toHaveValue('1000');
+  expect(await storedWidths(page)).toEqual([1000, 1000]);
   await expect(page.getByTestId('shelf-count')).toContainText('4');
 
   await switchTo(page, 'KZ');

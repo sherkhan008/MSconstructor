@@ -6,18 +6,12 @@ import { trackEvent } from '@/lib/analytics';
 import { configurationToShareQuery, parseConfigurationFromSearchParams } from '@/lib/configurator/url';
 import { DEFAULT_CONFIGURATION, useConfiguratorStore } from '@/store/configurator-store';
 import type { PublicCatalog } from '@/lib/data/public-catalog';
-import {
-  getAllowedDepthsForSections,
-  getAllowedHeightsForSections,
-  getAllowedWidthsForDepth,
-  getSharedMaxShelvesForSections,
-  MS_STANDARD_MIN_SHELVES,
-  normalizeMsStandardConfiguration,
-} from '@/lib/pricing/ms-standard-compatibility';
-import { getMaxSectionShelves } from '@/lib/configurator/section-dimensions';
-import { ShelvingPreview } from './ShelvingPreview';
+import { normalizeMsStandardConfiguration } from '@/lib/pricing/ms-standard-compatibility';
+import { getAllowedKitDepths, getAllowedSectionWidths, getSectionLimits } from '@/lib/configurator/section-limits';
+import { computeFramedCrops, frameAspectVars, ShelvingPreview } from './ShelvingPreview';
 import { TopShelvingPreview } from './TopShelvingPreview';
 import { ParametersSectionsTable } from './ParametersSectionsTable';
+import { ConfiguratorCharacteristics } from './ConfiguratorCharacteristics';
 import { AdvancedSettingsAccordion, CUSTOMER_ACCESSORY_IDS, isStaleCrossBrace } from './AdvancedSettingsAccordion';
 import { OrderSummaryBar } from './OrderSummaryBar';
 import { BomTable } from './BomTable';
@@ -38,8 +32,6 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
   const removeSection = useConfiguratorStore((s) => s.removeSection);
   const updateSection = useConfiguratorStore((s) => s.updateSection);
   const setField = useConfiguratorStore((s) => s.setField);
-  const setAllSectionHeights = useConfiguratorStore((s) => s.setAllSectionHeights);
-  const setAllSectionShelves = useConfiguratorStore((s) => s.setAllSectionShelves);
   const setMany = useConfiguratorStore((s) => s.setMany);
   const loadFromPartial = useConfiguratorStore((s) => s.loadFromPartial);
   const reset = useConfiguratorStore((s) => s.reset);
@@ -179,27 +171,20 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
   const color = catalog.colors.find((c) => c.id === config.colorId);
   const model = catalog.models.find((m) => m.slug === config.modelSlug);
 
-  // Same cross-dimensional MS Standard rules the parameter selects use (see
-  // ms-standard-compatibility.ts): height drag may only snap to a height
-  // whose own shelf ceiling fits every section's CURRENT shelf count, width
-  // drag may only snap to a width valid for the CURRENT shared depth, and
-  // the preview's own shelf +/- controls stay within every section's own
-  // height ceiling. Every other model keeps its flat model.heights/widths/
-  // minShelves/maxShelves — it has no cross-rules today.
-  //
-  // TRANSITIONAL (V2.2A): height and shelves are stored per section, but the
-  // current UI still has one height control and one shelf control; each
-  // applies its value to ALL sections (setAllSectionHeights /
-  // setAllSectionShelves). Per-section controls arrive in a later UI phase.
-  const isMsStandard = model?.slug === 'ms-standard';
-  const allowedHeights = isMsStandard ? getAllowedHeightsForSections(config.sections) : (model?.heights ?? []);
-  const allowedWidths = isMsStandard ? getAllowedWidthsForDepth(config.depth) : (model?.widths ?? []);
-  const allowedDepths = isMsStandard ? getAllowedDepthsForSections(config.sections) : (model?.depths ?? []);
-  const shelvesMin = isMsStandard ? MS_STANDARD_MIN_SHELVES : (model?.minShelves ?? 2);
-  const shelvesMax = isMsStandard
-    ? (getSharedMaxShelvesForSections(config.sections) ?? model?.maxShelves ?? 8)
-    : (model?.maxShelves ?? 8);
-  const rowShelves = getMaxSectionShelves(config.sections);
+  // Same rules the section controls use (see section-limits.ts), for the
+  // ACTIVE section only: height drag may only snap to a height whose shelf
+  // ceiling fits THAT section's shelf count, width drag only to a width valid
+  // for the shared depth, and the preview's shelf +/- stays within THAT
+  // section's own height ceiling. No range here reads another section.
+  const activeSection = config.sections.find((s) => s.id === activeSectionId) ?? config.sections[0];
+  const activeLimits = model ? getSectionLimits(model, activeSection) : undefined;
+  const allowedDimensions = activeLimits
+    ? {
+        heights: activeLimits.heights,
+        widths: model ? getAllowedSectionWidths(model, config.depth) : [],
+        depths: model ? getAllowedKitDepths(model, config.sections) : [],
+      }
+    : undefined;
   // The model's largest catalog dimensions — the preview reserves room for
   // them, so its physical scale never changes during or after a drag.
   const capacityMm =
@@ -207,14 +192,24 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
       ? { width: Math.max(...model.widths), height: Math.max(...model.heights), depth: Math.max(...model.depths) }
       : undefined;
 
+  // Width and height belong to the section being resized: the active one,
+  // read from the store at commit time so a selection made in the same
+  // gesture (pressing another section's top edge) is always the one changed.
   function handleCommitDimension(axis: DimensionAxis, value: number) {
+    const targetId = useConfiguratorStore.getState().activeSectionId;
     if (axis === 'width') {
-      updateSection(activeSectionId, { width: value });
+      updateSection(targetId, { width: value });
     } else if (axis === 'height') {
-      setAllSectionHeights(value);
+      updateSection(targetId, { height: value });
     } else {
       setField(axis, value);
     }
+  }
+
+  function handleStepShelves(delta: 1 | -1) {
+    if (!activeLimits) return;
+    const shelves = Math.min(activeLimits.maxShelves, Math.max(activeLimits.minShelves, activeSection.shelves + delta));
+    if (shelves !== activeSection.shelves) updateSection(activeSection.id, { shelves });
   }
 
   // "+" above a section inserts after that specific section, "−" below it
@@ -229,9 +224,17 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
     removeSection(id);
   }
 
-  // Two-zone workspace: the rack (left, sticky on desktop) is the visual
-  // centre; configuration, kit summary and the purchase card share the
-  // right column. Below `lg` the same DOM stacks, and OrderSummaryBar pins
+  // The top view's frame takes the front view's own ratio, so switching
+  // preview mode never changes the workspace's size (view-only; config is
+  // only read).
+  const topFrameStyle = frameAspectVars(computeFramedCrops(config.sections, config.depth, capacityMm));
+
+  // Page order (V2.4): title → rack → the current kit and its parameters →
+  // its sections → characteristics → additional parameters → kit contents →
+  // price and actions. Two-zone workspace: the rack (left, sticky on
+  // desktop) is the visual centre; everything after it shares the right
+  // column in that order, with the purchase card pinned to its foot. Below
+  // `lg` the same DOM stacks in the same order, and OrderSummaryBar pins
   // itself to the bottom of the viewport instead (see its own classes).
   return (
     <div className="pb-40 lg:pb-16">
@@ -262,28 +265,29 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
                 framed
                 frameClassName="configurator-frame"
                 interactive
-                allowedDimensions={model ? { heights: allowedHeights, widths: allowedWidths, depths: allowedDepths } : undefined}
+                allowedDimensions={allowedDimensions}
                 capacityMm={capacityMm}
                 activeSectionId={activeSectionId}
                 onSelectSection={setActiveSectionId}
                 onAddSectionAfter={handleAddSectionAfter}
                 onRemoveSectionAt={handleRemoveSectionAt}
                 onCommitDimension={handleCommitDimension}
-                minShelves={shelvesMin}
-                maxShelves={shelvesMax}
-                onIncreaseShelves={() => setAllSectionShelves(Math.min(shelvesMax, rowShelves + 1))}
-                onDecreaseShelves={() => setAllSectionShelves(Math.max(shelvesMin, rowShelves - 1))}
+                minShelves={activeLimits?.minShelves}
+                maxShelves={activeLimits?.maxShelves}
+                onIncreaseShelves={() => handleStepShelves(1)}
+                onDecreaseShelves={() => handleStepShelves(-1)}
               />
             ) : (
               <div>
                 {/* Exactly the front view's frame ratio at every breakpoint
-                    (6:5 on phones, 4:3 from `sm` up), so switching modes never
-                    makes the workspace jump. */}
-                <div className="configurator-frame mx-auto flex aspect-[6/5] w-full items-center sm:aspect-[4/3]">
+                    (see computeFramedCrops), so switching modes never makes
+                    the workspace jump. The drawing itself is unchanged; it
+                    fills the frame and keeps its own proportions. */}
+                <div className="configurator-frame configurator-frame-box mx-auto flex w-full items-center" style={topFrameStyle}>
                   <TopShelvingPreview
                     config={config}
                     color={color}
-                    className="!border-0"
+                    className="h-full !border-0"
                     interactive
                     activeSectionId={activeSectionId}
                     onSelectSection={setActiveSectionId}
@@ -306,6 +310,8 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
           <div className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-[calc(var(--header-height)+1rem)] lg:max-h-[calc(100dvh-var(--header-height)-6.5rem)] lg:gap-0 lg:border lg:border-line lg:bg-surface">
             <div className="flex min-w-0 flex-col gap-4 lg:min-h-0 lg:flex-1 lg:gap-0 lg:divide-y lg:divide-line lg:overflow-y-auto lg:overscroll-contain lg:[&>*]:border-0">
             <ParametersSectionsTable catalog={catalog} onReset={reset} />
+
+            <ConfiguratorCharacteristics config={config} />
 
             <AdvancedSettingsAccordion catalog={catalog} />
 

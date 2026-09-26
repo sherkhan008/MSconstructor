@@ -2,32 +2,36 @@
 
 import { MAX_SECTIONS, MIN_SECTIONS, useConfiguratorStore } from '@/store/configurator-store';
 import { NumberStepper } from './NumberStepper';
+import { CROSS_BRACE_ID, CROSS_BRACE_WIDTH_MM, OptionCheckbox } from './AdvancedSettingsAccordion';
 import type { PublicCatalog } from '@/lib/data/public-catalog';
 import type { ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
-import {
-  getAllowedDepthsForSections,
-  getAllowedHeightsForSections,
-  getAllowedWidthsForDepth,
-  getSharedMaxShelvesForSections,
-  MS_STANDARD_MIN_SHELVES,
-} from '@/lib/pricing/ms-standard-compatibility';
-import { getMaxSectionHeight, getMaxSectionShelves } from '@/lib/configurator/section-dimensions';
+import { getAllowedKitDepths, getAllowedSectionWidths, getSectionLimits } from '@/lib/configurator/section-limits';
+import { shelvesLabel } from '@/lib/plural';
 import { t } from '@/lib/i18n/format';
 import { dimensionOptionLabel, loadCapacityOptionLabel } from '@/lib/i18n/catalog-labels';
-import { CF } from '@/lib/i18n/strings';
+import { CF, CR, G } from '@/lib/i18n/strings';
+import type { Locale } from '@/lib/i18n/locales';
 import { useLocale } from '@/components/i18n/LocaleProvider';
 
 type ProductModel = PublicCatalog['models'][number];
-type WallField = 'rearWall' | 'leftWall' | 'rightWall';
 
 /**
- * The configurator's configuration panel: row parameters (height, depth,
- * shelves, load) followed by one row per section (width, walls) and the add
- * button. Reuses the exact same store state/actions the old
- * GeneralSettingsPanel + SectionTable pair used; no new configuration state
- * is introduced. Every control exists exactly once in the DOM, so plain
- * CSS-attribute locators used by existing e2e tests (e.g.
- * `select[aria-label="Ширина секции 1"]`) never see duplicates.
+ * The configurator's configuration panel (V2.4), in page order:
+ *
+ *  1. the current kit ("Комплект 1" — V2.4 always has exactly one; the kit
+ *     switcher arrives with V2.5) and its KIT-WIDE parameters: the shared
+ *     depth and load;
+ *  2. its SECTIONS: every section is listed; the active one is expanded with
+ *     its own width, height, shelf count, walls and section options, the
+ *     others collapse to a one-line summary of their own values that selects
+ *     them. Each control edits its own section only (`updateSection`), with a
+ *     range read from that section's own values (see section-limits.ts) —
+ *     there is no height or shelf control shared by every section.
+ *
+ * Reuses the existing store state/actions only; no new configuration state
+ * is introduced. Every control exists exactly once in the DOM (only the
+ * active section's fields are rendered), so plain CSS-attribute locators
+ * (e.g. `select[aria-label="Ширина секции 1"]`) never see duplicates.
  */
 export function ParametersSectionsTable({ catalog, onReset }: { catalog: PublicCatalog; onReset?: () => void }) {
   const config = useConfiguratorStore((s) => s.config);
@@ -35,133 +39,151 @@ export function ParametersSectionsTable({ catalog, onReset }: { catalog: PublicC
   const setActiveSectionId = useConfiguratorStore((s) => s.setActiveSectionId);
   const addSection = useConfiguratorStore((s) => s.addSection);
   const removeSection = useConfiguratorStore((s) => s.removeSection);
+  const duplicateSection = useConfiguratorStore((s) => s.duplicateSection);
   const updateSection = useConfiguratorStore((s) => s.updateSection);
   const setField = useConfiguratorStore((s) => s.setField);
-  const setAllSectionHeights = useConfiguratorStore((s) => s.setAllSectionHeights);
-  const setAllSectionShelves = useConfiguratorStore((s) => s.setAllSectionShelves);
+  const setMany = useConfiguratorStore((s) => s.setMany);
   const locale = useLocale();
 
   const model = catalog.models.find((m) => m.slug === config.modelSlug);
   if (!model) return null;
 
-  // MS Standard's width select must respect the CURRENT global depth (depth
-  // is per-row, width is per-section — see ms-standard-compatibility.ts):
-  // e.g. depth=700 only leaves width 1000 selectable. Every other model
-  // keeps using its own flat width list — it has no such cross-dimensional
-  // rule today.
-  const widths =
-    model.slug === 'ms-standard' ? getAllowedWidthsForDepth(config.depth) : (model.widths ?? catalog.widths.map((w) => w.value));
   const canAdd = config.sections.length < MAX_SECTIONS;
   const canRemove = config.sections.length > MIN_SECTIONS;
+  // Same resolution as the preview: an unknown active id falls back to the
+  // first section, so exactly one section is always expanded.
+  const activeSection = config.sections.find((s) => s.id === activeSectionId) ?? config.sections[0];
 
-  function handleFocusSection(id: string) {
-    setActiveSectionId(id);
-  }
-  function handleChangeWidth(id: string, width: number) {
-    setActiveSectionId(id);
-    updateSection(id, { width });
-  }
-  function handleToggleWall(id: string, field: WallField, checked: boolean) {
-    setActiveSectionId(id);
-    updateSection(id, { [field]: checked });
+  function toggleCrossBrace(section: ShelvingSection, checked: boolean) {
+    const others = config.accessories.filter((a) => !(a.accessoryId === CROSS_BRACE_ID && a.sectionId === section.id));
+    setMany({ accessories: checked ? [...others, { accessoryId: CROSS_BRACE_ID, quantity: 1, sectionId: section.id }] : others });
   }
 
   return (
     <div className="border border-line bg-surface text-sm">
       <div className="p-4">
-        <h2 className="font-display text-lg leading-tight">{t(CF['CF-024'], locale)}</h2>
-        <RowParamsFields
-          config={config}
-          model={model}
-          catalog={catalog}
-          setField={setField}
-          setAllSectionHeights={setAllSectionHeights}
-          setAllSectionShelves={setAllSectionShelves}
-        />
+        <h2 className="font-display text-lg leading-tight">{t(CF['CF-104'], locale, { N: 1 })}</h2>
+        <KitParamsFields config={config} model={model} catalog={catalog} setField={setField} />
       </div>
 
-      <ul className="border-t border-line">
-        {config.sections.map((section, i) => {
-          const active = section.id === activeSectionId;
-          return (
-            <li
-              key={section.id}
-              // Graphite rail + white surface for the active section, matching
-              // the graphite outline the preview draws around that same
-              // section — the two views of one selection must agree. (Not the
-              // legacy red accent: see the workspace's colour system, where
-              // red is reserved for semantic/destructive states.)
-              className={`border-b border-l-[3px] border-b-line px-4 pb-3 pt-1 ${active ? 'border-l-foreground bg-surface' : 'border-l-transparent bg-background/60'}`}
-            >
-              <div className="flex items-center justify-between gap-2">
+      <section aria-labelledby="configurator-sections-heading" className="border-t border-line">
+        <h3 id="configurator-sections-heading" className="px-4 pb-2 pt-3.5 font-display text-base leading-tight">
+          {t(CF['CF-105'], locale)}
+        </h3>
+        <ul className="border-t border-line">
+          {config.sections.map((section, i) =>
+            section.id === activeSection.id ? (
+              <li
+                key={section.id}
+                data-section-row={i + 1}
+                // Graphite rail + white surface for the active section, matching
+                // the graphite outline the preview draws around that same
+                // section — the two views of one selection must agree.
+                className="border-b border-l-[3px] border-b-line border-l-foreground bg-surface px-4 pb-4 pt-1"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    aria-pressed
+                    onClick={() => setActiveSectionId(section.id)}
+                    className="-ml-1 min-h-11 px-1 text-left text-[15px] font-semibold text-foreground"
+                  >
+                    {t(CF['CF-025'], locale, { N: i + 1 })}
+                  </button>
+                  <div className="-mr-2 flex shrink-0 items-center">
+                    <button
+                      type="button"
+                      disabled={!canAdd}
+                      onClick={() => duplicateSection(section.id)}
+                      className="min-h-11 px-2 text-[13px] font-medium text-steel transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {t(CR['CR-012'], locale)}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!canRemove}
+                      onClick={() => removeSection(section.id)}
+                      aria-label={t(CF['CF-026'], locale)}
+                      title={t(CF['CF-026'], locale)}
+                      className="grid h-11 w-11 place-items-center text-lg leading-none text-steel transition-colors hover:text-danger disabled:cursor-not-allowed disabled:opacity-30"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+                <SectionFields
+                  section={section}
+                  index={i}
+                  model={model}
+                  catalog={catalog}
+                  widths={getAllowedSectionWidths(model, config.depth)}
+                  crossBraceSelected={config.accessories.some((a) => a.accessoryId === CROSS_BRACE_ID && a.sectionId === section.id)}
+                  onChange={(patch) => updateSection(section.id, patch)}
+                  onToggleCrossBrace={(checked) => toggleCrossBrace(section, checked)}
+                />
+              </li>
+            ) : (
+              <li key={section.id} data-section-row={i + 1} className="border-b border-l-[3px] border-b-line border-l-transparent bg-background/60">
                 <button
                   type="button"
+                  aria-pressed={false}
+                  aria-label={t(CF['CF-025'], locale, { N: i + 1 })}
+                  aria-describedby={`section-summary-${section.id}`}
                   onClick={() => setActiveSectionId(section.id)}
-                  aria-pressed={active}
-                  className={`-ml-1 min-h-11 px-1 text-left text-[15px] font-semibold ${active ? 'text-foreground' : 'text-steel hover:text-foreground'}`}
+                  className="flex min-h-12 w-full items-center justify-between gap-3 px-4 text-left transition-colors hover:bg-surface"
                 >
-                  {t(CF['CF-025'], locale, { N: i + 1 })}
+                  <span className="shrink-0 text-[15px] font-semibold text-steel">{t(CF['CF-025'], locale, { N: i + 1 })}</span>
+                  <span id={`section-summary-${section.id}`} data-testid="section-summary" className="mono min-w-0 truncate text-right text-[13px] text-steel">
+                    {sectionSummary(section, locale)}
+                  </span>
                 </button>
-                <button
-                  type="button"
-                  disabled={!canRemove}
-                  onClick={() => removeSection(section.id)}
-                  aria-label={t(CF['CF-026'], locale)}
-                  title={t(CF['CF-026'], locale)}
-                  className="-mr-2 grid h-11 w-11 shrink-0 place-items-center text-lg leading-none text-steel transition-colors hover:text-danger disabled:cursor-not-allowed disabled:opacity-30"
-                >
-                  ×
-                </button>
-              </div>
-              <SectionFields
-                section={section}
-                index={i}
-                widths={widths}
-                onFocus={() => handleFocusSection(section.id)}
-                onChangeWidth={(w) => handleChangeWidth(section.id, w)}
-                onToggleWall={(field, checked) => handleToggleWall(section.id, field, checked)}
-              />
-            </li>
-          );
-        })}
-      </ul>
+              </li>
+            ),
+          )}
+        </ul>
 
-      <div className="p-4">
-        <button
-          type="button"
-          disabled={!canAdd}
-          onClick={addSection}
-          aria-label={t(CF['CF-027'], locale)}
-          title={t(CF['CF-027'], locale)}
-          className="flex min-h-11 w-full items-center justify-center border border-dashed border-line-strong text-[15px] font-medium text-foreground transition-colors hover:border-foreground disabled:cursor-not-allowed disabled:opacity-40 lg:min-h-10"
-        >
-          {t(CF['CF-028'], locale)}
-        </button>
-        {/* Over the limit only happens for a row saved/shared before it
-            dropped: kept intact, and the customer removes sections here. */}
-        {config.sections.length > MAX_SECTIONS ? (
-          <p role="alert" className="mt-2 text-[13px] text-danger">
-            {t(CF['CF-103'], locale, { N: MAX_SECTIONS })}
-          </p>
-        ) : (
-          !canAdd && <p className="mt-2 text-[13px] text-steel">{t(CF['CF-029'], locale)}</p>
-        )}
-        {/* Reset sits with the settings it resets: easy to find at the end
-            of the panel, visually secondary to adding a section. Reuses the
-            store's reset(), passed in by the page. */}
-        {onReset && (
+        <div className="p-4">
           <button
             type="button"
-            onClick={onReset}
-            className="mx-auto mt-2 flex min-h-11 items-center justify-center gap-2 px-2 text-center text-[13px] leading-tight text-steel transition-colors hover:text-foreground lg:min-h-10"
+            disabled={!canAdd}
+            onClick={addSection}
+            aria-label={t(CF['CF-027'], locale)}
+            title={t(CF['CF-027'], locale)}
+            className="flex min-h-11 w-full items-center justify-center border border-dashed border-line-strong text-[15px] font-medium text-foreground transition-colors hover:border-foreground disabled:cursor-not-allowed disabled:opacity-40 lg:min-h-10"
           >
-            <ResetIcon />
-            {t(CF['CF-022'], locale)}
+            {t(CF['CF-028'], locale)}
           </button>
-        )}
-      </div>
+          {/* Over the limit only happens for a row saved/shared before it
+              dropped: kept intact, and the customer removes sections here. */}
+          {config.sections.length > MAX_SECTIONS ? (
+            <p role="alert" className="mt-2 text-[13px] text-danger">
+              {t(CF['CF-103'], locale, { N: MAX_SECTIONS })}
+            </p>
+          ) : (
+            !canAdd && <p className="mt-2 text-[13px] text-steel">{t(CF['CF-029'], locale)}</p>
+          )}
+          {/* Reset sits with the settings it resets: easy to find at the end
+              of the panel, visually secondary to adding a section. Reuses the
+              store's reset(), passed in by the page. */}
+          {onReset && (
+            <button
+              type="button"
+              onClick={onReset}
+              className="mx-auto mt-2 flex min-h-11 items-center justify-center gap-2 px-2 text-center text-[13px] leading-tight text-steel transition-colors hover:text-foreground lg:min-h-10"
+            >
+              <ResetIcon />
+              {t(CF['CF-022'], locale)}
+            </button>
+          )}
+        </div>
+      </section>
     </div>
   );
+}
+
+/** "1200 × 2500 мм · 8 полок" — one section's own values, for its collapsed row. */
+function sectionSummary(section: ShelvingSection, locale: Locale): string {
+  return `${section.width} × ${section.height} ${t(G['G-008'], locale)} · ${shelvesLabel(section.shelves, locale)}`;
 }
 
 /** Shared field chrome: readable sentence-case label over a 44px control. */
@@ -169,59 +191,25 @@ const FIELD_LABEL = 'text-[13px] leading-tight text-steel';
 const SELECT_CLASS =
   'mono h-11 w-full min-w-0 border border-line bg-surface px-2.5 text-sm text-foreground outline-none transition-colors hover:border-line-strong focus:border-blueprint lg:h-10';
 
-function RowParamsFields({
+/** Kit-wide parameters: the depth every section shares and the shelf load. */
+function KitParamsFields({
   config,
   model,
   catalog,
   setField,
-  setAllSectionHeights,
-  setAllSectionShelves,
 }: {
   config: ShelvingConfiguration;
   model: ProductModel;
   catalog: PublicCatalog;
   setField: <K extends keyof ShelvingConfiguration>(key: K, value: ShelvingConfiguration[K]) => void;
-  setAllSectionHeights: (height: number) => void;
-  setAllSectionShelves: (shelves: number) => void;
 }) {
-  // MS Standard's height/depth/shelf controls are cross-dimensional (see
-  // ms-standard-compatibility.ts): the height select only offers heights
-  // whose own shelf ceiling can fit the CURRENT shelf count, the depth
-  // select only offers depths valid for EVERY current section's width, and
-  // the shelf stepper's own max follows every section's CURRENT height. Every
-  // other model keeps its simple flat-list behaviour — it has none of these
-  // cross-rules today.
-  //
-  // TRANSITIONAL (V2.2A): height and shelves live on each section, but this
-  // panel still offers one height select and one shelf stepper; each applies
-  // its value to ALL sections. The row's height/shelf count shown here is the
-  // tallest section / most shelves — with the uniform sections this UI
-  // produces, that is simply every section's value. Per-section controls
-  // come in a later UI phase.
-  const isMsStandard = model.slug === 'ms-standard';
-  const rowHeight = getMaxSectionHeight(config.sections);
-  const rowShelves = getMaxSectionShelves(config.sections);
-  const allowedHeights = isMsStandard ? getAllowedHeightsForSections(config.sections) : model.heights;
-  const allowedDepths = isMsStandard ? getAllowedDepthsForSections(config.sections) : model.depths;
-  const shelvesMax = isMsStandard ? (getSharedMaxShelvesForSections(config.sections) ?? model.maxShelves) : model.maxShelves;
-  const shelvesMin = isMsStandard ? MS_STANDARD_MIN_SHELVES : model.minShelves;
+  // MS Standard's depth select only offers depths valid for EVERY current
+  // section's width (see ms-standard-compatibility.ts).
+  const allowedDepths = getAllowedKitDepths(model, config.sections);
   const locale = useLocale();
 
   return (
-    <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-3">
-      <label className="flex min-w-0 flex-col gap-1.5">
-        <span className={FIELD_LABEL}>{t(CF['CF-030'], locale)}</span>
-        <select value={rowHeight} onChange={(e) => setAllSectionHeights(Number(e.target.value))} className={SELECT_CLASS}>
-          {catalog.heights
-            .filter((h) => allowedHeights.includes(h.value))
-            .map((h) => (
-              <option key={h.id} value={h.value}>
-                {dimensionOptionLabel(h, locale)}
-              </option>
-            ))}
-        </select>
-      </label>
-
+    <div role="group" aria-label={t(CF['CF-024'], locale)} className="mt-3 grid grid-cols-2 gap-x-3 gap-y-3">
       <label className="flex min-w-0 flex-col gap-1.5">
         <span className={FIELD_LABEL}>{t(CF['CF-031'], locale)}</span>
         <select value={config.depth} onChange={(e) => setField('depth', Number(e.target.value))} className={SELECT_CLASS}>
@@ -234,11 +222,6 @@ function RowParamsFields({
             ))}
         </select>
       </label>
-
-      <div className="flex min-w-0 flex-col gap-1.5">
-        <span className={FIELD_LABEL}>{t(CF['CF-032'], locale)}</span>
-        <NumberStepper value={rowShelves} min={shelvesMin} max={shelvesMax} onChange={(v) => setAllSectionShelves(v)} testId="shelf-count" />
-      </div>
 
       {/* Load options are words, not a bare number: sans face, and a full
           row below 400px so "Сөреге 150 кг" never clips inside the select. */}
@@ -262,47 +245,105 @@ function RowParamsFields({
   );
 }
 
+/**
+ * One section's own controls. Width is compatibility-driven by the kit's
+ * shared depth; height offers only the heights whose shelf ceiling fits THIS
+ * section's shelf count; the shelf stepper stops at THIS section's own
+ * height ceiling. Nothing here reads another section.
+ */
 function SectionFields({
   section,
   index,
+  model,
+  catalog,
   widths,
-  onFocus,
-  onChangeWidth,
-  onToggleWall,
+  crossBraceSelected,
+  onChange,
+  onToggleCrossBrace,
 }: {
   section: ShelvingSection;
   index: number;
+  model: ProductModel;
+  catalog: PublicCatalog;
   widths: number[];
-  onFocus: () => void;
-  onChangeWidth: (width: number) => void;
-  onToggleWall: (field: WallField, checked: boolean) => void;
+  crossBraceSelected: boolean;
+  onChange: (patch: Partial<Omit<ShelvingSection, 'id'>>) => void;
+  onToggleCrossBrace: (checked: boolean) => void;
 }) {
   const locale = useLocale();
+  const limits = getSectionLimits(model, section);
+  const mm = t(G['G-008'], locale);
+  const heights = catalog.heights.filter((h) => limits.heights.includes(h.value)).map((h) => h.value);
+
   return (
-    <div className="flex flex-col gap-2.5">
-      <label className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-3">
-        <span className={FIELD_LABEL}>{t(CF['CF-035'], locale)}</span>
-        <select
-          value={section.width}
-          data-section-index={index}
-          aria-label={t(CF['CF-036'], locale, { N: index + 1 })}
-          onClick={onFocus}
-          onChange={(e) => onChangeWidth(Number(e.target.value))}
-          className={SELECT_CLASS}
-        >
-          {widths.map((w) => (
-            <option key={w} value={w}>
-              {w}
-            </option>
-          ))}
-        </select>
-      </label>
+    <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-3 min-[400px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_7rem]">
+        <label className="flex min-w-0 flex-col gap-1.5">
+          <span className={FIELD_LABEL}>
+            {t(CF['CF-035'], locale)}, {mm}
+          </span>
+          <select
+            value={section.width}
+            data-section-index={index}
+            aria-label={t(CF['CF-036'], locale, { N: index + 1 })}
+            onChange={(e) => onChange({ width: Number(e.target.value) })}
+            className={SELECT_CLASS}
+          >
+            {widths.map((w) => (
+              <option key={w} value={w}>
+                {w}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex min-w-0 flex-col gap-1.5">
+          <span className={FIELD_LABEL}>
+            {t(CF['CF-030'], locale)}, {mm}
+          </span>
+          <select
+            value={section.height}
+            data-section-index={index}
+            aria-label={t(CF['CF-106'], locale, { N: index + 1 })}
+            onChange={(e) => onChange({ height: Number(e.target.value) })}
+            className={SELECT_CLASS}
+          >
+            {heights.map((h) => (
+              <option key={h} value={h}>
+                {h}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="col-span-2 flex min-w-0 flex-col gap-1.5 min-[400px]:col-span-1">
+          <span className={FIELD_LABEL}>{t(CF['CF-032'], locale)}</span>
+          <NumberStepper
+            value={section.shelves}
+            min={limits.minShelves}
+            max={limits.maxShelves}
+            onChange={(shelves) => onChange({ shelves })}
+            testId="shelf-count"
+          />
+        </div>
+      </div>
 
       <div className="grid grid-cols-3 gap-2">
-        <WallCheckbox label={t(CF['CF-037'], locale)} checked={section.rearWall} onFocus={onFocus} onChange={(checked) => onToggleWall('rearWall', checked)} />
-        <WallCheckbox label={t(CF['CF-038'], locale)} checked={section.leftWall} onFocus={onFocus} onChange={(checked) => onToggleWall('leftWall', checked)} />
-        <WallCheckbox label={t(CF['CF-039'], locale)} checked={section.rightWall} onFocus={onFocus} onChange={(checked) => onToggleWall('rightWall', checked)} />
+        <WallCheckbox label={t(CF['CF-037'], locale)} checked={section.rearWall} onChange={(checked) => onChange({ rearWall: checked })} />
+        <WallCheckbox label={t(CF['CF-038'], locale)} checked={section.leftWall} onChange={(checked) => onChange({ leftWall: checked })} />
+        <WallCheckbox label={t(CF['CF-039'], locale)} checked={section.rightWall} onChange={(checked) => onChange({ rightWall: checked })} />
       </div>
+
+      {/* A section option, not a kit-wide one: the cross brace belongs to
+          this section and exists only for a 1000 mm section (the same
+          accessory selection with this section's id as before). */}
+      <OptionCheckbox
+        label={t(CF['CF-048'], locale)}
+        note={t(CF['CF-049'], locale)}
+        checked={crossBraceSelected}
+        disabled={section.width !== CROSS_BRACE_WIDTH_MM}
+        onChange={onToggleCrossBrace}
+      />
     </div>
   );
 }
@@ -310,17 +351,7 @@ function SectionFields({
 /** A native checkbox inside a chip-shaped label: the whole chip is the
  * touch target, and the checked state reads from the tick and the darker
  * border together — never from colour alone. */
-function WallCheckbox({
-  label,
-  checked,
-  onFocus,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onFocus: () => void;
-  onChange: (checked: boolean) => void;
-}) {
+function WallCheckbox({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
   return (
     <label
       className={`flex min-h-11 min-w-0 cursor-pointer items-center gap-2 border px-2 text-[13px] leading-tight transition-colors lg:min-h-10 ${
@@ -330,7 +361,6 @@ function WallCheckbox({
       <input
         type="checkbox"
         checked={checked}
-        onFocus={onFocus}
         onChange={(e) => onChange(e.target.checked)}
         className="h-4 w-4 shrink-0 accent-[color:var(--color-foreground)]"
       />
