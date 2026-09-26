@@ -4,7 +4,8 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDimensionDrag } from '@/components/configurator/resize/useDimensionDrag';
 import { useLivePrice } from '@/components/configurator/useLivePrice';
-import { useConfiguratorStore, DEFAULT_CONFIGURATION } from '@/store/configurator-store';
+import { useConfiguratorStore, DEFAULT_CONFIGURATION, selectConfig } from '@/store/configurator-store';
+import { activeConfig, loadSingleKit } from '../helpers/workspace';
 
 /**
  * Verifies the drag-to-resize feature's most important performance/cost
@@ -45,12 +46,7 @@ async function settleDebounce() {
 describe('drag-to-resize does not spam the pricing API', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    useConfiguratorStore.setState({
-      config: DEFAULT_CONFIGURATION,
-      activeSectionId: DEFAULT_CONFIGURATION.sections[0].id,
-      priceResult: null,
-      pricingError: null,
-    });
+    loadSingleKit(DEFAULT_CONFIGURATION);
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -67,8 +63,8 @@ describe('drag-to-resize does not spam the pricing API', () => {
   it('fires once on mount, stays silent through many pointer moves, then fires once more after commit', async () => {
     const activeId = DEFAULT_CONFIGURATION.sections[0].id;
     const { result } = renderHook(() => {
-      const config = useConfiguratorStore((s) => s.config);
-      useLivePrice(config);
+      const config = useConfiguratorStore(selectConfig);
+      useLivePrice();
       return useDimensionDrag({
         axis: 'width',
         committedValue: config.sections[0].width,
@@ -98,7 +94,7 @@ describe('drag-to-resize does not spam the pricing API', () => {
 
     // Commit on release — exactly one price recalculation follows.
     act(() => result.current.onPointerUp(fakePointerEvent(30, 0)));
-    expect(useConfiguratorStore.getState().config.sections[0].width).not.toBe(DEFAULT_CONFIGURATION.sections[0].width);
+    expect(activeConfig().sections[0].width).not.toBe(DEFAULT_CONFIGURATION.sections[0].width);
 
     await settleDebounce();
     expect(fetch).toHaveBeenCalledTimes(1);

@@ -2,7 +2,7 @@
 import { createElement, type ComponentType, type ReactNode } from 'react';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_CONFIGURATION, MAX_SECTIONS, useConfiguratorStore } from '@/store/configurator-store';
+import { DEFAULT_CONFIGURATION, MAX_SECTIONS } from '@/store/configurator-store';
 import { ParametersSectionsTable } from '@/components/configurator/ParametersSectionsTable';
 import { ConfiguratorCharacteristics } from '@/components/configurator/ConfiguratorCharacteristics';
 import { ShelvingPreview } from '@/components/configurator/ShelvingPreview';
@@ -12,6 +12,7 @@ import { toPublicCatalog, type PublicCatalog } from '@/lib/data/public-catalog';
 import { getAllowedKitDepths, getAllowedSectionWidths, getSectionLimits } from '@/lib/configurator/section-limits';
 import type { ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
 import type { Locale } from '@/lib/i18n/locales';
+import { activeConfig, activeSectionIdOf, loadSingleKit } from '../helpers/workspace';
 
 /**
  * Configurator V2.4 — per-section controls. Every section owns its width,
@@ -29,17 +30,11 @@ function section(id: string, width: number, height: number, shelves: number, wal
 }
 
 function load(sections: ShelvingSection[], activeSectionId = sections[0].id) {
-  useConfiguratorStore.setState({
-    config: { ...DEFAULT_CONFIGURATION, sections, accessories: [] },
-    activeSectionId,
-    priceResult: null,
-    pricingError: null,
-  });
+  loadSingleKit({ ...DEFAULT_CONFIGURATION, sections, accessories: [] }, activeSectionId);
 }
 
-const state = () => useConfiguratorStore.getState();
-const heights = () => state().config.sections.map((s) => s.height);
-const shelves = () => state().config.sections.map((s) => s.shelves);
+const heights = () => activeConfig().sections.map((s) => s.height);
+const shelves = () => activeConfig().sections.map((s) => s.shelves);
 
 let catalog: PublicCatalog;
 beforeAll(async () => {
@@ -70,7 +65,7 @@ describe('V2.4 sections panel — the active section shows its OWN controls', ()
     expect(row2.textContent).toContain('1200 × 2500 мм · 8 полок');
 
     fireEvent.click(row2);
-    expect(state().activeSectionId).toBe('b');
+    expect(activeSectionIdOf()).toBe('b');
     expect(select('Ширина секции 2').value).toBe('1200');
     expect(select('Высота секции 2').value).toBe('2500');
     expect(shelfCount()).toBe('8');
@@ -121,9 +116,9 @@ describe('V2.4 sections panel — the active section shows its OWN controls', ()
   it('walls and the cross brace belong to the active section only', () => {
     renderPanel();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Задняя' }));
-    expect(state().config.sections.map((s) => s.rearWall)).toEqual([true, false]);
+    expect(activeConfig().sections.map((s) => s.rearWall)).toEqual([true, false]);
     fireEvent.click(screen.getByRole('checkbox', { name: /^Крестовина жесткости\./ }));
-    expect(state().config.accessories).toEqual([{ accessoryId: 'acc-cross-brace', quantity: 1, sectionId: 'a' }]);
+    expect(activeConfig().accessories).toEqual([{ accessoryId: 'acc-cross-brace', quantity: 1, sectionId: 'a' }]);
     // A 1200 mm section cannot take one.
     fireEvent.click(screen.getByRole('button', { name: 'Секция 2' }));
     expect((screen.getByRole('checkbox', { name: /^Крестовина жесткости\./ }) as HTMLInputElement).disabled).toBe(true);
@@ -133,18 +128,18 @@ describe('V2.4 sections panel — the active section shows its OWN controls', ()
     load([section('a', 1000, 1500, 4, { rearWall: true }), section('b', 1200, 2500, 8)], 'b');
     renderPanel();
     fireEvent.click(screen.getByRole('button', { name: 'Добавить секцию' }));
-    const [, , added] = state().config.sections;
+    const [, , added] = activeConfig().sections;
     expect([added.width, added.height, added.shelves, added.rearWall]).toEqual([1200, 2500, 8, false]);
-    expect(state().activeSectionId).toBe(added.id);
+    expect(activeSectionIdOf()).toBe(added.id);
 
     fireEvent.click(screen.getByRole('button', { name: 'Секция 1' }));
     fireEvent.click(screen.getByRole('button', { name: 'Дублировать' }));
-    const [original, copy] = state().config.sections;
+    const [original, copy] = activeConfig().sections;
     const { id: originalId, ...originalRest } = original;
     const { id: copyId, ...copyRest } = copy;
     expect(copyRest).toEqual(originalRest);
     expect(copyId).not.toBe(originalId);
-    expect(state().activeSectionId).toBe(copyId);
+    expect(activeSectionIdOf()).toBe(copyId);
   });
 
   it('never allows a sixth section: add and duplicate are disabled at the maximum', () => {
@@ -153,7 +148,7 @@ describe('V2.4 sections panel — the active section shows its OWN controls', ()
     expect((screen.getByRole('button', { name: 'Добавить секцию' }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole('button', { name: 'Дублировать' }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Дублировать' }));
-    expect(state().config.sections).toHaveLength(MAX_SECTIONS);
+    expect(activeConfig().sections).toHaveLength(MAX_SECTIONS);
   });
 
   it('keeps kit-wide depth and load separate from the section controls, and never reintroduces a shared height or shelf count', () => {
@@ -165,7 +160,7 @@ describe('V2.4 sections panel — the active section shows its OWN controls', ()
     expect(screen.getByRole('heading', { name: 'Комплект 1' })).toBeTruthy();
     fireEvent.change(select('Высота секции 1'), { target: { value: '1800' } });
     fireEvent.click(increase());
-    const config = state().config as ShelvingConfiguration & Record<string, unknown>;
+    const config = activeConfig() as ShelvingConfiguration & Record<string, unknown>;
     expect(config).not.toHaveProperty('height');
     expect(config).not.toHaveProperty('shelves');
   });

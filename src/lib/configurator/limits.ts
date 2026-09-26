@@ -15,3 +15,13 @@ export const MAX_SECTIONS = 5;
  * MAX_SECTIONS.
  */
 export const LEGACY_MAX_SECTIONS = 10;
+
+/**
+ * Kits in one configurator workspace (V2.5). A kit is one independent
+ * ShelvingConfiguration; its own `quantity` is how many physical racks of it
+ * are ordered, so this bound is separate from the order's physical-rack
+ * limit (MAX_KITS_PER_ORDER in src/lib/orders/limits.ts, Σ quantity), which
+ * the workspace must respect as well.
+ */
+export const MIN_WORKSPACE_KITS = 1;
+export const MAX_WORKSPACE_KITS = 5;

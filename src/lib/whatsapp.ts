@@ -5,7 +5,7 @@ import type { PublicAccessory, ShelvingConfiguration } from '@/lib/types/domain'
 import type { PublicPriceResult } from '@/lib/pricing/public-result';
 import type { Locale } from '@/lib/i18n/locales';
 import { pick, t } from '@/lib/i18n/format';
-import { WA } from '@/lib/i18n/strings';
+import { CF, WA } from '@/lib/i18n/strings';
 import { sectionHeightsSummary, sectionShelvesSummary } from '@/lib/configurator/section-dimensions';
 
 /**
@@ -91,13 +91,43 @@ export function whatsAppConfiguratorUrl(
   shareUrl: string,
   locale: Locale,
 ): string {
-  const c = price.configuration;
-  const widths = c.sections.map((s) => s.width).join(' + ');
+  const lines = [t(WA['WA-003'], locale), '', t(WA['WA-004'], locale), ...configurationLines(price.configuration, accessories, locale)];
+  lines.push('', t(WA['WA-017'], locale, { amount: formatPrice(price.breakdown.total) }), '', t(WA['WA-018'], locale), shareUrl);
+  return buildWhatsAppUrl(site.whatsapp, lines.join('\n'));
+}
 
+/**
+ * The configurator's WhatsApp message for the whole workspace (V2.5). One
+ * kit: exactly whatsAppConfiguratorUrl. Several kits: one block per kit, in
+ * order, headed "Комплект N — <its server total>", then the total — the sum
+ * of the kits' own server totals, which is also how the cart and the order
+ * API combine them (every kit carries its own assembly and delivery).
+ * `prices` must be every kit's current server result, in kit order.
+ */
+export function whatsAppWorkspaceUrl(
+  prices: readonly PublicPriceResult[],
+  accessories: PublicAccessory[],
+  shareUrl: string,
+  locale: Locale,
+): string {
+  if (prices.length === 1) return whatsAppConfiguratorUrl(prices[0], accessories, shareUrl, locale);
+  const lines = [t(WA['WA-003'], locale)];
+  prices.forEach((price, i) => {
+    lines.push(
+      '',
+      `${t(CF['CF-104'], locale, { N: i + 1 })} — ${formatPrice(price.breakdown.total)}`,
+      ...configurationLines(price.configuration, accessories, locale),
+    );
+  });
+  const total = prices.reduce((sum, price) => sum + price.breakdown.total, 0);
+  lines.push('', t(WA['WA-017'], locale, { amount: formatPrice(total) }), '', t(WA['WA-018'], locale), shareUrl);
+  return buildWhatsAppUrl(site.whatsapp, lines.join('\n'));
+}
+
+/** One configuration's dimensions, walls and selected options, one fact per line. */
+function configurationLines(c: ShelvingConfiguration, accessories: PublicAccessory[], locale: Locale): string[] {
+  const widths = c.sections.map((s) => s.width).join(' + ');
   const lines = [
-    t(WA['WA-003'], locale),
-    '',
-    t(WA['WA-004'], locale),
     t(WA['WA-005'], locale, { H: sectionHeightsSummary(c.sections) }),
     t(WA['WA-006'], locale, { D: c.depth }),
     t(WA['WA-007'], locale, { N: c.sections.length }),
@@ -111,10 +141,7 @@ export function whatsAppConfiguratorUrl(
   if (optionNames.length > 0) {
     lines.push('', t(WA['WA-016'], locale), ...optionNames.map((name) => `- ${name}`));
   }
-
-  lines.push('', t(WA['WA-017'], locale, { amount: formatPrice(price.breakdown.total) }), '', t(WA['WA-018'], locale), shareUrl);
-
-  return buildWhatsAppUrl(site.whatsapp, lines.join('\n'));
+  return lines;
 }
 
 /**

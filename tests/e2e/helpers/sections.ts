@@ -35,14 +35,32 @@ export interface StoredSection {
   rightWall: boolean;
 }
 
-/** Every section as the configurator store persisted it (localStorage) —
- * the real configuration state, including sections whose controls are
- * collapsed. */
+/** Every section of the ACTIVE kit as the configurator store persisted it
+ * (localStorage, V2.5 workspace) — the real configuration state, including
+ * sections whose controls are collapsed. */
 export async function storedSections(page: Page): Promise<StoredSection[]> {
+  return (await storedActiveConfiguration(page))?.sections ?? [];
+}
+
+export interface StoredKit {
+  id: string;
+  configuration: { sections: StoredSection[]; quantity: number; depth: number; shelfType: string } & Record<string, unknown>;
+  activeSectionId: string;
+}
+
+/** The persisted V2.5 workspace: every kit in order and the active kit id. */
+export async function storedWorkspace(page: Page): Promise<{ kits: StoredKit[]; activeKitId: string } | null> {
   return page.evaluate(() => {
     const raw = localStorage.getItem('ms-shelving-configurator');
-    return raw ? (JSON.parse(raw).state.config.sections as StoredSection[]) : [];
+    return raw ? (JSON.parse(raw).state as { kits: StoredKit[]; activeKitId: string }) : null;
   });
+}
+
+/** The active kit's persisted configuration. */
+export async function storedActiveConfiguration(page: Page): Promise<StoredKit['configuration'] | null> {
+  const workspace = await storedWorkspace(page);
+  if (!workspace) return null;
+  return (workspace.kits.find((k) => k.id === workspace.activeKitId) ?? workspace.kits[0])?.configuration ?? null;
 }
 
 export async function storedWidths(page: Page): Promise<number[]> {

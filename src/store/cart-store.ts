@@ -15,7 +15,7 @@ import { upgradeRowLevelConfiguration } from '@/lib/configurator/persisted-confi
  * price, in line with the "never trust a client total" rule.
  *
  * Physical-kit limit (src/lib/orders/limits.ts): every mutation that can
- * add kits — addItem, duplicateItem, a quantity increase — is refused when
+ * add kits — addItem, addItems, duplicateItem, a quantity increase — is refused when
  * the cart's total quantity would pass MAX_KITS_PER_ORDER. A refused
  * mutation changes nothing (never clamped) and reports why, so the UI can
  * explain it. Decreases and removals are always allowed, so a cart persisted
@@ -41,14 +41,20 @@ export interface CartItem {
   addedAt: string;
 }
 
+export interface CartItemInput {
+  modelSlug: string;
+  modelName: string;
+  configuration: ShelvingConfiguration;
+  priceSnapshot: PublicPriceResult;
+}
+
 interface CartState {
   items: CartItem[];
-  addItem: (input: {
-    modelSlug: string;
-    modelName: string;
-    configuration: ShelvingConfiguration;
-    priceSnapshot: PublicPriceResult;
-  }) => { ok: true; id: string } | CartMutationFailure;
+  addItem: (input: CartItemInput) => { ok: true; id: string } | CartMutationFailure;
+  /** Adds every input as its own line in ONE update, or none of them: the
+   * kit limit is checked against the inputs' total quantity first, so a
+   * refused call never leaves a partly added workspace in the cart. */
+  addItems: (inputs: readonly CartItemInput[]) => { ok: true; ids: string[] } | CartMutationFailure;
   removeItem: (id: string) => void;
   duplicateItem: (id: string) => CartMutationResult;
   setQuantity: (id: string, quantity: number) => CartMutationResult;
@@ -90,6 +96,22 @@ export const useCartStore = create<CartState>()(
           ],
         }));
         return { ok: true, id };
+      },
+
+      addItems: (inputs) => {
+        const additional = inputs.reduce((sum, input) => sum + input.configuration.quantity, 0);
+        if (!canAddKits(get().items, additional)) return { ok: false, reason: 'KIT_LIMIT' };
+        const addedAt = new Date().toISOString();
+        const lines: CartItem[] = inputs.map((input) => ({
+          id: generateId(),
+          modelSlug: input.modelSlug,
+          modelName: input.modelName,
+          configuration: input.configuration,
+          priceSnapshot: input.priceSnapshot,
+          addedAt,
+        }));
+        set((state) => ({ items: [...state.items, ...lines] }));
+        return { ok: true, ids: lines.map((line) => line.id) };
       },
 
       removeItem: (id) => set((state) => ({ items: state.items.filter((item) => item.id !== id) })),

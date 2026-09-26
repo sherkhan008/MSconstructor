@@ -34,7 +34,7 @@ async function openMixed(page: Page, query: string, count: number) {
   await expect.poll(async () => (await storedSections(page)).length).toBe(count);
 }
 
-test('the page follows the V2.4 order: rack, kit, sections, characteristics, options, contents, price', async ({ page }) => {
+test('the page follows the V2.4/V2.5 order: rack, kit switcher, kit, sections, characteristics, options, contents, price', async ({ page }) => {
   const errors = trackErrors(page);
   await page.goto('/ru/configurator');
   await waitForPrice(page);
@@ -55,8 +55,22 @@ test('the page follows the V2.4 order: rack, kit, sections, characteristics, opt
     return nodes.every((n, i) => i === 0 || nodes[i - 1]!.compareDocumentPosition(n!) & Node.DOCUMENT_POSITION_FOLLOWING);
   });
   expect(order).toBe(true);
-  // One kit only — no kit switcher or "add kit" control in V2.4.
-  await expect(page.getByRole('button', { name: /Добавить комплект/ })).toHaveCount(0);
+  // V2.5: the kit switcher sits between the rack and the kit's parameters,
+  // holding the one kit plus "+ Комплект".
+  const switcher = page.getByRole('group', { name: 'Комплекты' });
+  await expect(switcher.getByRole('button', { name: /^Комплект \d/ })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Добавить комплект' })).toBeEnabled();
+  const switcherFirst = await page.evaluate(() => {
+    const group = document.querySelector('[role="group"][aria-label="Комплекты"]');
+    const stage = document.querySelector('[data-testid="preview-stage"]');
+    const heading = Array.from(document.querySelectorAll('h2')).find((h) => h.textContent?.trim() === 'Комплект 1');
+    return Boolean(
+      group && stage && heading &&
+        stage.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING &&
+        group.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+  expect(switcherFirst).toBe(true);
   expect(errors).toEqual([]);
 });
 
