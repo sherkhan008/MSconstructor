@@ -14,14 +14,18 @@ import { getTotalSectionShelves } from '@/lib/configurator/section-dimensions';
 /**
  * Accessory ids the *customer* configurator may select — a small curated
  * subset of the full admin accessory catalog, backing three of the five
- * rack options below. Exported so ConfiguratorClient's normalization effect
- * can strip anything else a stale persisted config or share link carries,
- * without wiping this list too (see that effect's comment).
+ * rack options (two below, the cross brace in the active section's own
+ * controls — see ParametersSectionsTable). Exported so ConfiguratorClient's
+ * normalization effect can strip anything else a stale persisted config or
+ * share link carries, without wiping this list too (see that effect's
+ * comment).
  */
 export const CUSTOMER_ACCESSORY_IDS = ['acc-adjustable-feet', 'acc-shelf-reinforcement', 'acc-cross-brace'] as const;
 
-const CROSS_BRACE_ID = 'acc-cross-brace';
-const CROSS_BRACE_WIDTH_MM = 1000;
+/** The cross brace is a per-section accessory (its selection carries the
+ * section's id), offered only for a 1000 mm section. */
+export const CROSS_BRACE_ID = 'acc-cross-brace';
+export const CROSS_BRACE_WIDTH_MM = 1000;
 
 /** True for a cross-brace selection whose target section no longer exists
  * or is no longer 1000mm wide — reused by both the cleanup effect below and
@@ -34,11 +38,13 @@ export function isStaleCrossBrace(selection: ConfigurationAccessorySelection, se
 
 /**
  * Single compact, collapsed-by-default disclosure for the customer's
- * secondary choices: five real rack options plus assembly/delivery. Shelf
- * type is no longer a customer choice at all — MS Standard now only offers
- * STANDARD (see seed-data.ts), so there is nothing left to pick.
+ * secondary, KIT-WIDE choices: four rack options plus assembly/delivery.
+ * Section-level choices (walls, the cross brace) live with the section they
+ * belong to (see ParametersSectionsTable), so the two are never blurred.
+ * Shelf type is no longer a customer choice at all — MS Standard now only
+ * offers STANDARD (see seed-data.ts), so there is nothing left to pick.
  *
- * Three of the five options reuse the existing accessory mechanism
+ * Two of the four options reuse the existing accessory mechanism
  * (config.accessories) with real catalog pricing. Two — "Металлический
  * подпятник" and "Уголки жесткости на полки" — have no matching commercial
  * component in the current catalog (see the task report), so they are
@@ -49,15 +55,11 @@ export function AdvancedSettingsAccordion({ catalog }: { catalog: PublicCatalog 
   const [open, setOpen] = useState(false);
   const locale = useLocale();
   const config = useConfiguratorStore((s) => s.config);
-  const activeSectionId = useConfiguratorStore((s) => s.activeSectionId);
   const setField = useConfiguratorStore((s) => s.setField);
   const setMany = useConfiguratorStore((s) => s.setMany);
   const setAccessoryQuantity = useConfiguratorStore((s) => s.setAccessoryQuantity);
   const model = catalog.models.find((m) => m.slug === config.modelSlug);
 
-  const activeSection = config.sections.find((s) => s.id === activeSectionId) ?? config.sections[0];
-  const crossBraceEligible = activeSection?.width === CROSS_BRACE_WIDTH_MM;
-  const crossBraceSelectedHere = config.accessories.some((a) => a.accessoryId === CROSS_BRACE_ID && a.sectionId === activeSection?.id);
   const adjustableFeetSelected = config.accessories.some((a) => a.accessoryId === 'acc-adjustable-feet');
   const shelfReinforcementSelected = config.accessories.some((a) => a.accessoryId === 'acc-shelf-reinforcement');
 
@@ -65,7 +67,9 @@ export function AdvancedSettingsAccordion({ catalog }: { catalog: PublicCatalog 
   // (or removed) would otherwise sit there silently until the next price
   // calculation surfaces it as a compatibility error — clean it up
   // proactively instead, the same way ConfiguratorClient's own normalization
-  // effect fixes up other now-invalid selections.
+  // effect fixes up other now-invalid selections. (This panel is always
+  // mounted, so the cleanup runs even though the checkbox itself now sits in
+  // the active section's controls.)
   useEffect(() => {
     const stale = config.accessories.filter((a) => isStaleCrossBrace(a, config.sections));
     if (stale.length === 0) return;
@@ -93,17 +97,6 @@ export function AdvancedSettingsAccordion({ catalog }: { catalog: PublicCatalog 
     // section counts its own shelves.
     const quantity = getTotalSectionShelves(config.sections);
     setAccessoryQuantity('acc-shelf-reinforcement', checked ? quantity : 0);
-  }
-
-  function toggleCrossBrace(checked: boolean) {
-    if (!activeSection) return;
-    const withoutThisSection = config.accessories.filter(
-      (a) => !(a.accessoryId === CROSS_BRACE_ID && a.sectionId === activeSection.id),
-    );
-    const next = checked
-      ? [...withoutThisSection, { accessoryId: CROSS_BRACE_ID, quantity: 1, sectionId: activeSection.id }]
-      : withoutThisSection;
-    setMany({ accessories: next });
   }
 
   return (
@@ -138,13 +131,6 @@ export function AdvancedSettingsAccordion({ catalog }: { catalog: PublicCatalog 
               checked={shelfReinforcementSelected}
               onChange={toggleShelfReinforcement}
             />
-            <OptionCheckbox
-              label={t(CF['CF-048'], locale)}
-              note={t(CF['CF-049'], locale)}
-              checked={crossBraceSelectedHere}
-              disabled={!crossBraceEligible}
-              onChange={toggleCrossBrace}
-            />
           </div>
 
           <InstallDeliveryPanel catalog={catalog} />
@@ -154,7 +140,9 @@ export function AdvancedSettingsAccordion({ catalog }: { catalog: PublicCatalog 
   );
 }
 
-function OptionCheckbox({
+/** A labelled option checkbox with an optional note — shared with the
+ * section controls' own option (the cross brace). */
+export function OptionCheckbox({
   label,
   note,
   checked,

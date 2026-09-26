@@ -245,6 +245,7 @@ describe('physical geometry — the configurator frame contains the whole rack',
   ])('%s: every upright and shelf lies inside both crop profiles', (_label, sections) => {
     const { container, svg } = renderRack(sections, 800, { interactive: true, capacityMm: CAPACITY, framed: true, activeSectionId: sections[0].id });
     const stage = container.querySelector<HTMLElement>('[data-testid="preview-stage"]')!;
+    const frame = stage.parentElement!;
     for (const [prefix, profile] of [['w', WIDE_FRAME], ['c', COMPACT_FRAME]] as const) {
       const widthPct = parseFloat(stage.style.getPropertyValue(`--stage-${prefix}-w`));
       const leftPct = parseFloat(stage.style.getPropertyValue(`--stage-${prefix}-l`));
@@ -254,7 +255,12 @@ describe('physical geometry — the configurator frame contains the whole rack',
       const cropH = (VIEWBOX_H / heightPct) * 100;
       const cropX = (-leftPct / 100) * cropW;
       const cropY = (-topPct / 100) * cropH;
-      expect(cropW / cropH).toBeCloseTo(profile.aspect, 6);
+      // The crop takes exactly the frame's own published ratio (V2.4: the
+      // envelope's ratio, within the profile's bounds).
+      const aspect = parseFloat(frame.style.getPropertyValue(`--frame-${prefix}-aspect`));
+      expect(cropW / cropH).toBeCloseTo(aspect, 6);
+      expect(aspect).toBeGreaterThanOrEqual(profile.minAspect);
+      expect(aspect).toBeLessThanOrEqual(profile.maxAspect);
       for (const el of Array.from(svg.querySelectorAll('rect[data-upright], rect[data-shelf-part]'))) {
         expect(num(el, 'x')).toBeGreaterThanOrEqual(cropX - 1e-6);
         expect(num(el, 'x') + num(el, 'width')).toBeLessThanOrEqual(cropX + cropW + 1e-6);

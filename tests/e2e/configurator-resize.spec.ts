@@ -1,5 +1,6 @@
 import { test, expect } from './helpers/test';
 import type { Page } from '@playwright/test';
+import { sectionButtons, storedSections, storedWidths } from './helpers/sections';
 
 /**
  * End-to-end coverage for the drag-to-resize feature on /configurator:
@@ -123,7 +124,6 @@ test('width resize can start from near the top or near the bottom of the right u
   // still two distinct, well-separated points clearly outside the button,
   // which is what actually proves the enlarged zone (not just the marker)
   // owns the drag.
-  const widthSelects = page.locator('select[aria-label^="Ширина секции"]');
   const regions: [number, number][] = [
     [0.05, 0.3], // near the top of the upright
     [0.7, 0.95], // near the bottom
@@ -137,8 +137,8 @@ test('width resize can start from near the top or near the bottom of the right u
     await page.goto(
       '/ru/configurator?v=2&model=ms-standard&depth=400&sections=1000:2000:3:0:0:0,1000:2000:3:0:0:0',
     );
-    await expect(widthSelects).toHaveCount(2);
-    await expect(widthSelects.first()).toHaveValue('1000');
+    await expect(sectionButtons(page)).toHaveCount(2);
+    await expect.poll(() => storedWidths(page)).toEqual([1000, 1000]);
 
     const zone = page.getByTestId('width-resize-zone').first();
     await expect(zone).toBeVisible();
@@ -154,11 +154,11 @@ test('width resize can start from near the top or near the bottom of the right u
     await page.mouse.move(x + 300, y, { steps: 10 });
     await page.mouse.up();
 
-    const after = await widthSelects.first().inputValue();
-    expect(after).not.toBe('1000');
-    expect(['700', '1000', '1200', '1500']).toContain(after);
+    await expect.poll(async () => (await storedWidths(page))[0]).not.toBe(1000);
+    const [after, second] = await storedWidths(page);
+    expect([700, 1200, 1500]).toContain(after);
     // The second section, sharing this boundary, must stay untouched.
-    await expect(widthSelects.nth(1)).toHaveValue('1000');
+    expect(second).toBe(1000);
   }
 });
 
@@ -192,21 +192,20 @@ test('width resize started from the upright hit-zone still clamps correctly at t
   await expect(widthSelect).toHaveValue('700');
 });
 
-test('height resize can start from multiple points across the top rack edge — not only the circular button', async ({ page }) => {
-  // The top strip legitimately hosts other real controls too — the height
-  // handle itself sits near the row's left edge, and each section's own
-  // "add" button sits at its horizontal centre — so rather than assuming
-  // literal 0%/50%/100% points are free of them, search each third of the
+test('height resize can start from each section’s own top edge — not only the circular button — and changes only that section', async ({ page }) => {
+  // The top strips legitimately host other real controls too — the height
+  // handle itself sits near the active section's left edge, and each
+  // section's own "add" button sits at its horizontal centre — so rather
+  // than assuming literal points are free of them, search each region of a
   // strip for a point the zone itself actually owns (see
-  // findClearPointInZone). This still proves the same thing the task asks
-  // for: height can be grabbed from multiple, meaningfully distinct points
-  // along the top edge, not only the small circular marker.
-  const regions: [number, number][] = [
-    [0.05, 0.3],
-    [0.35, 0.65],
-    [0.7, 0.95],
+  // findClearPointInZone). V2.4: every section has its own strip, and
+  // pressing a strip resizes THAT section (selecting it first when needed).
+  const regions: [number, number, number][] = [
+    [0, 0.05, 0.3], // section 1 (already active), near its left end
+    [1, 0.05, 0.3], // section 2 (not active yet), left part of its edge
+    [1, 0.7, 0.98], // section 2, right part of its edge
   ];
-  for (const [regionStart, regionEnd] of regions) {
+  for (const [sectionIndex, regionStart, regionEnd] of regions) {
     // The configurator store persists to localStorage — a plain goto()
     // would carry over whatever a previous iteration committed, not the
     // default. An explicit share-link URL (see url.ts) deterministically
@@ -222,12 +221,11 @@ test('height resize can start from multiple points across the top rack edge — 
     const heightHandle = page.locator('button[data-axis="height"]');
     // The persisted store renders first and the share link is applied one
     // commit later, so an immediate read can still see the previous
-    // iteration's committed height (e.g. 3000). Wait for the URL's height
-    // before capturing the baseline the drag must change.
+    // iteration's committed heights. Wait for the URL's before dragging.
     await expect(heightHandle).toHaveAttribute('aria-valuenow', '2000');
-    const before = await heightHandle.getAttribute('aria-valuenow');
+    await expect.poll(async () => (await storedSections(page)).map((s) => s.height)).toEqual([2000, 2000]);
 
-    const zone = page.getByTestId('height-resize-zone');
+    const zone = page.locator(`[data-testid="height-resize-zone"][data-section-index="${sectionIndex}"]`);
     await expect(zone).toBeVisible();
     const zoneBox = await zone.boundingBox();
     if (!zoneBox) throw new Error('Height resize zone has no bounding box');
@@ -241,7 +239,10 @@ test('height resize can start from multiple points across the top rack edge — 
     await page.mouse.move(x, y - 300, { steps: 10 });
     await page.mouse.up();
 
-    await expect.poll(() => heightHandle.getAttribute('aria-valuenow')).not.toBe(before);
+    // The pressed section grew; the other one kept its own height.
+    await expect.poll(async () => (await storedSections(page))[sectionIndex].height).toBeGreaterThan(2000);
+    expect((await storedSections(page))[1 - sectionIndex].height).toBe(2000);
+    await expect(heightHandle).not.toHaveAttribute('aria-valuenow', '2000');
   }
 });
 
@@ -260,14 +261,17 @@ test('drag-to-resize: keyboard stepping is a fully usable alternative to draggin
   await expect(widthSelect).toHaveValue('1200');
 });
 
-test('drag-to-resize: the height handle changes the whole row, not just one section', async ({ page }) => {
-  await page.goto('/ru/configurator');
+test('drag-to-resize: the height handle changes only the active section (keyboard)', async ({ page }) => {
+  await page.goto('/ru/configurator?v=2&model=ms-standard&depth=400&sections=1000:1500:4:0:0:0,1200:2500:8:0:0:0');
+  await expect(sectionButtons(page)).toHaveCount(2);
 
   const heightHandle = page.locator('button[data-axis="height"]');
+  await expect(heightHandle).toHaveAttribute('aria-valuenow', '1500');
   await heightHandle.focus();
-  const before = await heightHandle.getAttribute('aria-valuenow');
   await page.keyboard.press('ArrowUp');
-  await expect.poll(async () => heightHandle.getAttribute('aria-valuenow')).not.toBe(before);
+  await expect(heightHandle).toHaveAttribute('aria-valuenow', '1800');
+  await expect(page.locator('select[aria-label="Высота секции 1"]')).toHaveValue('1800');
+  expect((await storedSections(page)).map((s) => s.height)).toEqual([1800, 2500]);
 });
 
 /** The inner marker dot's opacity is what actually reveals/hides each
@@ -388,7 +392,7 @@ test('depth is still driven by the parameter controls: changing it updates the r
   await expect.poll(() => getVisiblePriceText(page), { timeout: 10_000 }).not.toBe(priceBefore);
 });
 
-test('hovering a section\'s right upright targets that section for width resizing, including a newly added one', async ({
+test('the selected section is the one width resizing targets, including a newly added one', async ({
   page,
 }) => {
   await page.goto('/ru/configurator');
@@ -396,12 +400,12 @@ test('hovering a section\'s right upright targets that section for width resizin
   const addButton = page.getByRole('button', { name: /Добавить секцию после/ }).first();
   await addButton.click();
   await addButton.click();
-  const widthSelects = page.locator('select[aria-label^="Ширина секции"]');
-  await expect(widthSelects).toHaveCount(3);
+  await expect(sectionButtons(page)).toHaveCount(3);
 
-  // Select section 2 via the table (equivalent to hovering its own right
-  // upright, which also targets it — see ShelvingPreview's width-zone
-  // handlers), then drag and confirm only section 2 changed. The handle
+  // Select section 2 via the sections panel (pressing its own right upright
+  // also targets it — see ShelvingPreview's width-zone handlers; V2.4 no
+  // longer selects on mere hover), then drag and confirm only section 2
+  // changed. The handle
   // repositions itself to the newly active section on the next render, so
   // wait for that (via aria-pressed on the table button) before reading its
   // on-screen box — otherwise a drag can start against the handle's
@@ -409,11 +413,7 @@ test('hovering a section\'s right upright targets that section for width resizin
   const section2Button = page.getByRole('button', { name: 'Секция 2', exact: true });
   await section2Button.click();
   await expect(section2Button).toHaveAttribute('aria-pressed', 'true');
-  const before = [
-    await widthSelects.nth(0).inputValue(),
-    await widthSelects.nth(1).inputValue(),
-    await widthSelects.nth(2).inputValue(),
-  ];
+  const before = await storedWidths(page);
 
   const widthHandle = page.locator('button[data-axis="width"]');
   await widthHandle.scrollIntoViewIfNeeded();
@@ -424,17 +424,17 @@ test('hovering a section\'s right upright targets that section for width resizin
   await page.mouse.move(box.x + box.width / 2 + 80, box.y + box.height / 2, { steps: 8 });
   await page.mouse.up();
 
-  await expect(widthSelects.nth(0)).toHaveValue(before[0]);
-  await expect(widthSelects.nth(1)).not.toHaveValue(before[1]);
-  await expect(widthSelects.nth(2)).toHaveValue(before[2]);
+  await expect.poll(async () => (await storedWidths(page))[1]).not.toBe(before[1]);
+  const after = await storedWidths(page);
+  expect([after[0], after[2]]).toEqual([before[0], before[2]]);
 
   // A newly added (4th) section behaves the same way via its own right upright.
   await addButton.click();
-  await expect(widthSelects).toHaveCount(4);
+  await expect(sectionButtons(page)).toHaveCount(4);
   const section4Button = page.getByRole('button', { name: 'Секция 4', exact: true });
   await section4Button.click();
   await expect(section4Button).toHaveAttribute('aria-pressed', 'true');
-  const before4 = await widthSelects.nth(3).inputValue();
+  const before4 = (await storedWidths(page))[3];
   await widthHandle.scrollIntoViewIfNeeded();
   const box2 = await widthHandle.boundingBox();
   if (!box2) throw new Error('Width handle has no bounding box');
@@ -442,7 +442,7 @@ test('hovering a section\'s right upright targets that section for width resizin
   await page.mouse.down();
   await page.mouse.move(box2.x + box2.width / 2 - 60, box2.y + box2.height / 2, { steps: 8 });
   await page.mouse.up();
-  await expect(widthSelects.nth(3)).not.toHaveValue(before4);
+  await expect.poll(async () => (await storedWidths(page))[3]).not.toBe(before4);
 });
 
 /**

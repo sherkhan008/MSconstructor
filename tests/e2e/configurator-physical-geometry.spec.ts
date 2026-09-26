@@ -1,5 +1,6 @@
 import { test, expect } from './helpers/test';
 import type { Page } from '@playwright/test';
+import { sectionButtons, storedSections, storedWidths } from './helpers/sections';
 
 /**
  * Configurator V2.3 — true physical geometry, measured in the real browser:
@@ -84,10 +85,10 @@ for (const [name, { query, sections }] of Object.entries(MIXED)) {
     page.on('pageerror', (e) => errors.push(String(e)));
 
     await page.goto(`/ru/configurator${query}`);
-    const tallest = Math.max(...sections.map((s) => s.height));
-    // The share link is applied one commit after the persisted store renders.
-    await expect(page.locator('button[data-axis="height"]')).toHaveAttribute('aria-valuenow', String(tallest));
-    await expect(page.locator('select[aria-label^="Ширина секции"]')).toHaveCount(sections.length);
+    // The share link is applied one commit after the persisted store renders;
+    // it activates section 1, whose own height the height handle carries.
+    await expect(page.locator('button[data-axis="height"]')).toHaveAttribute('aria-valuenow', String(sections[0].height));
+    await expect(sectionButtons(page)).toHaveCount(sections.length);
 
     const measured = await measureSections(page, sections.length);
     const scale = (measured[0].right - measured[0].left) / sections[0].width;
@@ -116,7 +117,7 @@ for (const [name, { query, sections }] of Object.entries(MIXED)) {
 
 test('section selection works on a mixed row: the clicked section becomes active', async ({ page }) => {
   await page.goto(`/ru/configurator${MIXED['five mixed sections'].query}`);
-  await expect(page.locator('select[aria-label^="Ширина секции"]')).toHaveCount(5);
+  await expect(sectionButtons(page)).toHaveCount(5);
   await page.getByRole('button', { name: /^Секция 4, ширина 1500/ }).first().click();
   await expect(page.getByRole('button', { name: 'Секция 4', exact: true })).toHaveAttribute('aria-pressed', 'true');
   // The width handle moves to section 4's own right upright.
@@ -131,8 +132,7 @@ test('width drag on a five-section row: the upright follows the pointer 1:1, not
   // Five sections — the row the scale is width-bound for, i.e. exactly where
   // a width-dependent fit would rescale mid-drag or on release.
   await page.goto('/ru/configurator?v=2&model=ms-standard&depth=400&sections=1000:2000:4:0:0:0,1000:2000:4:0:0:0,700:2000:4:0:0:0,1000:2000:4:0:0:0,1000:2000:4:0:0:0');
-  const widthSelects = page.locator('select[aria-label^="Ширина секции"]');
-  await expect(widthSelects).toHaveCount(5);
+  await expect(sectionButtons(page)).toHaveCount(5);
   const section3 = page.getByRole('button', { name: 'Секция 3', exact: true });
   await section3.click();
   await expect(section3).toHaveAttribute('aria-pressed', 'true');
@@ -168,7 +168,8 @@ test('width drag on a five-section row: the upright follows the pointer 1:1, not
   const liveMm = 700 + lastDx / pxPerMm;
   await page.mouse.up();
 
-  const committed = Number(await widthSelects.nth(2).inputValue());
+  await expect(page.locator('select[aria-label="Ширина секции 3"]')).not.toHaveValue('700');
+  const committed = Number(await page.locator('select[aria-label="Ширина секции 3"]').inputValue());
   expect([1000, 1200, 1500]).toContain(committed);
   await nextFrame(page);
   const released = (await handle.boundingBox())!;
@@ -177,12 +178,16 @@ test('width drag on a five-section row: the upright follows the pointer 1:1, not
   expect(Math.abs(released.x + released.width / 2 - (startX + lastDx) - (committed - liveMm) * pxPerMm)).toBeLessThan(1.5);
   expect(await stage.boundingBox()).toEqual(stageBefore);
   // The other sections kept their widths.
-  for (const i of [0, 1, 3, 4]) await expect(widthSelects.nth(i)).toHaveValue('1000');
+  const widths = await storedWidths(page);
+  for (const i of [0, 1, 3, 4]) expect(widths[i]).toBe(1000);
 });
 
-test('height drag on a mixed row: the top edge follows the pointer 1:1 without rescaling, then commits once', async ({ page }) => {
+test('height drag on a mixed row: the active section’s top edge follows the pointer 1:1 without rescaling, then commits to it alone', async ({ page }) => {
   await page.goto(`/ru/configurator${MIXED['two sections, 1000×1500/4 + 1200×2500/8'].query}`);
   const heightHandle = page.locator('button[data-axis="height"]');
+  await expect(heightHandle).toHaveAttribute('aria-valuenow', '1500');
+  // V2.4: the handle belongs to the active section — select section 2.
+  await page.getByRole('button', { name: 'Секция 2', exact: true }).click();
   await expect(heightHandle).toHaveAttribute('aria-valuenow', '2500');
 
   const stage = page.getByTestId('preview-stage');
@@ -210,10 +215,16 @@ test('height drag on a mixed row: the top edge follows the pointer 1:1 without r
   }
   await page.mouse.up();
 
-  // The transitional control applies the snapped height to every section.
+  // Only the dragged (active) section takes the snapped height; section 1
+  // keeps its own 1500 mm, drawn at the same scale as before.
   await expect(heightHandle).toHaveAttribute('aria-valuenow', '3000');
   await nextFrame(page);
   const after = await measureSections(page, 2);
-  for (const m of after) expect(Math.abs(m.bottom - m.top - 3000 * pxPerMm)).toBeLessThan(1.5);
+  expect(Math.abs(after[1].bottom - after[1].top - 3000 * pxPerMm)).toBeLessThan(1.5);
+  expect(Math.abs(after[0].bottom - after[0].top - 1500 * pxPerMm)).toBeLessThan(1.5);
+  expect((await storedSections(page)).map((s) => [s.height, s.shelves])).toEqual([
+    [1500, 4],
+    [3000, 8],
+  ]);
   expect(await stage.boundingBox()).toEqual(stageBefore);
 });

@@ -329,7 +329,7 @@ describe('useDimensionDrag — configurator store synchronization', () => {
         pxPerMm: PX_PER_MM.width,
         onCommit: (axis, value) => {
           if (axis === 'width') useConfiguratorStore.getState().updateSection(activeId, { width: value });
-          else if (axis === 'height') useConfiguratorStore.getState().setAllSectionHeights(value);
+          else if (axis === 'height') useConfiguratorStore.getState().updateSection(activeId, { height: value });
           else useConfiguratorStore.getState().setField(axis, value);
         },
       }),

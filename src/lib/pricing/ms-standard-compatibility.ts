@@ -319,10 +319,14 @@ export function normalizeMsStandardConfiguration<T extends NormalizableMsStandar
 }
 
 /**
- * TRANSITIONAL UI ADAPTER (V2.2A). Today's configurator still has ONE height
- * select and ONE shelf stepper that apply to every section at once; the
- * per-section controls arrive in a later UI phase. These two helpers give
- * that single control a range that is valid for every section:
+ * @deprecated V2.2A transitional adapter, no longer used by the customer UI:
+ * since V2.4 every section has its own height and shelf controls, whose
+ * ranges come from that section alone (see src/lib/configurator/
+ * section-limits.ts). Kept only for its existing unit coverage; nothing may
+ * start depending on a shared range again.
+ *
+ * It gave the old single height select / shelf stepper (which applied one
+ * value to every section at once) a range valid for every section:
  *
  *   - heights offered: those whose own ceiling fits every section's current
  *     shelf count;

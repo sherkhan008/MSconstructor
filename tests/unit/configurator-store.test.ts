@@ -162,24 +162,33 @@ describe('configurator store — per-section height and shelves (V2.2A)', () => 
     expect(state().config.sections).toHaveLength(MAX_SECTIONS);
   });
 
-  it('setAllSectionHeights applies one height to every section (transitional single control)', () => {
-    const { addSection, setAllSectionHeights } = useConfiguratorStore.getState();
+  it('has no action that edits every section at once (V2.4)', () => {
+    const state = useConfiguratorStore.getState() as unknown as Record<string, unknown>;
+    expect(state).not.toHaveProperty('setAllSectionHeights');
+    expect(state).not.toHaveProperty('setAllSectionShelves');
+  });
+
+  it('changing one section’s height leaves every other section untouched', () => {
+    const { addSection, updateSection } = useConfiguratorStore.getState();
     addSection();
     addSection();
-    setAllSectionHeights(2500);
-    expect(useConfiguratorStore.getState().config.sections.map((s) => s.height)).toEqual([2500, 2500, 2500]);
+    const [a, b, c] = useConfiguratorStore.getState().config.sections;
+    updateSection(b.id, { height: 2500 });
+    expect(useConfiguratorStore.getState().config.sections.map((s) => s.height)).toEqual([a.height, 2500, c.height]);
     expect(useConfiguratorStore.getState().config).not.toHaveProperty('height');
   });
 
-  it('setAllSectionShelves applies one count, never above each section’s own height ceiling', () => {
-    const { addSection, updateSection, setAllSectionShelves } = useConfiguratorStore.getState();
+  it('changing one section’s shelves leaves every other section untouched', () => {
+    const { addSection, updateSection } = useConfiguratorStore.getState();
     addSection();
     const [a, b] = useConfiguratorStore.getState().config.sections;
-    updateSection(a.id, { height: 1000, shelves: 4 });
-    updateSection(b.id, { height: 3000, shelves: 4 });
-    setAllSectionShelves(7);
-    // 1000 mm keeps its own ceiling (4); it never borrows 3000 mm's 8.
-    expect(useConfiguratorStore.getState().config.sections.map((s) => s.shelves)).toEqual([4, 7]);
+    updateSection(a.id, { height: 1500, shelves: 4 });
+    updateSection(b.id, { height: 2500, shelves: 8 });
+    updateSection(a.id, { shelves: 3 });
+    expect(useConfiguratorStore.getState().config.sections.map((s) => [s.height, s.shelves])).toEqual([
+      [1500, 3],
+      [2500, 8],
+    ]);
     expect(useConfiguratorStore.getState().config).not.toHaveProperty('shelves');
   });
 });

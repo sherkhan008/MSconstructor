@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
+import { flushSync } from 'react-dom';
 import type { ColorOption, ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
 import {
   VIEWBOX_H,
@@ -14,7 +15,6 @@ import { layoutSectionFrames, rackEnvelopeMm, SHELF_FACE_OFFSET_PX, type Dimensi
 import { useDimensionDrag } from './resize/useDimensionDrag';
 import { ResizeHandle } from './resize/ResizeHandle';
 import { MAX_SECTIONS, MIN_SECTIONS } from '@/store/configurator-store';
-import { getMaxSectionHeight, getMaxSectionShelves } from '@/lib/configurator/section-dimensions';
 import { resolveRackFill, shade } from './rack-colors';
 import { computeRenderDepthVecForSections, SHELF_LIP_HEIGHT_PX } from './shelf-depth-projection';
 import { t } from '@/lib/i18n/format';
@@ -142,6 +142,77 @@ export const DRAW_INK_SOFT = 'var(--color-steel)';
 export const DRAW_PAPER = 'var(--color-surface)';
 
 /* ---------------------------------------------------------------------------
+   Dimension text readability (V2.4). Labels are drawn in viewBox units; the
+   stage's measured size says how many CSS pixels one unit is, and below
+   MIN_LABEL_PX a label is scaled up rather than rendered unreadably small.
+   --------------------------------------------------------------------------- */
+/** Font size of every dimension label, in viewBox units, at scale 1. */
+const LABEL_FONT = 10;
+/** Height of a dimension tag's label surface, in viewBox units, at scale 1. */
+const DIMENSION_TAG_H = 15;
+/** The smallest on-screen size dimension text is allowed to render at. */
+const MIN_LABEL_PX = 11;
+/** Never enlarge beyond this — the reserved margins are sized for it. */
+const MAX_LABEL_SCALE = 1.7;
+/** Past this enlargement space is tight enough to drop the depth tag. */
+const TIGHT_LABEL_SCALE = 1.15;
+
+/** Approximate rendered width of a mono section-width label, in viewBox units. */
+function sectionLabelWidth(label: number, scale: number): number {
+  return String(Math.round(label)).length * 0.62 * LABEL_FONT * scale;
+}
+
+/**
+ * The framed stage, measured: CSS pixels per viewBox unit (the stage resolves
+ * to the full viewBox at the crop's zoom, so its rendered width over
+ * VIEWBOX_W is exactly that) and the visible frame's width in viewBox units
+ * (which says which crop profile the CSS applied). Display-only: it sizes
+ * label text and spaces the overlaid controls; it never feeds drawing
+ * geometry, drag math, configuration or pricing. `null` until measured (and
+ * wherever ResizeObserver is unavailable), which leaves labels and control
+ * offsets at their defaults.
+ */
+interface StageMetrics {
+  unitPx: number;
+  frameUnits: number;
+}
+
+function useStageMetrics(ref: RefObject<HTMLElement | null>, enabled: boolean): StageMetrics | null {
+  const [metrics, setMetrics] = useState<StageMetrics | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!enabled || !el || typeof ResizeObserver === 'undefined') return;
+    const update = () => {
+      const width = el.getBoundingClientRect().width;
+      const frameWidth = el.parentElement?.getBoundingClientRect().width ?? 0;
+      const unitPx = width / VIEWBOX_W;
+      setMetrics(width > 0 && frameWidth > 0 ? { unitPx, frameUnits: frameWidth / unitPx } : null);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref, enabled]);
+  return metrics;
+}
+
+/* ---------------------------------------------------------------------------
+   Overlaid control spacing (V2.4). The circular controls are HTML buttons
+   sized in CSS pixels, while the rack they sit on is drawn in viewBox units —
+   so on a narrow section (a 700 mm section on a phone is ~25–30 px wide) the
+   section's "+" above its top edge, the height handle on that edge and the
+   width handle on its upright would all land within one touch target. Their
+   positions are therefore spaced in measured pixels: only where the controls
+   are drawn changes, never the drawing, its scale or the drag math.
+   --------------------------------------------------------------------------- */
+/** Centre-to-centre distance that keeps two 44 px touch targets apart. */
+const CONTROL_SPACING_PX = 44;
+/** Radius of the section "+" disc (27 px) plus a small margin inside the frame. */
+const ADD_DISC_CLEARANCE_PX = 16;
+/** Radius of a resize-handle disc (18 px) plus a small margin. */
+const HANDLE_DISC_CLEARANCE_PX = 11;
+
+/* ---------------------------------------------------------------------------
    Framed workspace crop (see `computeFramedCrop`).
    --------------------------------------------------------------------------- */
 /** The shelf-count column sits this far past the row's right edge, plus up to
@@ -164,23 +235,33 @@ const NARROWEST_FRAME_PX = 320;
 /**
  * How the workspace frame is proportioned, and how much empty room the crop
  * reserves around the drawing. Two profiles, chosen purely by viewport width
- * in CSS (see `.configurator-stage` in globals.css) — this component
- * publishes both as custom properties and never measures the viewport.
+ * in CSS (see `.configurator-stage` / `.configurator-frame-box` in
+ * globals.css) — this component publishes both as custom properties and
+ * never measures the viewport for them.
  *
- *  - `WIDE_FRAME` is the approved desktop/tablet framing, unchanged: a 4:3
- *    frame, 46 units of room left of the row, and the deepest possible
- *    shelf-column offset reserved whatever depth is configured.
- *  - `COMPACT_FRAME` applies to phones only. It is proportioned 6:5 rather
- *    than 4:3 — a phone can spare a little frame height far more cheaply
- *    than frame width — and it reserves only what is really drawn: the room
- *    the height dimension actually needs on the left, and the shelf column's
- *    real offset at the *committed* depth. Depth is never dragged (it changes
- *    only through the parameter select), so reading it here cannot rescale
- *    the workspace mid-gesture the way reading a section width would.
+ *  - `WIDE_FRAME` is the desktop/tablet framing: 46 units of room left of
+ *    the row, and the deepest possible shelf-column offset reserved whatever
+ *    depth is configured.
+ *  - `COMPACT_FRAME` applies to phones only. It reserves only what is really
+ *    drawn: the room the height dimension actually needs on the left, and
+ *    the shelf column's real offset at the *committed* depth. Depth is never
+ *    dragged (it changes only through the parameter select), so reading it
+ *    here cannot rescale the workspace mid-gesture the way reading a section
+ *    width would.
+ *
+ * V2.4: the frame's ratio follows the physical envelope it shows (see
+ * `computeFramedCrop`) within each profile's bounds — a lone section gets a
+ * taller, narrower frame and a five-section row a wide, low one — instead of
+ * one fixed ratio that left a small rack floating in empty frame. Like the
+ * crop, the ratio depends only on the section count (and, compact, the
+ * committed depth), so no width or height drag and no commit of one ever
+ * changes it.
  */
 export interface FrameProfile {
-  /** Frame width divided by height. The crop always takes the frame's ratio. */
-  aspect: number;
+  /** Bounds of the frame's width ÷ height. The crop always takes the
+   * frame's ratio: the envelope's own ratio, clamped into these bounds. */
+  minAspect: number;
+  maxAspect: number;
   /** viewBox x of the crop's left edge: the row starts at RACK_LEFT_MARGIN
    * (see `committedLeftShift`) and the height dimension line plus its rotated
    * tag reach ~34 units to its left. */
@@ -201,7 +282,8 @@ export interface FrameProfile {
 }
 
 export const WIDE_FRAME: FrameProfile = {
-  aspect: VIEWBOX_W / VIEWBOX_H,
+  minAspect: 1,
+  maxAspect: 1.8,
   left: RACK_LEFT_MARGIN - 46,
   top: 54,
   bottom: 94,
@@ -210,7 +292,8 @@ export const WIDE_FRAME: FrameProfile = {
 };
 
 export const COMPACT_FRAME: FrameProfile = {
-  aspect: 6 / 5,
+  minAspect: 0.9,
+  maxAspect: 1.8,
   left: RACK_LEFT_MARGIN - 36,
   top: 54,
   bottom: 91,
@@ -250,8 +333,8 @@ export function framedCropWidth(
 
 /**
  * The rectangle of the 640×480 viewBox that the framed workspace actually
- * shows, in viewBox units. Exported so tests can assert the framing without
- * re-deriving it.
+ * shows, in viewBox units, and the frame ratio it implies. Exported so tests
+ * can assert the framing without re-deriving it.
  *
  * Framing only: no drawing geometry, no drag math and no interactive position
  * depends on this. `useDimensionDrag` measures the stage element, which still
@@ -266,6 +349,14 @@ export function framedCropWidth(
  * `rackEnvelopeMm`), the largest rack that count can be dragged to. So no
  * width or height drag, and no commit of one, ever rescales the workspace;
  * only adding or removing a section does.
+ *
+ * The frame ratio is the envelope's own (content width ÷ content height),
+ * clamped into the profile's bounds, so the frame hugs the drawing instead of
+ * surrounding it with a fixed-ratio margin. Whatever horizontal slack remains
+ * is split around `rowCenterX` — the envelope row's own centre — so a short
+ * row sits in the middle of its frame rather than against the left edge. That
+ * can place the crop's left edge before the viewBox origin: the room there is
+ * plain white frame, since nothing is ever drawn left of x = 0.
  */
 export function computeFramedCrop(
   profile: FrameProfile,
@@ -274,17 +365,72 @@ export function computeFramedCrop(
   sectionCount: number,
   depthShiftPx?: number,
   rowCeilingPx?: number,
+  rowCenterX?: number,
 ) {
   const minW = framedCropWidth(profile, sectionCount, depthShiftPx, rowCeilingPx);
   const needed = Math.max(contentBottom - contentTop, 1);
-  const w = clamp(Math.max(needed * profile.aspect, minW), 1, Math.min(VIEWBOX_W, VIEWBOX_H * profile.aspect));
-  const h = w / profile.aspect;
+  const aspect = clamp(minW / needed, profile.minAspect, profile.maxAspect);
+  const w = clamp(Math.max(needed * aspect, minW), 1, Math.min(VIEWBOX_W, VIEWBOX_H * aspect));
+  const h = w / aspect;
+  const contentLeft = profile.left;
+  const x =
+    w >= minW
+      ? // Centre the row within the slack, never cutting into the content box.
+        clamp((rowCenterX ?? contentLeft + minW / 2) - w / 2, contentLeft + minW - w, contentLeft)
+      : clamp(contentLeft - (w - minW) / 2, 0, VIEWBOX_W - w);
   return {
-    x: clamp(profile.left - (w - minW) / 2, 0, VIEWBOX_W - w),
+    x,
     y: clamp((contentTop + contentBottom) / 2 - h / 2, 0, VIEWBOX_H - h),
     w,
     h,
+    aspect,
   };
+}
+
+export type FramedCrop = ReturnType<typeof computeFramedCrop>;
+
+/**
+ * Both profiles' crops for a configuration, from its COMMITTED sections and
+ * depth. With `capacityMm` (the configurator) the envelope — the largest rack
+ * this section count can become — always contains every live drag value, so
+ * the result is the same before, during and after a drag. Shared with the top
+ * view's frame (ConfiguratorClient), so switching preview mode never changes
+ * the workspace's size.
+ */
+export function computeFramedCrops(
+  sections: readonly ShelvingSection[],
+  depth: number,
+  capacityMm?: DimensionCapacityMm,
+): { wide: FramedCrop; compact: FramedCrop } {
+  const envelope = rackEnvelopeMm(sections, depth, capacityMm);
+  const pxPerMm = fitPxPerMm(envelope);
+  const frames = layoutSectionFrames(sections, pxPerMm, RACK_LEFT_MARGIN, FLOOR_Y);
+  const rowTop = Math.min(...frames.map((f) => f.top));
+  const rowWidth = frames.reduce((sum, f) => sum + f.width, 0);
+  const depthVec = computeRenderDepthVecForSections(
+    depthVectorPx(depth, pxPerMm),
+    frames.map((f) => f.shelfYs),
+  );
+  const envelopeTop = FLOOR_Y - envelope.height * pxPerMm;
+  const envelopeRearTop = envelopeTop + depthVectorPx(envelope.depth, pxPerMm).dy;
+  const rowCeiling = Math.max(envelope.rowWidth * pxPerMm, rowWidth);
+  const cropFor = (profile: FrameProfile) =>
+    computeFramedCrop(
+      profile,
+      Math.min(envelopeTop - profile.top, envelopeRearTop - 8, rowTop - profile.top, rowTop + depthVec.dy - 8),
+      FLOOR_Y + profile.bottom,
+      sections.length,
+      depthVec.dx,
+      rowCeiling,
+      RACK_LEFT_MARGIN + rowCeiling / 2,
+    );
+  return { wide: cropFor(WIDE_FRAME), compact: cropFor(COMPACT_FRAME) };
+}
+
+/** The frame-ratio custom properties both preview modes' frames read (see
+ * `.configurator-frame-box` in globals.css). */
+export function frameAspectVars(crops: { wide: FramedCrop; compact: FramedCrop }): CSSProperties {
+  return { '--frame-c-aspect': String(crops.compact.aspect), '--frame-w-aspect': String(crops.wide.aspect) } as CSSProperties;
 }
 
 export interface AllowedDimensions {
@@ -316,7 +462,9 @@ interface Props {
   onAddSectionAfter?: (id: string) => void;
   onRemoveSectionAt?: (id: string) => void;
   onCommitDimension?: (axis: DimensionAxis, value: number) => void;
-  /** Global shelf count controls — rendered attached to the rack's right edge. */
+  /** The ACTIVE section's shelf count controls — its own min/max (from its
+   * own height), rendered in a column just past the row's right edge at that
+   * section's mid-height. */
   minShelves?: number;
   maxShelves?: number;
   onIncreaseShelves?: () => void;
@@ -384,13 +532,20 @@ export function ShelvingPreview({
   const commit = onCommitDimension ?? noop;
 
   const activeSection = config.sections.find((s) => s.id === activeSectionId) ?? config.sections[0];
-  // TRANSITIONAL (V2.2A–V2.3): the drawing below renders every section from
-  // its own height and shelf count, but the preview's height handle and
-  // shelf-count column are still the single temporary controls that apply
-  // one value to ALL sections (per-section controls arrive with V2.4). They
-  // start from the tallest section / the most shelves.
-  const rowHeight = getMaxSectionHeight(config.sections);
-  const rowShelves = getMaxSectionShelves(config.sections);
+  const activeIndex = Math.max(0, config.sections.indexOf(activeSection));
+  // V2.4: the height handle, the height dimension and the shelf-count column
+  // all belong to the ACTIVE section — its own height and shelf count, never
+  // a row-wide value. The caller passes that section's own allowed heights
+  // and shelf range.
+  const stageMetrics = useStageMetrics(containerRef, framed);
+  const stageUnitPx = stageMetrics?.unitPx ?? null;
+  // Dimension text is drawn in viewBox units, so on a phone that shows a long
+  // row (a small zoom) it would shrink below readable size. Below
+  // MIN_LABEL_PX it is scaled up to stay readable instead; the purely
+  // informational depth tag (depth is also in the kit parameters) is dropped
+  // once space is that tight, rather than crowding the rest.
+  const labelScale = stageUnitPx ? clamp(MIN_LABEL_PX / (LABEL_FONT * stageUnitPx), 1, MAX_LABEL_SCALE) : 1;
+  const tightLabels = labelScale > TIGHT_LABEL_SCALE;
 
   // One uniform physical scale — viewBox units per millimetre — for every
   // section's width and height and for the shared depth. It is a function of
@@ -403,7 +558,7 @@ export function ShelvingPreview({
 
   const heightDrag = useDimensionDrag({
     axis: 'height',
-    committedValue: rowHeight,
+    committedValue: activeSection.height,
     allowedValues: allowedDimensions?.heights ?? NO_ALLOWED,
     containerRef,
     pxPerMm,
@@ -427,17 +582,21 @@ export function ShelvingPreview({
   // The frame geometry always follows the continuous drag value (smooth
   // resize); only the dimension *labels* jump to the snapped target so the
   // customer can see what will actually be committed on release. A live value
-  // replaces exactly what its commit will change: the active section's width,
-  // or — the transitional height control sets every section — every
-  // section's height, once the pointer has actually moved it off the
-  // committed value (a press without movement commits nothing, so it must
-  // not redraw anything either).
-  const liveHeight = heightDrag.isDragging && heightDrag.displayValue !== rowHeight ? heightDrag.displayValue : null;
-  const visualSections: ShelvingSection[] = config.sections.map((s) => ({
-    ...s,
-    width: widthDrag.isDragging && s.id === activeSection.id ? widthDrag.displayValue : s.width,
-    height: liveHeight ?? s.height,
-  }));
+  // replaces exactly what its commit will change — the active section's own
+  // width or height, and nothing on any other section — once the pointer has
+  // actually moved it off the committed value (a press without movement
+  // commits nothing, so it must not redraw anything either).
+  const liveHeight =
+    heightDrag.isDragging && heightDrag.displayValue !== activeSection.height ? heightDrag.displayValue : null;
+  const visualSections: ShelvingSection[] = config.sections.map((s) =>
+    s.id === activeSection.id
+      ? {
+          ...s,
+          width: widthDrag.isDragging ? widthDrag.displayValue : s.width,
+          height: liveHeight ?? s.height,
+        }
+      : s,
+  );
   // Depth is read-only in this preview — no drag hook, straight from config.
   const visualDepth = config.depth;
 
@@ -452,11 +611,8 @@ export function ShelvingPreview({
   const rowEnd = lastFrame.x + lastFrame.width;
   // The tallest section's top — the rack's overall height.
   const rowTop = Math.min(...frames.map((f) => f.top));
-  // The section the height handle rides on: the COMMITTED tallest one. Read
-  // from the committed row, not the live frames — a live height drag makes
-  // every section equally tall, and re-picking "the tallest" then would slide
-  // the handle sideways under the pointer mid-gesture.
-  const tallestFrame = frames[Math.max(0, config.sections.findIndex((s) => s.height === rowHeight))];
+  // The active section's live geometry: the width handle rides on its right
+  // upright, the height handle on its own top edge.
   const activeGeom = frames.find((f) => f.id === activeSection.id) ?? firstFrame;
 
   // Each section's own two uprights, on the centrelines just inside its own
@@ -523,35 +679,48 @@ export function ShelvingPreview({
     rowEnd + SHELF_COLUMN_OFFSET + Math.min(depthVec.dx, SHELF_COLUMN_DEPTH_SHIFT),
     VIEWBOX_W - 16,
   );
-  // The height label stays to the left of the rack, measuring the rack's
-  // overall (tallest) height from the floor to that section's top plane;
-  // only the drag *handle* sits on the rack. Requirement: the handle must sit
-  // on the top shelf/top structural edge, not floating to the side — the
-  // tallest section's, since the drag starts from its height. Deliberately
+  // The height label stays to the left of the rack, measuring the ACTIVE
+  // section's height from the floor to its own top plane (a hairline
+  // extension carries that level across when the active section is not the
+  // first); only the drag *handle* sits on the rack. Requirement: the handle
+  // must sit on the top shelf/top structural edge, not floating to the side —
+  // the active section's, since the drag changes its height. Deliberately
   // offset from the section's horizontal centre (not centred on it): the
   // per-section "add" button already lives centred above each section, and a
   // 44px circular hit-target directly concentric with another one makes the
   // lower control (z-index-wise) permanently unclickable, on short mobile
   // containers especially. Anchoring near the section's left edge instead
-  // keeps the handle clearly on the rack's own top edge.
-  const heightLabelPoint = { x: rowStart - 26, y: (rowTop + FLOOR_Y) / 2 };
-  const heightHandlePoint = { x: tallestFrame.x + Math.min(20, tallestFrame.width / 2), y: tallestFrame.top };
-  const widthHandlePoint = { x: activeGeom.x + activeGeom.width, y: (activeGeom.top + FLOOR_Y) / 2 };
+  // keeps the handle clearly on the rack's own top edge. A tag enlarged for
+  // readability moves just far enough right to stay inside the reserved
+  // left margin.
+  const heightLabelPoint = {
+    x: Math.max(rowStart - 26, rowStart - 34 + (DIMENSION_TAG_H * labelScale) / 2),
+    y: (activeGeom.top + FLOOR_Y) / 2,
+  };
   // Still used to position the read-only depth dimension tag below — see
   // the SVG dimension-tags block.
   const depthOrigin = { x: rowEnd, y: lastFrame.top + 10 };
   const depthEnd = { x: depthOrigin.x + depthVec.dx, y: depthOrigin.y + depthVec.dy };
 
-  // Height resize discovery/drag strip: along each section's own top edge
-  // (every section's height is set by this transitional control), extended
-  // past the row's two ends. One path, so it stays one element.
-  const heightZonePath = frames
-    .map((f, i) => {
-      const x1 = f.x - (i === 0 ? 14 : 0);
-      const x2 = f.x + f.width + (i === frames.length - 1 ? 14 : 0);
-      return `M${x1} ${f.top - 20}H${x2}V${f.top}H${x1}Z`;
-    })
-    .join('');
+  // Height resize discovery/drag strips: one along each section's own top
+  // edge (the row's two ends extended outward). Pressing a section's strip
+  // resizes THAT section: a strip of a section that is not yet active selects
+  // it first — synchronously, so the drag starts from that section's own
+  // committed height and allowed heights — then starts the same drag.
+  const heightZones = frames.map((f, i) => {
+    const x1 = f.x - (i === 0 ? 14 : 0);
+    const x2 = f.x + f.width + (i === frames.length - 1 ? 14 : 0);
+    return { id: f.id, path: `M${x1} ${f.top - 20}H${x2}V${f.top}H${x1}Z` };
+  });
+  // Width zones (each section's right upright) work the same way. Neither
+  // kind selects a section on mere hover: V2.4's panel expands the active
+  // section's controls, and a selection that followed the pointer across
+  // uprights — or landed on a neighbour when a drag was released over its
+  // upright — would swap the open controls under the customer.
+  function startZoneDrag(drag: typeof heightDrag, e: ReactPointerEvent<Element>, sectionId: string) {
+    if (sectionId !== activeSection.id && onSelectSection) flushSync(() => onSelectSection(sectionId));
+    drag.onPointerDown(e);
+  }
 
   const totalLengthMm = visualSections.reduce((sum, s) => sum + s.width, 0);
   const canAdd = config.sections.length < MAX_SECTIONS;
@@ -563,33 +732,79 @@ export function ShelvingPreview({
   // Only highlight the active section's own +/− when there is a choice of
   // section at all — a single-section row has nothing to disambiguate.
   const markActive = interactive && config.sections.length > 1;
+  const sectionName = t(CF['CF-025'], locale, { N: activeIndex + 1 });
 
   const frameTop = tightFraming ? rowTop + depthVec.dy - 30 : Math.min(0, rowTop + depthVec.dy - 30);
 
-  // Framed workspace crop (see computeFramedCrop): frames the physical
+  // Framed workspace crop (see computeFramedCrops): frames the physical
   // envelope the scale was fitted to — in the configurator the largest rack
   // this section count can become — so committing or dragging a width or a
   // height never rescales the workspace or moves the rack under the pointer.
-  // The live rack is included too, which only matters for a preview without
-  // `capacityMm`, whose envelope is its committed rack.
   //
   // Both profiles are computed and published as custom properties; a media
-  // query in globals.css decides which one the stage actually uses, so the
-  // component never reads the viewport and there is nothing to hydrate.
-  const envelopeTop = FLOOR_Y - envelope.height * pxPerMm;
-  const envelopeRearTop = envelopeTop + depthVectorPx(envelope.depth, pxPerMm).dy;
-  const cropFor = (profile: FrameProfile) =>
-    computeFramedCrop(
-      profile,
-      Math.min(envelopeTop - profile.top, envelopeRearTop - 8, rowTop - profile.top, rowTop + depthVec.dy - 8),
-      FLOOR_Y + profile.bottom,
-      config.sections.length,
-      depthVec.dx,
-      Math.max(envelope.rowWidth * pxPerMm, rowEnd - rowStart),
+  // query in globals.css decides which one the stage and the frame ratio
+  // actually use, so the crop never depends on reading the viewport and there
+  // is nothing to hydrate.
+  const crops = computeFramedCrops(config.sections, config.depth, capacityMm);
+  const wideCrop = crops.wide;
+  const compactCrop = crops.compact;
+
+  // Overlaid control positions, spaced in measured pixels (see
+  // CONTROL_SPACING_PX). Unmeasured (static render, tests), every offset
+  // falls back to its fixed viewBox default.
+  const pxToUnits = (value: number) => (stageUnitPx ? value / stageUnitPx : 0);
+  const spacing = pxToUnits(CONTROL_SPACING_PX);
+  // The crop the CSS actually applied — the one whose width matches the
+  // visible frame — bounds how far above a section its "+" can rise.
+  const appliedCrop = stageMetrics
+    ? Math.abs(stageMetrics.frameUnits - wideCrop.w) <= Math.abs(stageMetrics.frameUnits - compactCrop.w)
+      ? wideCrop
+      : compactCrop
+    : null;
+  const addTopLimit = appliedCrop ? appliedCrop.y + pxToUnits(ADD_DISC_CLEARANCE_PX) : Number.NEGATIVE_INFINITY;
+  /** Each section's "+": at least one touch target above its own top edge
+   * (never less than the default 24 units), as far as the frame allows. */
+  const addButtonY = (top: number) => Math.min(top - 24, Math.max(top - Math.max(24, spacing), addTopLimit));
+  // The height handle rides the active section's top edge near one end —
+  // a quarter of the way in on a narrow section, away from the "+" centred
+  // above it — on the end clearer of every section's "+" (a shorter
+  // neighbour's "+" can sit level with this top edge). Only when the frame
+  // leaves no room to lift the section's own "+" a full target (a narrow
+  // section at the tallest height on a small phone) is the handle lowered by
+  // the missing distance, onto the top of the upright. Side and offset come
+  // from the COMMITTED layout, so neither changes during a drag and the
+  // handle keeps following the pointer 1:1.
+  const committedFrames = layoutSectionFrames(config.sections, pxPerMm, RACK_LEFT_MARGIN, FLOOR_Y);
+  const committedActive = committedFrames[activeIndex] ?? committedFrames[0];
+  const handleDrop = Math.min(
+    Math.max(0, spacing - (committedActive.top - addButtonY(committedActive.top))),
+    (FLOOR_Y - committedActive.top) * 0.4,
+  );
+  const handleInset = (width: number) => Math.min(20, width / 4);
+  const clearanceFromAdds = (x: number) =>
+    Math.min(
+      ...committedFrames.map((f) => Math.hypot(x - (f.x + f.width / 2), committedActive.top + handleDrop - addButtonY(f.top))),
     );
-  const wideCrop = cropFor(WIDE_FRAME);
-  const compactCrop = cropFor(COMPACT_FRAME);
-  const stageVars = (crop: ReturnType<typeof cropFor>, prefix: string) => ({
+  // The left end is preferred (the right one is shared with the width
+  // handle); the right end is used only when the left is crowded and the
+  // right is clearer.
+  const leftClearance = clearanceFromAdds(committedActive.x + handleInset(committedActive.width));
+  const handleOnRight =
+    spacing > 0 &&
+    leftClearance < spacing &&
+    clearanceFromAdds(committedActive.x + committedActive.width - handleInset(committedActive.width)) > leftClearance;
+  const heightHandlePoint = {
+    x: handleOnRight ? activeGeom.x + activeGeom.width - handleInset(activeGeom.width) : activeGeom.x + handleInset(activeGeom.width),
+    y: activeGeom.top + handleDrop,
+  };
+  // The width handle rides the active section's right upright at mid-height,
+  // moved down (never below the floor) when that would be within one target
+  // of the height handle — the case of a short section.
+  const widthHandlePoint = {
+    x: activeGeom.x + activeGeom.width,
+    y: Math.min(FLOOR_Y - pxToUnits(HANDLE_DISC_CLEARANCE_PX), Math.max((activeGeom.top + FLOOR_Y) / 2, heightHandlePoint.y + spacing)),
+  };
+  const stageVars = (crop: FramedCrop, prefix: string) => ({
     [`--stage-${prefix}-w`]: `${(VIEWBOX_W / crop.w) * 100}%`,
     [`--stage-${prefix}-h`]: `${(VIEWBOX_H / crop.h) * 100}%`,
     [`--stage-${prefix}-l`]: `${(-crop.x / crop.w) * 100}%`,
@@ -886,39 +1101,50 @@ export function ShelvingPreview({
              the top edge, not the upright. */}
         {interactive && (
           <>
-            <path
-              data-testid="height-resize-zone"
-              d={heightZonePath}
-              fill="transparent"
-              style={{ cursor: 'ns-resize' }}
-              onPointerEnter={() => setHeightZoneHovered(true)}
-              onPointerLeave={() => setHeightZoneHovered(false)}
-              onPointerDown={heightDrag.onPointerDown}
-              onPointerMove={heightDrag.onPointerMove}
-              onPointerUp={heightDrag.onPointerUp}
-              onPointerCancel={heightDrag.onPointerCancel}
-            />
-            {frames.map((section) => (
-              <rect
-                key={`width-zone-${section.id}`}
-                data-testid="width-resize-zone"
-                x={section.x + section.width - 16}
-                y={section.top}
-                width={32}
-                height={FLOOR_Y - section.top + 10}
-                fill="transparent"
-                style={{ cursor: 'ew-resize' }}
-                onPointerEnter={() => {
-                  setWidthZoneHovered(true);
-                  onSelectSection?.(section.id);
-                }}
-                onPointerLeave={() => setWidthZoneHovered(false)}
-                onPointerDown={widthDrag.onPointerDown}
-                onPointerMove={widthDrag.onPointerMove}
-                onPointerUp={widthDrag.onPointerUp}
-                onPointerCancel={widthDrag.onPointerCancel}
-              />
-            ))}
+            {heightZones.map((zone, i) => {
+              // Only the active section's strip reveals the handle marker —
+              // the marker sits on that section, so revealing it from another
+              // section's edge would point at the wrong top.
+              const isActiveZone = zone.id === activeSection.id;
+              return (
+                <path
+                  key={`height-zone-${zone.id}`}
+                  data-testid="height-resize-zone"
+                  data-section-index={i}
+                  d={zone.path}
+                  fill="transparent"
+                  style={{ cursor: 'ns-resize' }}
+                  onPointerEnter={isActiveZone ? () => setHeightZoneHovered(true) : undefined}
+                  onPointerLeave={isActiveZone ? () => setHeightZoneHovered(false) : undefined}
+                  onPointerDown={(e) => startZoneDrag(heightDrag, e, zone.id)}
+                  onPointerMove={heightDrag.onPointerMove}
+                  onPointerUp={heightDrag.onPointerUp}
+                  onPointerCancel={heightDrag.onPointerCancel}
+                />
+              );
+            })}
+            {frames.map((section, i) => {
+              const isActiveZone = section.id === activeSection.id;
+              return (
+                <rect
+                  key={`width-zone-${section.id}`}
+                  data-testid="width-resize-zone"
+                  data-section-index={i}
+                  x={section.x + section.width - 16}
+                  y={section.top}
+                  width={32}
+                  height={FLOOR_Y - section.top + 10}
+                  fill="transparent"
+                  style={{ cursor: 'ew-resize' }}
+                  onPointerEnter={isActiveZone ? () => setWidthZoneHovered(true) : undefined}
+                  onPointerLeave={isActiveZone ? () => setWidthZoneHovered(false) : undefined}
+                  onPointerDown={(e) => startZoneDrag(widthDrag, e, section.id)}
+                  onPointerMove={widthDrag.onPointerMove}
+                  onPointerUp={widthDrag.onPointerUp}
+                  onPointerCancel={widthDrag.onPointerCancel}
+                />
+              );
+            })}
           </>
         )}
 
@@ -931,40 +1157,70 @@ export function ShelvingPreview({
              active for; see the component doc comment above). */}
         <g pointerEvents="none">
           {/* Height: a vertical extension line down the rack's left side,
-               capped with short ticks at the floor and the tallest
-               section's top plane — the rack's overall height. */}
-          <line x1={heightLabelPoint.x} y1={rowTop} x2={heightLabelPoint.x} y2={FLOOR_Y} stroke={DRAW_LINE} strokeWidth={0.75} />
-          <line x1={heightLabelPoint.x - 3.5} y1={rowTop} x2={heightLabelPoint.x + 3.5} y2={rowTop} stroke={DRAW_LINE} strokeWidth={0.75} />
+               capped with short ticks at the floor and the ACTIVE section's
+               top plane — that section's own height. */}
+          <line x1={heightLabelPoint.x} y1={activeGeom.top} x2={heightLabelPoint.x} y2={FLOOR_Y} stroke={DRAW_LINE} strokeWidth={0.75} />
+          <line x1={heightLabelPoint.x - 3.5} y1={activeGeom.top} x2={heightLabelPoint.x + 3.5} y2={activeGeom.top} stroke={DRAW_LINE} strokeWidth={0.75} />
           <line x1={heightLabelPoint.x - 3.5} y1={FLOOR_Y} x2={heightLabelPoint.x + 3.5} y2={FLOOR_Y} stroke={DRAW_LINE} strokeWidth={0.75} />
+          {/* …and, for any section but the first, a dashed hairline carrying
+               the measured level across to that section's own top edge. */}
+          {activeIndex > 0 && (
+            <line
+              data-testid="height-extension-line"
+              x1={heightLabelPoint.x + 3.5}
+              y1={activeGeom.top}
+              x2={activeGeom.x}
+              y2={activeGeom.top}
+              stroke={DRAW_HAIRLINE}
+              strokeWidth={0.75}
+              strokeDasharray="2 2"
+            />
+          )}
           {/* Depth: a leader following the rack's own perspective diagonal,
                from the front upright back to the rear plane. */}
-          <line x1={depthOrigin.x} y1={depthOrigin.y} x2={depthEnd.x} y2={depthEnd.y} stroke={DRAW_LINE} strokeWidth={0.75} />
+          {!tightLabels && <line x1={depthOrigin.x} y1={depthOrigin.y} x2={depthEnd.x} y2={depthEnd.y} stroke={DRAW_LINE} strokeWidth={0.75} />}
         </g>
-        <DimensionTag x={heightLabelPoint.x} y={heightLabelPoint.y} label={`${Math.round(heightDrag.snapTarget ?? rowHeight)}`} active={heightDrag.isDragging} orientation="vertical" />
-        <DimensionTag x={depthEnd.x} y={depthEnd.y} label={`${config.depth}`} active={false} orientation="horizontal" testId="depth-dimension-tag" />
+        <DimensionTag
+          x={heightLabelPoint.x}
+          y={heightLabelPoint.y}
+          label={`${Math.round(heightDrag.snapTarget ?? activeSection.height)}`}
+          active={heightDrag.isDragging}
+          orientation="vertical"
+          scale={labelScale}
+          testId="height-dimension-tag"
+        />
+        {!tightLabels && (
+          <DimensionTag x={depthEnd.x} y={depthEnd.y} label={`${config.depth}`} active={false} orientation="horizontal" testId="depth-dimension-tag" scale={labelScale} />
+        )}
 
         {frames.map((section) => {
           const isDraggingThis = widthDrag.isDragging && section.id === activeSection.id;
+          const label = isDraggingThis ? (widthDrag.snapTarget ?? section.section.width) : section.section.width;
+          // A value that would not fit under its own section is left out
+          // rather than overlapping its neighbour's — every section's width
+          // is always in the section list, and the total stays drawn.
+          if (sectionLabelWidth(label, labelScale) > section.width - 2) return null;
           return (
             <SectionWidthLabel
               key={`label-${section.id}`}
               x={section.x + section.width / 2}
               y={FLOOR_Y + 13}
-              label={isDraggingThis ? (widthDrag.snapTarget ?? section.section.width) : section.section.width}
+              label={label}
               active={isDraggingThis || (markActive && section.id === activeSection.id)}
+              scale={labelScale}
             />
           );
         })}
 
-        <TotalWidthLine x1={rowStart} x2={rowEnd} y={FLOOR_Y + 68} label={Math.round(totalLengthMm)} active={widthDrag.isDragging} />
+        <TotalWidthLine x1={rowStart} x2={rowEnd} y={FLOOR_Y + 68} label={Math.round(totalLengthMm)} active={widthDrag.isDragging} scale={labelScale} />
       </svg>
 
       {interactive && (
         <>
           <ResizeHandle
             axis="height"
-            ariaLabel={t(CF['CF-009'], locale, { H: rowHeight })}
-            value={rowHeight}
+            ariaLabel={t(CF['CF-009'], locale, { H: activeSection.height })}
+            value={activeSection.height}
             min={heightDrag.min}
             max={heightDrag.max}
             xPercent={(heightHandlePoint.x / VIEWBOX_W) * 100}
@@ -1016,7 +1272,7 @@ export function ShelvingPreview({
               handle, which shares their vertical band.) */}
           {frames.map((section, i) => {
             const xPercent = ((section.x + section.width / 2) / VIEWBOX_W) * 100;
-            const yPercent = ((section.top - 24) / VIEWBOX_H) * 100;
+            const yPercent = (addButtonY(section.top) / VIEWBOX_H) * 100;
             const isActive = markActive && section.id === activeSection.id;
             return (
               <div key={`add-${section.id}`} className="absolute z-20 -translate-x-1/2 -translate-y-1/2" style={{ left: `${xPercent}%`, top: `${yPercent}%` }}>
@@ -1067,25 +1323,46 @@ export function ShelvingPreview({
             );
           })}
 
-          {/* Global shelf count — a compact vertical control column just off
-              the rack's right edge, in the same circle language as the
+          {/* The ACTIVE section's shelf count — a compact vertical control
+              column just off the rack's right edge, level with that
+              section's own mid-height, in the same circle language as the
               section add/remove controls. The two 44px hit areas overlap the
-              count between them by design, so the column stays short. */}
+              count between them by design, so the column stays short. Its
+              group label, desktop tooltips and the graphite ring (whenever
+              there is a choice of section) name the section it edits; it
+              never needs hover to work. */}
           <div
+            role="group"
+            aria-label={`${t(CF['CF-032'], locale)} · ${sectionName}`}
+            data-testid="preview-shelf-controls"
             className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center -space-y-1.5"
             style={{
               left: `${(shelfColumnX / VIEWBOX_W) * 100}%`,
-              top: `${(((lastFrame.top + FLOOR_Y) / 2) / VIEWBOX_H) * 100}%`,
+              top: `${(((activeGeom.top + FLOOR_Y) / 2) / VIEWBOX_H) * 100}%`,
             }}
           >
-            <button type="button" aria-label={t(CF['CF-019'], locale)} onClick={onIncreaseShelves} disabled={rowShelves >= maxShelves} className={CIRCLE_HIT}>
-              <span aria-hidden="true" className={`${CIRCLE_DISC} ${DISC_SMALL} border-line-strong bg-surface`}>
+            <button
+              type="button"
+              aria-label={t(CF['CF-019'], locale)}
+              title={`${t(CF['CF-019'], locale)} · ${sectionName}`}
+              onClick={onIncreaseShelves}
+              disabled={activeSection.shelves >= maxShelves}
+              className={CIRCLE_HIT}
+            >
+              <span aria-hidden="true" className={`${CIRCLE_DISC} ${DISC_SMALL} ${markActive ? 'border-foreground' : 'border-line-strong'} bg-surface`}>
                 +
               </span>
             </button>
-            <span className="mono relative z-10 text-xs font-semibold leading-none text-foreground">{rowShelves}</span>
-            <button type="button" aria-label={t(CF['CF-020'], locale)} onClick={onDecreaseShelves} disabled={rowShelves <= minShelves} className={CIRCLE_HIT}>
-              <span aria-hidden="true" className={`${CIRCLE_DISC} ${DISC_SMALL} border-line-strong bg-surface`}>
+            <span className="mono relative z-10 text-xs font-semibold leading-none text-foreground">{activeSection.shelves}</span>
+            <button
+              type="button"
+              aria-label={t(CF['CF-020'], locale)}
+              title={`${t(CF['CF-020'], locale)} · ${sectionName}`}
+              onClick={onDecreaseShelves}
+              disabled={activeSection.shelves <= minShelves}
+              className={CIRCLE_HIT}
+            >
+              <span aria-hidden="true" className={`${CIRCLE_DISC} ${DISC_SMALL} ${markActive ? 'border-foreground' : 'border-line-strong'} bg-surface`}>
                 −
               </span>
             </button>
@@ -1102,10 +1379,11 @@ export function ShelvingPreview({
   if (framed) {
     return (
       <div className={`bg-surface ${className}`}>
-        {/* 6:5 on phones, the approved 4:3 from `sm` up. The top view frame in
-            ConfiguratorClient carries the identical pair, so switching view
+        {/* The frame takes the crop's own ratio — compact on phones, wide
+            from `sm` up (see computeFramedCrop). The top view frame in
+            ConfiguratorClient reads the identical pair, so switching view
             never changes the workspace's height. */}
-        <div className={`relative mx-auto aspect-[6/5] w-full overflow-hidden sm:aspect-[4/3] ${frameClassName}`}>
+        <div className={`configurator-frame-box relative mx-auto w-full overflow-hidden ${frameClassName}`} style={frameAspectVars(crops)}>
           <div
             ref={containerRef}
             data-testid="preview-stage"
@@ -1213,14 +1491,27 @@ function WallPanels({
  * under the rack for no extra information. `active` (the section being
  * dragged, or the selected one in a multi-section row) darkens it to graphite
  * and adds weight; it is never the only cue for either state. */
-export function SectionWidthLabel({ x, y, label, active }: { x: number; y: number; label: number; active: boolean }) {
+export function SectionWidthLabel({
+  x,
+  y,
+  label,
+  active,
+  scale = 1,
+}: {
+  x: number;
+  y: number;
+  label: number;
+  active: boolean;
+  /** Readability enlargement (see ShelvingPreview's labelScale); 1 elsewhere. */
+  scale?: number;
+}) {
   return (
     <text
       x={x}
-      y={y + 3.5}
+      y={y + 3.5 * scale}
       textAnchor="middle"
       fontFamily="IBM Plex Mono, monospace"
-      fontSize={10}
+      fontSize={LABEL_FONT * scale}
       fontWeight={active ? 700 : 500}
       fill={active ? DRAW_INK : DRAW_INK_SOFT}
       pointerEvents="none"
@@ -1243,6 +1534,7 @@ export function DimensionTag({
   active,
   orientation,
   testId,
+  scale = 1,
 }: {
   x: number;
   y: number;
@@ -1253,9 +1545,11 @@ export function DimensionTag({
    * instances render structurally-identical markup with only their number
    * differing, which a test can't otherwise reliably tell apart. */
   testId?: string;
+  /** Readability enlargement (see ShelvingPreview's labelScale); 1 elsewhere. */
+  scale?: number;
 }) {
-  const w = Math.max(26, label.length * 6.6 + 11);
-  const h = 15;
+  const w = Math.max(26, label.length * 6.6 + 11) * scale;
+  const h = DIMENSION_TAG_H * scale;
   const isVertical = orientation === 'vertical';
   return (
     <g transform={isVertical ? `rotate(-90 ${x} ${y})` : undefined} data-testid={testId} pointerEvents="none">
@@ -1271,10 +1565,10 @@ export function DimensionTag({
       />
       <text
         x={x}
-        y={y + 3.4}
+        y={y + 3.4 * scale}
         textAnchor="middle"
         fontFamily="IBM Plex Mono, monospace"
-        fontSize={10}
+        fontSize={LABEL_FONT * scale}
         fontWeight={600}
         fill={active ? DRAW_PAPER : DRAW_INK}
       >
@@ -1286,15 +1580,39 @@ export function DimensionTag({
 
 /** Thin dimension line + centred value under the whole row — no arrowheads,
  * no sentence-length label, and no colour of its own: the same steel hairline
- * and neutral tag every other dimension on this canvas uses. */
-function TotalWidthLine({ x1, x2, y, label, active }: { x1: number; x2: number; y: number; label: number; active: boolean }) {
+ * and neutral tag every other dimension on this canvas uses. The tag's lower
+ * edge stays at y + 21.5 at any readability scale (inside the reserved
+ * bottom margin); an enlarged tag grows upward over its own line. */
+function TotalWidthLine({
+  x1,
+  x2,
+  y,
+  label,
+  active,
+  scale = 1,
+}: {
+  x1: number;
+  x2: number;
+  y: number;
+  label: number;
+  active: boolean;
+  scale?: number;
+}) {
   const locale = useLocale();
   return (
     <g pointerEvents="none">
       <line x1={x1} y1={y} x2={x2} y2={y} stroke={DRAW_LINE} strokeWidth={0.75} />
       <line x1={x1} y1={y - 3.5} x2={x1} y2={y + 3.5} stroke={DRAW_LINE} strokeWidth={0.75} />
       <line x1={x2} y1={y - 3.5} x2={x2} y2={y + 3.5} stroke={DRAW_LINE} strokeWidth={0.75} />
-      <DimensionTag x={(x1 + x2) / 2} y={y + 14} label={`${label} ${t(G['G-008'], locale)}`} active={active} orientation="horizontal" />
+      <DimensionTag
+        x={(x1 + x2) / 2}
+        y={y + 21.5 - (DIMENSION_TAG_H * scale) / 2}
+        label={`${label} ${t(G['G-008'], locale)}`}
+        active={active}
+        orientation="horizontal"
+        scale={scale}
+        testId="total-width-tag"
+      />
     </g>
   );
 }

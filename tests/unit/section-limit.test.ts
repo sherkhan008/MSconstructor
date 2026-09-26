@@ -148,7 +148,10 @@ describe('sections panel', () => {
   it('explains an over-limit (persisted) configuration instead of hiding or trimming it', () => {
     resetStore(7);
     renderPanel();
-    expect(screen.getAllByRole('button', { name: 'Удалить секцию' })).toHaveLength(7);
+    // Every one of the seven sections is still listed (none trimmed); the
+    // active one carries the remove action the customer reduces it with.
+    expect(screen.getAllByRole('button', { name: /^Секция \d+$/ })).toHaveLength(7);
+    expect(screen.getByRole('button', { name: 'Удалить секцию' })).toHaveProperty('disabled', false);
     expect(screen.getByRole('alert').textContent).toBe('В одном стеллаже не более 5 секций. Удалите лишние секции.');
   });
 });

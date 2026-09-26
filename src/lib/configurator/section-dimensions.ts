@@ -7,9 +7,9 @@ import type { ShelvingSection } from '@/lib/types/domain';
  * helpers, each with an explicit meaning — never an arbitrary `sections[0]`.
  *
  *   uniform…   the one value every section shares, or `undefined` when they
- *              differ (used by the single shared height/shelf controls of
- *              today's UI; pricing never needs it — V2.2B prices every
- *              section from its own BOM);
+ *              differ (summaries only; no control edits every section at
+ *              once since V2.4, and pricing never needs it — V2.2B prices
+ *              every section from its own BOM);
  *   max…       the tallest section / most shelves — the row's overall
  *              envelope (e.g. the overall В×Ш×Г, the preview frame);
  *   …Summary   a display string that states one value when all sections
@@ -60,6 +60,11 @@ export function getTotalSectionShelves(sections: readonly SectionShelves[]): num
 function summarize(values: readonly number[]): string {
   const uniform = uniformValue(values);
   return uniform !== undefined ? String(uniform) : values.join(' / ');
+}
+
+/** "1000" when every section is 1000 mm wide, else "1000 / 1200". */
+export function sectionWidthsSummary(sections: readonly Pick<ShelvingSection, 'width'>[]): string {
+  return summarize(sections.map((s) => s.width));
 }
 
 /** "2000" when every section is 2000 mm tall, else "1500 / 2500 / 1000". */

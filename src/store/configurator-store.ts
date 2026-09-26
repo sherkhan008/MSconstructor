@@ -4,11 +4,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { PriceFailure, ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
 import type { PublicPriceResult } from '@/lib/pricing/public-result';
-import {
-  getAllowedWidthsForDepth,
-  getMaxShelvesForHeight,
-  isValidMsStandardWidthDepth,
-} from '@/lib/pricing/ms-standard-compatibility';
+import { getAllowedWidthsForDepth, isValidMsStandardWidthDepth } from '@/lib/pricing/ms-standard-compatibility';
 import { MAX_SECTIONS, MIN_SECTIONS } from '@/lib/configurator/limits';
 import { readPersistedConfiguration, upgradeRowLevelConfiguration } from '@/lib/configurator/persisted-configuration';
 
@@ -87,15 +83,10 @@ interface ConfiguratorState {
   addSection: () => void;
   removeSection: (id: string) => void;
   duplicateSection: (id: string) => void;
+  /** Changes one section only — every section owns its width, height,
+   * shelves and walls; there is no action that edits all sections at once. */
   updateSection: (id: string, patch: Partial<Omit<ShelvingSection, 'id'>>) => void;
   setSectionWidth: (id: string, width: number) => void;
-  /** TRANSITIONAL (V2.2A): today's single height control applies one height
-   * to every section. Per-section controls come in a later UI phase. */
-  setAllSectionHeights: (height: number) => void;
-  /** TRANSITIONAL (V2.2A): today's single shelf control applies one shelf
-   * count to every section, never above that section's own MS Standard
-   * ceiling for its own height. */
-  setAllSectionShelves: (shelves: number) => void;
 
   loadFromPartial: (partial: Partial<ShelvingConfiguration>) => void;
   reset: () => void;
@@ -196,21 +187,6 @@ export const useConfiguratorStore = create<ConfiguratorState>()(
         })),
 
       setSectionWidth: (id, width) => get().updateSection(id, { width }),
-
-      setAllSectionHeights: (height) =>
-        set((state) => ({
-          config: { ...state.config, sections: state.config.sections.map((s) => ({ ...s, height })) },
-        })),
-
-      setAllSectionShelves: (shelves) =>
-        set((state) => {
-          const isMsStandard = state.config.modelSlug === 'ms-standard';
-          const sections = state.config.sections.map((s) => {
-            const ceiling = isMsStandard ? getMaxShelvesForHeight(s.height) : undefined;
-            return { ...s, shelves: ceiling === undefined ? shelves : Math.min(shelves, ceiling) };
-          });
-          return { config: { ...state.config, sections } };
-        }),
 
       loadFromPartial: (partial) =>
         set((state) => {
