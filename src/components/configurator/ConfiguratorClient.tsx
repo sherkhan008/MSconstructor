@@ -200,6 +200,12 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
     ? (getSharedMaxShelvesForSections(config.sections) ?? model?.maxShelves ?? 8)
     : (model?.maxShelves ?? 8);
   const rowShelves = getMaxSectionShelves(config.sections);
+  // The model's largest catalog dimensions — the preview reserves room for
+  // them, so its physical scale never changes during or after a drag.
+  const capacityMm =
+    model && model.widths.length > 0 && model.heights.length > 0 && model.depths.length > 0
+      ? { width: Math.max(...model.widths), height: Math.max(...model.heights), depth: Math.max(...model.depths) }
+      : undefined;
 
   function handleCommitDimension(axis: DimensionAxis, value: number) {
     if (axis === 'width') {
@@ -257,6 +263,7 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
                 frameClassName="configurator-frame"
                 interactive
                 allowedDimensions={model ? { heights: allowedHeights, widths: allowedWidths, depths: allowedDepths } : undefined}
+                capacityMm={capacityMm}
                 activeSectionId={activeSectionId}
                 onSelectSection={setActiveSectionId}
                 onAddSectionAfter={handleAddSectionAfter}

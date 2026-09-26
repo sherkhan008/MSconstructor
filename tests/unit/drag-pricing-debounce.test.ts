@@ -74,6 +74,7 @@ describe('drag-to-resize does not spam the pricing API', () => {
         committedValue: config.sections[0].width,
         allowedValues: [700, 1000, 1200, 1500],
         containerRef: CONTAINER,
+        pxPerMm: 0.08,
         onCommit: (axis, value) => {
           if (axis === 'width') useConfiguratorStore.getState().updateSection(activeId, { width: value });
           else if (axis === 'height') useConfiguratorStore.getState().setAllSectionHeights(value);

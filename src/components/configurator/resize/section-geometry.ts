@@ -1,12 +1,106 @@
 import type { ShelvingSection } from '@/lib/types/domain';
-import { mmToPx } from './dimension-scale';
+import { getMaxSectionHeight } from '@/lib/configurator/section-dimensions';
+import { mmToPx, type RackEnvelopeMm } from './dimension-scale';
+
+/* ---------------------------------------------------------------------------
+   V2.3 physical front-view geometry. Every section is laid out in world
+   millimetres at one uniform `pxPerMm` (see dimension-scale.ts's
+   `fitPxPerMm`): its own width, its own height standing on the shared floor,
+   and its own shelf planes. Nothing here reads another section's height or
+   shelf count, and there is no row-level height or shelf value.
+   --------------------------------------------------------------------------- */
+
+/** The largest width, height and depth the product offers, in mm — from the
+ * catalog model, never invented here. */
+export interface DimensionCapacityMm {
+  width: number;
+  height: number;
+  depth: number;
+}
+
+/**
+ * The envelope the preview's scale is fitted to.
+ *
+ * Without `capacity` it is the configuration itself: the row's real total
+ * width, its tallest section and its depth — a static drawing fills its frame.
+ *
+ * With `capacity` (the interactive configurator) it is the largest rack this
+ * section COUNT can become: every section at the model's widest width, the
+ * model's tallest height and deepest depth. No width or height drag, and no
+ * commit of one, can change that envelope, so the scale — and with it the
+ * pointer-to-millimetre mapping — stays fixed for the gesture and after it.
+ * Only adding or removing a section (a discrete button press) refits. A
+ * committed value beyond the catalog maximum still widens the envelope, so
+ * the rack can never be drawn outside its frame.
+ */
+export function rackEnvelopeMm(sections: readonly ShelvingSection[], depthMm: number, capacity?: DimensionCapacityMm): RackEnvelopeMm {
+  const rowWidth = sections.reduce((sum, s) => sum + s.width, 0);
+  const height = getMaxSectionHeight(sections);
+  if (!capacity) return { rowWidth, height, depth: depthMm };
+  const widest = sections.reduce((max, s) => Math.max(max, s.width), capacity.width);
+  return {
+    rowWidth: sections.length * widest,
+    height: Math.max(capacity.height, height),
+    depth: Math.max(capacity.depth, depthMm),
+  };
+}
+
+// A shelf's upper face (its front lip's top edge and the front corners of its
+// receding top surface) is drawn SHELF_FACE_OFFSET_PX above its y. The top
+// shelf's y is placed exactly that far below its section's `top`, so its
+// upper face lies on the section's physical top — the same `top` that
+// section's uprights and wall panels start from — and nothing protrudes above
+// it. Drawing only: the configured height, the price and the BOM never read
+// these coordinates. The bottom shelf keeps its clearance above the floor.
+export const SHELF_FACE_OFFSET_PX = 2;
+const BOTTOM_SHELF_CLEARANCE_PX = 14;
+
+/** One section's own shelf planes, top → bottom, from ITS OWN top, height
+ * and shelf count. */
+export function computeShelfYs(top: number, heightPx: number, shelves: number): number[] {
+  const shelfCount = Math.max(1, shelves);
+  const firstY = top + SHELF_FACE_OFFSET_PX;
+  const lastY = top + heightPx - BOTTOM_SHELF_CLEARANCE_PX;
+  return Array.from({ length: shelfCount }, (_, i) => {
+    // A single shelf is the top shelf: the uprights end flush with it too.
+    const ratio = shelfCount === 1 ? 0 : i / (shelfCount - 1);
+    return firstY + ratio * (lastY - firstY);
+  });
+}
+
+/** One section's world geometry in viewBox units. */
+export interface SectionFrame extends SectionLayout {
+  /** The section's own height (section.height × pxPerMm). */
+  height: number;
+  /** Its own top plane: floorY − height. Its uprights end exactly here. */
+  top: number;
+  /** Its own shelf planes, from its own height and shelf count. */
+  shelfYs: number[];
+}
+
+/**
+ * Lays sections out left to right from `leftX`, contiguous, each at
+ * `width × pxPerMm` wide and `height × pxPerMm` tall, all standing on
+ * `floorY`. A section's x depends only on the widths before it, so changing
+ * one section's width moves only the sections after it — the section itself
+ * keeps its left edge, earlier sections are untouched.
+ */
+export function layoutSectionFrames(sections: readonly ShelvingSection[], pxPerMm: number, leftX: number, floorY: number): SectionFrame[] {
+  let cursor = leftX;
+  return sections.map((section) => {
+    const x = cursor;
+    const width = section.width * pxPerMm;
+    const height = section.height * pxPerMm;
+    const top = floorY - height;
+    cursor += width;
+    return { id: section.id, x, width, section, height, top, shelfYs: computeShelfYs(top, height, section.shelves) };
+  });
+}
 
 /**
  * Proportional per-section horizontal layout, auto-fit so the row never
- * overflows `maxRowWidthPx`. Pure function of section widths only — shared by
- * both ShelvingPreview (front view) and TopShelvingPreview (plan view) so the
- * two views always agree on where each section sits along the x-axis and
- * section-width math never needs to be duplicated.
+ * overflows `maxRowWidthPx` — the pre-V2.3 curve, kept for the top view and
+ * the catalog illustration only; the front view uses `layoutSectionFrames`.
  */
 export interface SectionLayout {
   id: string;
@@ -70,37 +164,10 @@ export function computeSectionLayout(
   return layoutSectionsWithScale(sections, scale, viewboxW);
 }
 
-/** N sections share N+1 upright/post positions — the boundary x-coordinates. */
+/** The boundary x-coordinates between sections — used by the top view's
+ * seams and the catalog illustration. (The front view draws each section's
+ * own two uprights instead: V2.2B sections never share an upright.) */
 export function computeBoundaryXs(layout: SectionLayout[]): number[] {
   if (layout.length === 0) return [];
   return [layout[0].x, ...layout.map((s) => s.x + s.width)];
-}
-
-/**
- * Applies a live width-drag to one committed layout, the same way height
- * drag already behaves (one fixed anchor, only the dragged edge moves):
- * sections before the active one are untouched, the active section keeps
- * its own left edge fixed and only its width changes, and sections after it
- * translate by the resulting width delta so the row stays contiguous — no
- * gaps, no overlap, and no other section's own pixel width is touched.
- *
- * `liveActiveWidthPx` must already be computed with the *live* auto-fit
- * scale for what the row would be if committed right now (see
- * ShelvingPreview, which derives it from `computeRowScale` applied to the
- * live section widths) — not the scale frozen from whatever the row looked
- * like when the drag started. `computeRowScale`'s auto-fit is a function of
- * the row's total width, so a scale frozen at drag-start does not
- * necessarily match the scale a release will actually render with; using
- * the live scale for this one width is what makes a value pixel-match
- * between "still being dragged" and "just committed".
- */
-export function applyLiveActiveWidth(committedLayout: SectionLayout[], activeSectionId: string, liveActiveWidthPx: number): SectionLayout[] {
-  const activeIndex = committedLayout.findIndex((s) => s.id === activeSectionId);
-  if (activeIndex === -1) return committedLayout;
-  const deltaPx = liveActiveWidthPx - committedLayout[activeIndex].width;
-  return committedLayout.map((s, i) => {
-    if (i < activeIndex) return s;
-    if (i === activeIndex) return { ...s, width: liveActiveWidthPx };
-    return { ...s, x: s.x + deltaPx };
-  });
 }

@@ -13,14 +13,14 @@ import { useDimensionDrag } from '@/components/configurator/resize/useDimensionD
  * [minAllowed(allowedValues), maxAllowed(allowedValues)] while dragging, so
  * geometry never exceeds what release would actually commit.
  *
- * WIDTH_MM_RANGE (600..1600mm -> 90..170px) is the shared, untouched visual
- * scale used to convert pointer pixels to millimetres; these tests compute
- * pointer deltas from that exact mapping so "raw pointer equivalent of
- * 1600mm" means something precise, not an arbitrary pixel count.
+ * The hook converts pointer pixels to millimetres with the preview's uniform
+ * physical scale (`pxPerMm`); these tests compute pointer deltas from that
+ * exact scale so "raw pointer equivalent of 1600mm" means something precise,
+ * not an arbitrary pixel count.
  */
 
 function mmToPxWidth(mm: number): number {
-  return 90 + ((mm - 600) * 80) / 1000;
+  return mm * PX_PER_MM.width;
 }
 
 function fakePointerEvent(clientX: number, clientY: number, pointerId = 1): ReactPointerEvent<Element> {
@@ -50,6 +50,12 @@ function fakeContainerRef(width: number, height: number) {
 const CONTAINER = fakeContainerRef(640, 480);
 const ALLOWED_WIDTHS = [700, 1000, 1200, 1500];
 
+/** viewBox units per millimetre handed to the hook — the preview's physical
+ * scale. These are the old curve's slopes (80px per 1000mm of width, 180px per
+ * 2500mm of height, 55px per 500mm of depth), so the pointer deltas below
+ * keep meaning the same millimetres. */
+const PX_PER_MM = { width: 0.08, height: 0.072, depth: 0.11 } as const;
+
 describe('useDimensionDrag — width axis is clamped to the catalog range while dragging', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -66,6 +72,7 @@ describe('useDimensionDrag — width axis is clamped to the catalog range while 
         committedValue,
         allowedValues: ALLOWED_WIDTHS,
         containerRef: CONTAINER,
+        pxPerMm: PX_PER_MM.width,
         onCommit,
       }),
     );
@@ -149,6 +156,7 @@ describe('width clamp composes correctly into ShelvingPreview\'s total-row sum (
         committedValue: 1500,
         allowedValues: ALLOWED_WIDTHS,
         containerRef: CONTAINER,
+        pxPerMm: PX_PER_MM.width,
         onCommit,
       }),
     );

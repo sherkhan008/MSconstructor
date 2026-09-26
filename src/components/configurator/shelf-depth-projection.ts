@@ -93,3 +93,22 @@ export function computeRenderDepthVec(
   const sign = Math.sign(rawDepthVec.dy);
   return { dx: rawDepthVec.dx, dy: sign * maxVerticalRise };
 }
+
+/**
+ * The same cap for a rack whose sections each have their own shelf planes.
+ * Depth is one vector for the whole rack — every section's rear uprights and
+ * shelves recede along it — so it is capped by the densest section: the one
+ * with the smallest spacing between its own consecutive shelves. Spacing is
+ * only ever measured within a section, never between two sections' shelves.
+ */
+export function computeRenderDepthVecForSections(
+  rawDepthVec: DepthVec,
+  shelfYsBySection: readonly (readonly number[])[],
+  options: { lipHeightPx?: number; minAirGapPx?: number } = {},
+): DepthVec {
+  let densest: readonly number[] = [];
+  for (const shelfYs of shelfYsBySection) {
+    if (minShelfSpacingPx(shelfYs) < minShelfSpacingPx(densest)) densest = shelfYs;
+  }
+  return computeRenderDepthVec(rawDepthVec, densest, options);
+}

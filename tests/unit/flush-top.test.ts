@@ -4,8 +4,9 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { mmToPx } from '@/components/configurator/resize/dimension-scale';
-import { FLOOR_Y, RACK_SCALE, SHELF_FACE_OFFSET_PX, ShelvingPreview, computeShelfYs } from '@/components/configurator/ShelvingPreview';
+import { fitPxPerMm } from '@/components/configurator/resize/dimension-scale';
+import { rackEnvelopeMm } from '@/components/configurator/resize/section-geometry';
+import { FLOOR_Y, SHELF_FACE_OFFSET_PX, ShelvingPreview, computeShelfYs } from '@/components/configurator/ShelvingPreview';
 import type { ShelvingConfiguration } from '@/lib/types/domain';
 import { uniformRow, type UniformRowInput } from '../helpers/uniform-row';
 
@@ -43,7 +44,8 @@ const points = (p: Element) =>
 afterEach(cleanup);
 
 describe('computeShelfYs — the top shelf sits on the physical top', () => {
-  const heightPx = mmToPx('height', 2000) * RACK_SCALE;
+  const config = baseConfig();
+  const heightPx = 2000 * fitPxPerMm(rackEnvelopeMm(config.sections, config.depth));
   const top = FLOOR_Y - heightPx;
 
   it.each([1, 2, 3, 5, 8])('with %d shelf(s), the top shelf face is exactly at `top`', (shelves) => {
@@ -98,6 +100,46 @@ describe('ShelvingPreview — uprights and walls end flush with the top shelf', 
     // the rear uprights' top — nothing protrudes past the top shelf.
     const allPolygonYs = Array.from(svg.querySelectorAll('polygon')).flatMap((p) => points(p).map(([, y]) => y));
     expect(Math.min(...allPolygonYs)).toBeGreaterThanOrEqual(topRearY - 1e-9);
+  });
+
+  it.each([
+    [
+      { id: 'a', width: 1000, height: 1500, shelves: 4, rearWall: true, leftWall: true, rightWall: false },
+      { id: 'b', width: 1200, height: 2500, shelves: 8, rearWall: true, leftWall: false, rightWall: true },
+    ],
+    [
+      { id: 'a', width: 1500, height: 3000, shelves: 8, rearWall: false, leftWall: false, rightWall: false },
+      { id: 'b', width: 700, height: 1000, shelves: 2, rearWall: true, leftWall: true, rightWall: true },
+    ],
+  ])('mixed heights: every section’s own uprights and walls end flush with its OWN top shelf (%#)', (a, b) => {
+    const config = baseConfig({ depth: 400, sections: [a, b] });
+    const { container } = render(createElement(ShelvingPreview, { config }));
+    const svg = container.querySelector('svg')!;
+
+    for (const [index, section] of config.sections.entries()) {
+      const at = `[data-section-index="${index}"]`;
+      const shelfTops = Array.from(svg.querySelectorAll(`polygon[data-shelf-part="top-surface"]${at}`));
+      expect(shelfTops).toHaveLength(section.shelves);
+      const topFrontY = Math.min(...shelfTops.flatMap((p) => points(p).slice(0, 2).map(([, y]) => y)));
+      const topRearY = Math.min(...shelfTops.flatMap((p) => points(p).slice(2, 4).map(([, y]) => y)));
+
+      const front = Array.from(svg.querySelectorAll(`rect[data-upright="front"]${at}`));
+      const rear = Array.from(svg.querySelectorAll(`rect[data-upright="rear"]${at}`));
+      expect(front).toHaveLength(2);
+      expect(rear).toHaveLength(2);
+      for (const r of front) expect(num(r, 'y')).toBeCloseTo(topFrontY, 9);
+      for (const r of rear) expect(num(r, 'y')).toBeCloseTo(topRearY, 9);
+    }
+
+    // The shorter section's uprights stop strictly below the taller one's.
+    const topOf = (index: number) => num(svg.querySelector(`rect[data-upright="front"][data-section-index="${index}"]`)!, 'y');
+    const [shortIndex, tallIndex] = a.height < b.height ? [0, 1] : [1, 0];
+    expect(topOf(shortIndex)).toBeGreaterThan(topOf(tallIndex) + 1);
+
+    // No wall panel rises above its own section's rear uprights.
+    const rearTop = Math.min(...Array.from(svg.querySelectorAll('rect[data-upright="rear"]')).map((r) => num(r, 'y')));
+    const allPolygonYs = Array.from(svg.querySelectorAll('polygon')).flatMap((p) => points(p).map(([, y]) => y));
+    expect(Math.min(...allPolygonYs)).toBeGreaterThanOrEqual(rearTop - 1e-9);
   });
 
   it('never changes the configuration it draws', () => {
