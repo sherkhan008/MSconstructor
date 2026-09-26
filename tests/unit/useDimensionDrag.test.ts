@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { PointerEvent as ReactPointerEvent, RefObject } from 'react';
 import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDimensionDrag } from '@/components/configurator/resize/useDimensionDrag';
 import { useConfiguratorStore, DEFAULT_CONFIGURATION } from '@/store/configurator-store';
 
@@ -38,6 +38,12 @@ function fakeContainerRef(width: number, height: number) {
 // viewBox-unit deltas equal client-pixel deltas in these tests.
 const CONTAINER = fakeContainerRef(640, 480);
 
+/** viewBox units per millimetre handed to the hook — the preview's physical
+ * scale. These are the old curve's slopes (80px per 1000mm of width, 180px per
+ * 2500mm of height, 55px per 500mm of depth), so the pointer deltas below
+ * keep meaning the same millimetres. */
+const PX_PER_MM = { width: 0.08, height: 0.072, depth: 0.11 } as const;
+
 describe('useDimensionDrag — width axis', () => {
   it('commits the nearest allowed width once, on pointer release', () => {
     const onCommit = vi.fn();
@@ -47,6 +53,7 @@ describe('useDimensionDrag — width axis', () => {
         committedValue: 1000,
         allowedValues: [700, 1000, 1200, 1500],
         containerRef: CONTAINER,
+        pxPerMm: PX_PER_MM.width,
         onCommit,
       }),
     );
@@ -74,6 +81,7 @@ describe('useDimensionDrag — width axis', () => {
         committedValue: 1000,
         allowedValues: [700, 1000, 1200], // this model does not offer 1500
         containerRef: CONTAINER,
+        pxPerMm: PX_PER_MM.width,
         onCommit,
       }),
     );
@@ -96,6 +104,7 @@ describe('useDimensionDrag — height axis', () => {
         committedValue: 2000,
         allowedValues: [1600, 1850, 2000, 2200, 2400, 3000],
         containerRef: CONTAINER,
+        pxPerMm: PX_PER_MM.height,
         onCommit,
       }),
     );
@@ -116,6 +125,7 @@ describe('useDimensionDrag — height axis', () => {
         committedValue: 2000,
         allowedValues: [1600, 1850, 2000, 2200, 2400, 3000],
         containerRef: CONTAINER,
+        pxPerMm: PX_PER_MM.height,
         onCommit,
       }),
     );
@@ -138,6 +148,7 @@ describe('useDimensionDrag — depth axis', () => {
         committedValue: 400,
         allowedValues: [300, 400, 500, 600],
         containerRef: CONTAINER,
+        pxPerMm: PX_PER_MM.depth,
         onCommit,
       }),
     );
@@ -163,6 +174,7 @@ describe('useDimensionDrag — depth axis', () => {
         committedValue: 400,
         allowedValues: [300, 400, 500, 600],
         containerRef: CONTAINER,
+        pxPerMm: PX_PER_MM.depth,
         onCommit,
       }),
     );
@@ -191,6 +203,7 @@ describe('useDimensionDrag — pointercancel and unmount', () => {
         committedValue: 1000,
         allowedValues: [700, 1000, 1200, 1500],
         containerRef: CONTAINER,
+        pxPerMm: PX_PER_MM.width,
         onCommit,
       }),
     );
@@ -211,6 +224,7 @@ describe('useDimensionDrag — pointercancel and unmount', () => {
         committedValue: 1000,
         allowedValues: [700, 1000, 1200, 1500],
         containerRef: CONTAINER,
+        pxPerMm: PX_PER_MM.width,
         onCommit,
       }),
     );
@@ -230,6 +244,7 @@ describe('useDimensionDrag — keyboard stepping', () => {
         committedValue: 1000,
         allowedValues: [700, 1000, 1200, 1500],
         containerRef: CONTAINER,
+        pxPerMm: PX_PER_MM.width,
         onCommit,
       }),
     );
@@ -246,6 +261,7 @@ describe('useDimensionDrag — keyboard stepping', () => {
         committedValue: 1200,
         allowedValues: [700, 1000, 1200, 1500],
         containerRef: CONTAINER,
+        pxPerMm: PX_PER_MM.width,
         onCommit,
       }),
     );
@@ -262,6 +278,7 @@ describe('useDimensionDrag — keyboard stepping', () => {
         committedValue: 2200,
         allowedValues: [1600, 1850, 2000, 2200, 2400, 3000],
         containerRef: CONTAINER,
+        pxPerMm: PX_PER_MM.height,
         onCommit,
       }),
     );
@@ -281,6 +298,7 @@ describe('useDimensionDrag — keyboard stepping', () => {
         committedValue: 1000,
         allowedValues: [700, 1000, 1200, 1500],
         containerRef: CONTAINER,
+        pxPerMm: PX_PER_MM.width,
         onCommit,
       }),
     );
@@ -308,6 +326,7 @@ describe('useDimensionDrag — configurator store synchronization', () => {
         committedValue: useConfiguratorStore.getState().config.sections[0].width,
         allowedValues: [700, 1000, 1200, 1500],
         containerRef: CONTAINER,
+        pxPerMm: PX_PER_MM.width,
         onCommit: (axis, value) => {
           if (axis === 'width') useConfiguratorStore.getState().updateSection(activeId, { width: value });
           else if (axis === 'height') useConfiguratorStore.getState().setAllSectionHeights(value);
@@ -328,5 +347,128 @@ describe('useDimensionDrag — configurator store synchronization', () => {
     expect(useConfiguratorStore.getState().config.sections[0].shelves).toBe(DEFAULT_CONFIGURATION.sections[0].shelves);
     expect(useConfiguratorStore.getState().config.depth).toBe(DEFAULT_CONFIGURATION.depth);
     expect(useConfiguratorStore.getState().config.sections.length).toBe(1);
+  });
+});
+
+describe('useDimensionDrag — physical scale, frozen for the whole gesture (V2.3)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** One pointer move, then the rAF flush that publishes displayValue. */
+  function move(result: { current: { onPointerMove: (e: ReactPointerEvent<Element>) => void } }, x: number, y: number) {
+    act(() => {
+      result.current.onPointerMove(fakePointerEvent(x, y));
+      vi.advanceTimersByTime(16);
+    });
+  }
+  /** A container whose on-screen size can be changed mid-drag. */
+  function resizableContainer(initial: { width: number; height: number }) {
+    const size = { ...initial };
+    const ref = {
+      current: {
+        getBoundingClientRect: () =>
+          ({ ...size, top: 0, left: 0, right: size.width, bottom: size.height, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect,
+      },
+    } as unknown as RefObject<HTMLElement | null>;
+    return { ref, size };
+  }
+
+  it('maps pointer movement linearly through pxPerMm: Δmm = Δpx / pxPerMm, at any starting value', () => {
+    for (const committedValue of [700, 1000, 1200]) {
+      const { result } = renderHook(() =>
+        useDimensionDrag({
+          axis: 'width',
+          committedValue,
+          allowedValues: [700, 1000, 1200, 1500],
+          containerRef: CONTAINER,
+          pxPerMm: 0.064,
+          onCommit: vi.fn(),
+        }),
+      );
+      act(() => result.current.onPointerDown(fakePointerEvent(100, 100)));
+      // 6.4 viewBox units at 0.064 px/mm is exactly 100 mm.
+      move(result, 106.4, 100);
+      move(result, 106.4, 100);
+      expect(result.current.displayValue).toBeCloseTo(committedValue + 100, 6);
+      act(() => result.current.onPointerUp(fakePointerEvent(106.4, 100)));
+    }
+  });
+
+  it('a pxPerMm change mid-gesture does not change the pointer-to-mm mapping of that gesture', () => {
+    let pxPerMm = 0.064;
+    const { result, rerender } = renderHook(() =>
+      useDimensionDrag({
+        axis: 'height',
+        committedValue: 2000,
+        allowedValues: [1000, 1500, 2000, 2500, 3000],
+        containerRef: CONTAINER,
+        pxPerMm,
+        onCommit: vi.fn(),
+      }),
+    );
+    act(() => result.current.onPointerDown(fakePointerEvent(0, 0)));
+    move(result, 0, -12.8); // 200 mm up
+    expect(result.current.displayValue).toBeCloseTo(2200, 6);
+
+    // Something re-renders the preview at a different scale mid-drag.
+    pxPerMm = 0.032;
+    rerender();
+    move(result, 0, -12.8);
+    expect(result.current.displayValue).toBeCloseTo(2200, 6);
+    move(result, 0, -25.6); // 400 mm at the frozen scale
+    expect(result.current.displayValue).toBeCloseTo(2400, 6);
+    act(() => result.current.onPointerUp(fakePointerEvent(0, -25.6)));
+
+    // The next gesture picks the new scale up.
+    act(() => result.current.onPointerDown(fakePointerEvent(0, 0)));
+    move(result, 0, -12.8); // 400 mm at 0.032
+    expect(result.current.displayValue).toBeCloseTo(2400, 6);
+  });
+
+  it('a container that re-lays out mid-gesture does not change the pointer-to-mm mapping of that gesture', () => {
+    const { ref, size } = resizableContainer({ width: 640, height: 480 });
+    const { result } = renderHook(() =>
+      useDimensionDrag({
+        axis: 'width',
+        committedValue: 1000,
+        allowedValues: [700, 1000, 1200, 1500],
+        containerRef: ref,
+        pxPerMm: 0.064,
+        onCommit: vi.fn(),
+      }),
+    );
+    act(() => result.current.onPointerDown(fakePointerEvent(0, 0)));
+    move(result, 12.8, 0); // 200 mm
+    expect(result.current.displayValue).toBeCloseTo(1200, 6);
+
+    size.width = 320; // the stage halves on screen mid-drag
+    size.height = 240;
+    move(result, 12.8, 0);
+    expect(result.current.displayValue).toBeCloseTo(1200, 6);
+  });
+
+  it('clamps height to the allowed range while dragging, so the rack never outgrows its reserved frame', () => {
+    const { result } = renderHook(() =>
+      useDimensionDrag({
+        axis: 'height',
+        committedValue: 2000,
+        allowedValues: [1000, 1500, 2000, 2500, 3000],
+        containerRef: CONTAINER,
+        pxPerMm: 0.064,
+        onCommit: vi.fn(),
+      }),
+    );
+    act(() => result.current.onPointerDown(fakePointerEvent(0, 0)));
+    move(result, 0, -500);
+    expect(result.current.displayValue).toBe(3000);
+    move(result, 0, 500);
+    expect(result.current.displayValue).toBe(1000);
+    // Back inside the range the value tracks the pointer again, unsnapped.
+    move(result, 0, -6.4);
+    expect(result.current.displayValue).toBeCloseTo(2100, 6);
   });
 });

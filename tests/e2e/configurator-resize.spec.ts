@@ -212,7 +212,13 @@ test('height resize can start from multiple points across the top rack edge — 
     // default. An explicit share-link URL (see url.ts) deterministically
     // re-seeds the store on every load regardless of what's persisted, so
     // every iteration starts from the same known baseline height.
-    await page.goto('/ru/configurator?v=2&model=ms-standard&depth=400&sections=1000:2000:3:0:0:0');
+    //
+    // Two sections, not one: drawn at true physical scale (V2.3) a single
+    // 1000mm section's top edge is only about as wide as its own centred
+    // "add" button plus the height handle, leaving no point in its middle
+    // third that the zone itself owns. A two-section row gives the strip
+    // three genuinely distinct free regions again.
+    await page.goto('/ru/configurator?v=2&model=ms-standard&depth=400&sections=1000:2000:3:0:0:0,1000:2000:3:0:0:0');
     const heightHandle = page.locator('button[data-axis="height"]');
     // The persisted store renders first and the share link is applied one
     // commit later, so an immediate read can still see the previous

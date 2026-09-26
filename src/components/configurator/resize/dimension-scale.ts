@@ -21,9 +21,60 @@ export interface Range {
 export const VIEWBOX_W = 640;
 export const VIEWBOX_H = 480;
 
-/** Visual normalisation ranges — mirrors the constants ShelvingPreview used
- * before drag support existed, now shared so the drag math and the static
- * render agree on the same mm-to-px curve. */
+/* ---------------------------------------------------------------------------
+   V2.3 true physical scale (front view). One uniform `pxPerMm` — viewBox
+   units per millimetre — draws every section's width and height and the
+   shared depth, so a 700 mm section is exactly 700/1500 as wide as a 1500 mm
+   one and a 1500 mm section exactly 3/5 as tall as a 2500 mm one. The scale
+   is chosen once per envelope (see `fitPxPerMm`) and never per section or
+   per axis.
+   --------------------------------------------------------------------------- */
+
+/** The rack's physical extent the scale is fitted to: the front row's total
+ * width, the tallest section and the shared depth, all in millimetres. */
+export interface RackEnvelopeMm {
+  rowWidth: number;
+  height: number;
+  depth: number;
+}
+
+/** viewBox room for the row plus its depth projection, horizontally… */
+export const RACK_ROW_BUDGET_PX = 460;
+/** …and for the tallest section plus its depth projection, vertically. The
+ * height budget keeps the largest catalog rack (3000 mm + 800 mm depth) at
+ * the size the preview has always drawn its tallest rack. */
+export const RACK_HEIGHT_BUDGET_PX = 225;
+
+/** A depth of `depthMm`, projected along the receding DEPTH_ANGLE_DEG
+ * diagonal at the same `pxPerMm` as width and height (cavalier oblique: the
+ * receding axis is not foreshortened). */
+export function depthVectorPx(depthMm: number, pxPerMm: number): { dx: number; dy: number } {
+  const angleRad = (DEPTH_ANGLE_DEG * Math.PI) / 180;
+  const length = depthMm * pxPerMm;
+  return { dx: length * Math.cos(angleRad), dy: -length * Math.sin(angleRad) };
+}
+
+/**
+ * The single uniform scale at which `envelope` — row plus depth projection
+ * horizontally, tallest section plus depth projection vertically — just fits
+ * the rack budget. Whichever direction is tighter decides; the other simply
+ * has room to spare. Proportions are never traded for fill.
+ */
+export function fitPxPerMm(envelope: RackEnvelopeMm): number {
+  const { dx, dy } = depthVectorPx(envelope.depth, 1);
+  const widthMm = envelope.rowWidth + dx;
+  const heightMm = envelope.height - dy;
+  if (!(widthMm > 0) || !(heightMm > 0)) return RACK_HEIGHT_BUDGET_PX / 3000;
+  return Math.min(RACK_ROW_BUDGET_PX / widthMm, RACK_HEIGHT_BUDGET_PX / heightMm);
+}
+
+/* ---------------------------------------------------------------------------
+   Legacy, non-physical curves. The front view and the drag math no longer use
+   them (V2.3); they remain only for the top view's depth band and the
+   server-rendered catalog illustration, which keep their own framing.
+   --------------------------------------------------------------------------- */
+
+/** Visual normalisation ranges of the pre-V2.3 drawing. */
 export const HEIGHT_MM_RANGE: Range = { min: 500, max: 3000 };
 export const HEIGHT_PX_RANGE: Range = { min: 140, max: 320 };
 

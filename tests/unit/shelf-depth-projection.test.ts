@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { DEPTH_ANGLE_DEG, mmToPx } from '@/components/configurator/resize/dimension-scale';
-import { FLOOR_Y, RACK_SCALE, computeShelfYs } from '@/components/configurator/ShelvingPreview';
+import { depthVectorPx, fitPxPerMm } from '@/components/configurator/resize/dimension-scale';
+import { rackEnvelopeMm } from '@/components/configurator/resize/section-geometry';
+import { FLOOR_Y, computeShelfYs } from '@/components/configurator/ShelvingPreview';
+import { MAX_SECTIONS } from '@/lib/configurator/limits';
 import {
   computeRenderDepthVec,
+  computeRenderDepthVecForSections,
   minShelfSpacingPx,
   MIN_SHELF_AIR_GAP_PX,
   SHELF_LIP_HEIGHT_PX,
@@ -78,17 +81,38 @@ function testShelfCounts(maxShelves: number): number[] {
   return [2, 3, 5, 6, 8].filter((n) => n >= MIN_SHELVES && n <= maxShelves);
 }
 
-/** Reproduces ShelvingPreview's exact geometry pipeline for one
- * configuration — the same functions/constants the component itself calls,
- * not a re-derived formula. */
-function computeGeometry(height: number, depth: number, shelves: number) {
-  const heightPx = mmToPx('height', height) * RACK_SCALE;
+/** MS Standard's catalog maxima, as ConfiguratorClient passes them. */
+const CAPACITY = { width: 1500, height: 3000, depth: 800 };
+
+/** The configurator's physical scale for a row of `count` sections — it
+ * depends on the count alone (see rackEnvelopeMm), and is largest for one
+ * section and smallest for the maximum count. */
+function configuratorScale(count: number): number {
+  const sections = Array.from({ length: count }, (_, i) => ({
+    id: `s${i}`,
+    width: 1000,
+    height: 2000,
+    shelves: 4,
+    rearWall: false,
+    leftWall: false,
+    rightWall: false,
+  }));
+  return fitPxPerMm(rackEnvelopeMm(sections, 400, CAPACITY));
+}
+const SCALES: [string, number][] = [
+  ['1 section', configuratorScale(1)],
+  [`${MAX_SECTIONS} sections`, configuratorScale(MAX_SECTIONS)],
+];
+
+/** Reproduces ShelvingPreview's exact geometry pipeline for one section —
+ * the same functions/constants the component itself calls, not a
+ * re-derived formula. Defaults to the densest (smallest) configurator scale. */
+function computeGeometry(height: number, depth: number, shelves: number, pxPerMm = configuratorScale(MAX_SECTIONS)) {
+  const heightPx = height * pxPerMm;
   const top = FLOOR_Y - heightPx;
   const shelfYs = computeShelfYs(top, heightPx, shelves);
 
-  const depthPx = mmToPx('depth', depth) * RACK_SCALE;
-  const angleRad = (DEPTH_ANGLE_DEG * Math.PI) / 180;
-  const rawDepthVec: DepthVec = { dx: depthPx * Math.cos(angleRad), dy: -depthPx * Math.sin(angleRad) };
+  const rawDepthVec: DepthVec = depthVectorPx(depth, pxPerMm);
   const renderDepthVec = computeRenderDepthVec(rawDepthVec, shelfYs);
 
   return { shelfYs, rawDepthVec, renderDepthVec };
@@ -110,9 +134,11 @@ describe('shelf-depth-projection — every valid matrix combination keeps the mi
         for (const depth of group.depths) {
           for (const shelves of testShelfCounts(heightGroup.maxShelves)) {
             it(`width=${group.width} height=${height} depth=${depth} shelves=${shelves} keeps >= ${MIN_SHELF_AIR_GAP_PX}px air gap`, () => {
-              const { shelfYs, renderDepthVec } = computeGeometry(height, depth, shelves);
-              const gap = visibleAirGap(shelfYs, renderDepthVec.dy);
-              expect(gap).toBeGreaterThanOrEqual(MIN_SHELF_AIR_GAP_PX - 1e-6);
+              for (const [scaleName, pxPerMm] of SCALES) {
+                const { shelfYs, renderDepthVec } = computeGeometry(height, depth, shelves, pxPerMm);
+                const gap = visibleAirGap(shelfYs, renderDepthVec.dy);
+                expect(gap, scaleName).toBeGreaterThanOrEqual(MIN_SHELF_AIR_GAP_PX - 1e-6);
+              }
             });
           }
         }
@@ -213,5 +239,30 @@ describe('minShelfSpacingPx', () => {
   it('a single-shelf configuration never gets its depth vector compressed', () => {
     const { rawDepthVec, renderDepthVec } = computeGeometry(1500, 800, 1);
     expect(renderDepthVec).toEqual(rawDepthVec);
+  });
+});
+
+describe('shelf-depth-projection — one shared depth for sections with their own shelf planes', () => {
+  it('is capped by the densest section, never by the gap between two different sections’ shelves', () => {
+    const pxPerMm = configuratorScale(2);
+    const sparse = computeShelfYs(FLOOR_Y - 3000 * pxPerMm, 3000 * pxPerMm, 2);
+    const dense = computeShelfYs(FLOOR_Y - 2000 * pxPerMm, 2000 * pxPerMm, 8);
+    const raw = depthVectorPx(800, pxPerMm);
+
+    const shared = computeRenderDepthVecForSections(raw, [sparse, dense]);
+    expect(shared).toEqual(computeRenderDepthVec(raw, dense));
+    expect(computeRenderDepthVecForSections(raw, [dense, sparse])).toEqual(shared);
+    // Horizontal depth is still the physical depth at the one scale.
+    expect(shared.dx).toBeCloseTo(800 * pxPerMm * Math.cos((40 * Math.PI) / 180), 9);
+    // Both sections keep the minimum air gap with the shared vector.
+    for (const ys of [sparse, dense]) expect(visibleAirGap(ys, shared.dy)).toBeGreaterThanOrEqual(MIN_SHELF_AIR_GAP_PX - 1e-6);
+  });
+
+  it('leaves the natural projection alone when every section has air to spare', () => {
+    const pxPerMm = configuratorScale(2);
+    const a = computeShelfYs(FLOOR_Y - 3000 * pxPerMm, 3000 * pxPerMm, 3);
+    const b = computeShelfYs(FLOOR_Y - 2500 * pxPerMm, 2500 * pxPerMm, 2);
+    const raw = depthVectorPx(300, pxPerMm);
+    expect(computeRenderDepthVecForSections(raw, [a, b])).toEqual(raw);
   });
 });

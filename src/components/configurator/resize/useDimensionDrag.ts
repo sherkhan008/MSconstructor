@@ -10,8 +10,6 @@ import {
   findNearestAllowed,
   maxAllowed,
   minAllowed,
-  mmToPx,
-  pxToMm,
   stepAllowed,
   type DimensionAxis,
 } from './dimension-scale';
@@ -42,6 +40,11 @@ export interface UseDimensionDragOptions {
   allowedValues: number[];
   /** The element whose rendered box corresponds 1:1 to the preview's viewBox. */
   containerRef: React.RefObject<HTMLElement | null>;
+  /** The preview's uniform physical scale — viewBox units per millimetre
+   * (for depth: along its receding diagonal). Pointer movement is converted
+   * with exactly the scale the rack is drawn at, so the dragged edge stays
+   * under the pointer. Captured at pointer-down for the whole gesture. */
+  pxPerMm: number;
   onCommit: (axis: DimensionAxis, value: number) => void;
   /** Called once per commit (drag release or keyboard step) with a human-readable message. */
   onAnnounce?: (message: string) => void;
@@ -69,6 +72,13 @@ const RESIZED_ANNOUNCEMENT: Record<DimensionAxis, Entry> = {
   depth: CF['CF-014'],
 };
 
+interface GestureScale {
+  unitsPerClientX: number;
+  unitsPerClientY: number;
+  pxPerMm: number;
+}
+
+/** Pointer movement along the axis, in viewBox units. */
 function projectDelta(axis: DimensionAxis, dxViewBox: number, dyViewBox: number): number {
   if (axis === 'height') {
     // SVG y grows downward; dragging up (negative dy) must increase height.
@@ -89,6 +99,7 @@ export function useDimensionDrag({
   committedValue,
   allowedValues,
   containerRef,
+  pxPerMm,
   onCommit,
   onAnnounce,
 }: UseDimensionDragOptions): UseDimensionDragResult {
@@ -110,6 +121,20 @@ export function useDimensionDrag({
   allowedRef.current = allowedValues;
   const committedRef = useRef(committedValue);
   committedRef.current = committedValue;
+  const pxPerMmRef = useRef(pxPerMm);
+  pxPerMmRef.current = pxPerMm;
+
+  // The whole client-px → viewBox → mm conversion of one gesture, frozen at
+  // pointer-down: the container's size (so a stage that re-lays out mid-drag
+  // cannot rescale the pointer) and the drawing's pxPerMm (so a scale that
+  // changed mid-drag could not either). Released with the pointer.
+  const gestureRef = useRef<GestureScale | null>(null);
+  const captureGestureScale = useCallback((): GestureScale | null => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    const scale = pxPerMmRef.current;
+    if (!rect || rect.width === 0 || rect.height === 0 || !(scale > 0)) return null;
+    return { unitsPerClientX: VIEWBOX_W / rect.width, unitsPerClientY: VIEWBOX_H / rect.height, pxPerMm: scale };
+  }, [containerRef]);
 
   // Cancel any in-flight animation frame on unmount so a late callback never
   // calls setState after this component is gone.
@@ -133,6 +158,7 @@ export function useDimensionDrag({
       e.currentTarget.setPointerCapture(e.pointerId);
       draggingRef.current = true;
       startClientRef.current = { x: e.clientX, y: e.clientY };
+      gestureRef.current = captureGestureScale();
       startValueRef.current = committedRef.current;
       latestRef.current = {
         tempValue: committedRef.current,
@@ -142,40 +168,35 @@ export function useDimensionDrag({
       setTempValue(committedRef.current);
       setSnapTarget(latestRef.current.snapTarget);
     },
-    [],
+    [captureGestureScale],
   );
 
   const onPointerMove = useCallback(
     (e: ReactPointerEvent<Element>) => {
       if (!draggingRef.current) return;
       e.preventDefault();
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (!rect || rect.width === 0 || rect.height === 0) return;
+      // Normally captured at pointer-down; only a container that had no size
+      // yet at that moment is measured here instead — and then kept.
+      gestureRef.current ??= captureGestureScale();
+      const gesture = gestureRef.current;
+      if (!gesture) return;
 
-      const scaleX = VIEWBOX_W / rect.width;
-      const scaleY = VIEWBOX_H / rect.height;
-      const dxViewBox = (e.clientX - startClientRef.current.x) * scaleX;
-      const dyViewBox = (e.clientY - startClientRef.current.y) * scaleY;
+      const dxViewBox = (e.clientX - startClientRef.current.x) * gesture.unitsPerClientX;
+      const dyViewBox = (e.clientY - startClientRef.current.y) * gesture.unitsPerClientY;
+      const rawMm = startValueRef.current + projectDelta(axis, dxViewBox, dyViewBox) / gesture.pxPerMm;
 
-      const deltaAlongAxis = projectDelta(axis, dxViewBox, dyViewBox);
-      const startPx = mmToPx(axis, startValueRef.current);
-      const rawMm = pxToMm(axis, startPx + deltaAlongAxis);
-
-      // Width is a per-section catalog value with a hard min/max (unlike
-      // height/depth, whose mm range is a continuous visual scale) — once the
-      // pointer drags a section past its own allowed max/min, the section
-      // must stop growing/shrinking right there instead of following the
-      // pointer past the legal boundary and snapping back on release. The
-      // pointer itself keeps moving (startClientRef/startValueRef never
-      // rebase), so re-entering the legal range resumes smooth tracking with
-      // no extra drag needed.
+      // Every axis is a catalog value with a hard min/max — once the pointer
+      // drags past the allowed max/min, the rack must stop growing/shrinking
+      // right there instead of following the pointer past the legal boundary
+      // (and outside the frame reserved for the largest catalog rack) and
+      // snapping back on release. The pointer itself keeps moving
+      // (startClientRef/startValueRef never rebase), so re-entering the legal
+      // range resumes smooth tracking with no extra drag needed.
       let newMm = rawMm;
-      if (axis === 'width') {
-        const min = minAllowed(allowedRef.current);
-        const max = maxAllowed(allowedRef.current);
-        if (min !== undefined && max !== undefined) {
-          newMm = clamp(rawMm, min, max);
-        }
+      const min = minAllowed(allowedRef.current);
+      const max = maxAllowed(allowedRef.current);
+      if (min !== undefined && max !== undefined) {
+        newMm = clamp(rawMm, min, max);
       }
 
       latestRef.current = { tempValue: newMm, snapTarget: findNearestAllowed(newMm, allowedRef.current) };
@@ -183,13 +204,14 @@ export function useDimensionDrag({
         rafRef.current = requestAnimationFrame(flush);
       }
     },
-    [axis, containerRef, flush],
+    [axis, captureGestureScale, flush],
   );
 
   const endDrag = useCallback(
     (e: ReactPointerEvent<Element>) => {
       if (!draggingRef.current) return;
       draggingRef.current = false;
+      gestureRef.current = null;
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
