@@ -13,6 +13,7 @@ import { getCatalog } from '@/lib/data/repository';
 import { toPublicCatalog, type PublicCatalog } from '@/lib/data/public-catalog';
 import type { ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
 import type { Locale } from '@/lib/i18n/locales';
+import { activeConfig, loadSingleKit } from '../helpers/workspace';
 
 /**
  * V2.1: one shelving configuration holds at most 5 sections. One shared
@@ -31,7 +32,7 @@ function config(n: number): ShelvingConfiguration {
 
 function resetStore(n = 1) {
   const c = config(n);
-  useConfiguratorStore.setState({ config: c, activeSectionId: c.sections[0].id, priceResult: null, pricingError: null });
+  loadSingleKit(c);
 }
 
 describe('one authoritative section limit', () => {
@@ -67,24 +68,27 @@ describe('configurator store', () => {
   it('cannot add a 6th section', () => {
     resetStore(5);
     useConfiguratorStore.getState().addSection();
-    expect(useConfiguratorStore.getState().config.sections).toHaveLength(5);
+    expect(activeConfig().sections).toHaveLength(5);
   });
 
   it('cannot duplicate into a 6th section', () => {
     resetStore(5);
     useConfiguratorStore.getState().duplicateSection('s0');
-    expect(useConfiguratorStore.getState().config.sections).toHaveLength(5);
+    expect(activeConfig().sections).toHaveLength(5);
   });
 
-  it('keeps a persisted 8-section configuration intact — not truncated (v3 and migrated V2.1 v2)', () => {
-    const current = migrateConfiguratorState({ config: config(8), activeSectionId: 's3' }, 3);
-    expect(current.config.sections.map((s) => s.id)).toEqual(sections(8).map((s) => s.id));
+  it('keeps a persisted 8-section configuration intact — not truncated (v4, migrated V2.4 v3 and V2.1 v2)', () => {
+    const [current] = migrateConfiguratorState({ config: config(8), activeSectionId: 's3' }, 3).kits;
+    expect(current.configuration.sections.map((s) => s.id)).toEqual(sections(8).map((s) => s.id));
     expect(current.activeSectionId).toBe('s3');
+
+    const [v4] = migrateConfiguratorState({ kits: [{ id: 'k', configuration: config(8), activeSectionId: 's3' }], activeKitId: 'k' }, 4).kits;
+    expect(v4.configuration.sections).toEqual(sections(8));
 
     const rowLevelSections = sections(8).map(({ height: _h, shelves: _s, ...rest }) => rest);
     const v21 = { config: { ...DEFAULT_CONFIGURATION, height: 2000, shelves: 5, sections: rowLevelSections }, activeSectionId: 's3' };
-    const migrated = migrateConfiguratorState(v21, 2);
-    expect(migrated.config.sections).toEqual(sections(8));
+    const [migrated] = migrateConfiguratorState(v21, 2).kits;
+    expect(migrated.configuration.sections).toEqual(sections(8));
     expect(migrated.activeSectionId).toBe('s3');
   });
 
@@ -92,11 +96,11 @@ describe('configurator store', () => {
     resetStore(7);
     useConfiguratorStore.getState().addSection();
     useConfiguratorStore.getState().duplicateSection('s1');
-    expect(useConfiguratorStore.getState().config.sections).toHaveLength(7);
+    expect(activeConfig().sections).toHaveLength(7);
     useConfiguratorStore.getState().removeSection('s6');
     useConfiguratorStore.getState().removeSection('s5');
-    expect(useConfiguratorStore.getState().config.sections).toHaveLength(5);
-    expect(schema.parseConfiguration(useConfiguratorStore.getState().config).success).toBe(true);
+    expect(activeConfig().sections).toHaveLength(5);
+    expect(schema.parseConfiguration(activeConfig()).success).toBe(true);
   });
 });
 
@@ -138,11 +142,11 @@ describe('sections panel', () => {
     renderPanel();
     expect(addButton().disabled).toBe(false);
     fireEvent.click(addButton());
-    expect(useConfiguratorStore.getState().config.sections).toHaveLength(5);
+    expect(activeConfig().sections).toHaveLength(5);
     expect(addButton().disabled).toBe(true);
     expect(screen.getByText('Достигнуто максимальное количество секций.')).toBeTruthy();
     fireEvent.click(addButton());
-    expect(useConfiguratorStore.getState().config.sections).toHaveLength(5);
+    expect(activeConfig().sections).toHaveLength(5);
   });
 
   it('explains an over-limit (persisted) configuration instead of hiding or trimming it', () => {

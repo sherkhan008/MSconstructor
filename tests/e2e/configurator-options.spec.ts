@@ -1,4 +1,5 @@
 import { test, expect } from './helpers/test';
+import { storedActiveConfiguration } from './helpers/sections';
 
 /**
  * End-to-end coverage for two follow-up configurator changes:
@@ -135,8 +136,7 @@ test('a legacy persisted non-STANDARD shelf type normalizes to STANDARD without 
 
   await expect.poll(
     async () => {
-      const raw = await page.evaluate(() => localStorage.getItem('ms-shelving-configurator'));
-      return raw ? JSON.parse(raw).state.config.shelfType : null;
+      return (await storedActiveConfiguration(page))?.shelfType ?? null;
     },
     { timeout: 10_000 },
   ).toBe('STANDARD');

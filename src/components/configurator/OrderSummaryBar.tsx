@@ -6,10 +6,11 @@ import { Button } from '@/components/ui/Button';
 import { PriceTag } from '@/components/ui/PriceTag';
 import { formatPrice } from '@/lib/money';
 import { trackEvent } from '@/lib/analytics';
-import { configurationToShareQuery } from '@/lib/configurator/url';
-import { whatsAppConfiguratorUrl } from '@/lib/whatsapp';
-import { MAX_SECTIONS, useConfiguratorStore } from '@/store/configurator-store';
-import { useCartStore } from '@/store/cart-store';
+import { workspaceToShareQuery } from '@/lib/configurator/url';
+import { whatsAppWorkspaceUrl } from '@/lib/whatsapp';
+import { EMPTY_KIT_PRICE, isKitPriceCurrent, MAX_SECTIONS, useConfiguratorStore } from '@/store/configurator-store';
+import { useCartStore, type CartItemInput } from '@/store/cart-store';
+import { getWorkspaceRackCount } from '@/lib/configurator/workspace';
 import type { PublicCatalog } from '@/lib/data/public-catalog';
 import { pick, t } from '@/lib/i18n/format';
 import { localizePath } from '@/lib/i18n/locales';
@@ -32,43 +33,88 @@ import { Chevron } from './AdvancedSettingsAccordion';
  * there is no separate VAT row. A price the customer can act on is either a
  * fresh server result or explicitly marked stale/loading — never a leftover
  * number from before the last change.
+ *
+ * Workspace (V2.5): the card is about EVERY kit. Its total is the sum of the
+ * kits' own server totals — exactly how the cart and the order API combine
+ * lines (src/app/api/orders/route.ts: grandTotal = Σ item totals), because
+ * each kit carries its own assembly and delivery choice, priced by the server
+ * per configuration; nothing is re-derived here. The details list every
+ * kit's total, then the active kit's own breakdown. The purchase actions add
+ * all kits to the cart in ONE atomic cart update, and only while every kit
+ * has a current server price.
  */
 export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
-  const config = useConfiguratorStore((s) => s.config);
-  const priceResult = useConfiguratorStore((s) => s.priceResult);
-  const pricingError = useConfiguratorStore((s) => s.pricingError);
-  const isPricing = useConfiguratorStore((s) => s.isPricing);
+  const kits = useConfiguratorStore((s) => s.kits);
+  const activeKitId = useConfiguratorStore((s) => s.activeKitId);
+  const kitPrices = useConfiguratorStore((s) => s.kitPrices);
   const retryPricing = useConfiguratorStore((s) => s.retryPricing);
-  const addItem = useCartStore((s) => s.addItem);
+  const addItems = useCartStore((s) => s.addItems);
   const cartItems = useCartStore((s) => s.items);
   const router = useRouter();
   const [feedback, setFeedback] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const locale = useLocale();
 
-  const model = catalog.models.find((m) => m.slug === config.modelSlug);
-  const modelName = model ? pick(model.name, locale) : config.modelSlug;
+  const activeIndex = Math.max(0, kits.findIndex((k) => k.id === activeKitId));
+  const multiKit = kits.length > 1;
+  const kitName = (index: number) => t(CF['CF-104'], locale, { N: index + 1 });
+  const modelNameOf = (slug: string) => {
+    const model = catalog.models.find((m) => m.slug === slug);
+    return model ? pick(model.name, locale) : slug;
+  };
 
-  /** Share link to this configuration in the page's own language. */
+  const priced = kits.map((kit) => {
+    const price = kitPrices[kit.id] ?? EMPTY_KIT_PRICE;
+    return { kit, price, current: isKitPriceCurrent(price, kit.configuration) };
+  });
+  const activePrice = priced[activeIndex].price;
+  // Every kit has a price answering its current configuration: the only
+  // state in which the total is current and anything can be purchased.
+  const allCurrent = priced.every((p) => p.current && p.price.result);
+  const failedIndex = priced.findIndex((p) => p.current && p.price.error);
+  const failure = failedIndex === -1 ? null : priced[failedIndex].price.error;
+  const isPricing = !allCurrent && failedIndex === -1;
+  // Σ of the kits' own server totals — null until every kit has one (a
+  // total missing a kit would read as the price of the whole workspace).
+  const total = priced.every((p) => p.price.result) ? priced.reduce((sum, p) => sum + p.price.result!.breakdown.total, 0) : null;
+
+  /** Share link to the whole workspace in the page's own language. */
   function shareUrl(): string {
     if (typeof window === 'undefined') return '';
-    return `${window.location.origin}${localizePath(`/configurator?${configurationToShareQuery(config)}`, locale)}`;
+    return `${window.location.origin}${localizePath(`/configurator?${workspaceToShareQuery(kits.map((k) => k.configuration), activeIndex)}`, locale)}`;
   }
 
-  // Limits the order cannot pass (the server rejects both anyway): a
-  // configuration persisted/shared with more than MAX_SECTIONS sections, and
-  // a cart that has no room left for this configuration's quantity (see
-  // src/lib/orders/limits.ts). Either one blocks adding to the cart and says why.
-  const sectionsOverLimit = config.sections.length > MAX_SECTIONS;
-  const kitLimitBlocked = !canAddKits(cartItems, config.quantity);
+  // Limits the order cannot pass (the server rejects all of them anyway): a
+  // kit persisted/shared with more than MAX_SECTIONS sections, a workspace
+  // describing more than MAX_KITS_PER_ORDER physical racks (Σ quantity), and
+  // a cart with no room left for them (see src/lib/orders/limits.ts). Each
+  // one blocks adding to the cart and says why.
+  const sectionsOverIndex = kits.findIndex((k) => k.configuration.sections.length > MAX_SECTIONS);
+  const sectionsOverLimit = sectionsOverIndex !== -1;
+  const rackCount = getWorkspaceRackCount(kits);
+  const kitLimitBlocked = rackCount > MAX_KITS_PER_ORDER || !canAddKits(cartItems, rackCount);
 
   function handleAddToCart(redirectToOrder: boolean) {
-    if (!priceResult || sectionsOverLimit) return;
-    const added = addItem({ modelSlug: config.modelSlug, modelName, configuration: priceResult.configuration, priceSnapshot: priceResult });
-    // Refused by the store's own kit-limit check: nothing was added, and the
-    // limit message below is already on screen.
+    // Read at click time: every kit must still have a price answering its
+    // CURRENT configuration — a snapshot is never taken from a stale answer.
+    const state = useConfiguratorStore.getState();
+    if (getWorkspaceRackCount(state.kits) > MAX_KITS_PER_ORDER) return;
+    const inputs: CartItemInput[] = [];
+    for (const kit of state.kits) {
+      const price = state.kitPrices[kit.id];
+      if (!price?.result || !isKitPriceCurrent(price, kit.configuration) || kit.configuration.sections.length > MAX_SECTIONS) return;
+      inputs.push({
+        modelSlug: kit.configuration.modelSlug,
+        modelName: modelNameOf(kit.configuration.modelSlug),
+        configuration: price.result.configuration,
+        priceSnapshot: price.result,
+      });
+    }
+    // All kits or none: refused by the cart's own kit-limit check, nothing
+    // was added, and the limit message below is already on screen.
+    const added = addItems(inputs);
     if (!added.ok) return;
-    trackEvent('product_added_to_cart', { model: config.modelSlug, redirectToOrder });
+    trackEvent('product_added_to_cart', { model: inputs[0]?.modelSlug, redirectToOrder, kits: inputs.length });
     if (redirectToOrder) {
       router.push(localizePath('/order', locale));
     } else {
@@ -79,7 +125,8 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
 
   async function handleShare() {
     const url = shareUrl();
-    trackEvent('configuration_shared', { model: config.modelSlug });
+    const modelName = modelNameOf(kits[activeIndex].configuration.modelSlug);
+    trackEvent('configuration_shared', { model: kits[activeIndex].configuration.modelSlug, kits: kits.length });
     if (typeof navigator !== 'undefined' && navigator.share) {
       try {
         await navigator.share({ title: t(CF['CF-072'], locale, { model: modelName }), url });
@@ -96,16 +143,20 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
   }
 
   function handleWhatsApp() {
-    if (!priceResult) return;
+    if (!allCurrent) return;
     trackEvent('whatsapp_clicked', { location: 'configurator' });
-    window.open(whatsAppConfiguratorUrl(priceResult, catalog.accessories, shareUrl(), locale), '_blank', 'noopener,noreferrer');
+    const results = priced.map((p) => p.price.result!);
+    window.open(whatsAppWorkspaceUrl(results, catalog.accessories, shareUrl(), locale), '_blank', 'noopener,noreferrer');
   }
 
-  const actionsDisabled = !priceResult || isPricing || sectionsOverLimit;
+  const actionsDisabled = !allCurrent || sectionsOverLimit;
   const cartActionsDisabled = actionsDisabled || kitLimitBlocked;
   // Transient status replaces the "Итого" label in place instead of adding a
   // line, so the bar never changes height while a price is recalculated.
   const status = feedback ?? (isPricing ? t(CF['CF-071'], locale) : null);
+  const totalLabel = multiKit ? t(CF['CF-117'], locale) : t(CF['CF-064'], locale);
+  // With several kits, a message names the kit it is about.
+  const aboutKit = (index: number, message: string) => (multiKit ? `${kitName(index)}: ${message}` : message);
 
   return (
     <div
@@ -130,22 +181,16 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
               aria-live="polite"
               className={`truncate text-[13px] leading-tight max-[359px]:col-start-1 max-[359px]:row-start-1 max-[359px]:self-end ${feedback ? 'font-medium text-success' : 'text-steel'}`}
             >
-              {status ?? t(CF['CF-064'], locale)}
+              {status ?? totalLabel}
             </p>
             <div className="max-[359px]:col-span-4 max-[359px]:row-start-2 max-[359px]:min-w-0">
             {sectionsOverLimit ? (
               <p role="alert" data-testid="sections-over-limit" className="text-[13px] leading-snug text-danger">
-                {t(CF['CF-103'], locale, { N: MAX_SECTIONS })}
+                {aboutKit(sectionsOverIndex, t(CF['CF-103'], locale, { N: MAX_SECTIONS }))}
               </p>
-            ) : priceResult ? (
-              <PriceTag
-                value={priceResult.breakdown.total}
-                size="lg"
-                className={`block whitespace-nowrap leading-tight lg:!text-[2rem] ${isPricing ? 'opacity-60' : 'price-flash'}`}
-              />
-            ) : pricingError ? (
+            ) : failure ? (
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <p className="text-[13px] leading-snug text-danger">{pricingError.message}</p>
+                <p className="text-[13px] leading-snug text-danger">{aboutKit(failedIndex, failure.message)}</p>
                 <button
                   type="button"
                   onClick={retryPricing}
@@ -154,6 +199,12 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
                   {t(CF['CF-065'], locale)}
                 </button>
               </div>
+            ) : total !== null ? (
+              <PriceTag
+                value={total}
+                size="lg"
+                className={`block whitespace-nowrap leading-tight lg:!text-[2rem] ${allCurrent ? 'price-flash' : 'opacity-60'}`}
+              />
             ) : (
               <div className="mt-1 h-7 w-32 animate-pulse bg-surface-muted" />
             )}
@@ -163,7 +214,7 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
           <button
             type="button"
             onClick={() => setDetailsOpen((o) => !o)}
-            disabled={!priceResult}
+            disabled={!activePrice.result}
             aria-expanded={detailsOpen}
             className={`${ICON_ACTION} gap-2 sm:w-auto sm:px-3 lg:order-last lg:-my-1 lg:h-9 lg:basis-full lg:justify-start lg:border-transparent lg:bg-transparent lg:px-0 lg:text-[13px] lg:font-medium lg:text-steel lg:hover:border-transparent lg:hover:text-foreground`}
           >
@@ -185,9 +236,22 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
           </button>
         </div>
 
-        {detailsOpen && priceResult && (
+        {detailsOpen && activePrice.result && (
           <div className="max-h-[40vh] overflow-y-auto border-y border-line py-2.5 sm:order-last sm:basis-full lg:order-none lg:basis-auto">
-            <PriceDetails priceResult={priceResult} />
+            {multiKit && (
+              <dl className="mb-2.5 grid grid-cols-1 gap-x-8 gap-y-1.5 border-b border-line pb-2.5 text-sm sm:grid-cols-2 lg:grid-cols-1">
+                {priced.map((p, i) =>
+                  p.price.result ? <Row key={p.kit.id} label={kitName(i)} value={p.price.result.breakdown.total} dim={!p.current} /> : null,
+                )}
+              </dl>
+            )}
+            {multiKit && <p className="mb-1.5 text-[13px] font-semibold">{kitName(activeIndex)}</p>}
+            <PriceDetails priceResult={activePrice.result} />
+            {/* Delivery calculated individually is not in the total — said
+                once for the workspace when it applies to a kit not on screen. */}
+            {multiKit && !activePrice.result.deliveryNote && priced.some((p) => p.price.result?.deliveryNote) && (
+              <p className="mt-2 text-[13px] leading-snug text-blueprint">{priced.find((p) => p.price.result?.deliveryNote)!.price.result!.deliveryNote}</p>
+            )}
           </div>
         )}
 
@@ -218,7 +282,7 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
             variant="outline"
             className="min-h-12 bg-surface !whitespace-normal !px-2 !tracking-normal !py-1.5 text-center !text-[15px] leading-tight min-[390px]:!text-base"
           >
-            {t(CF['CF-066'], locale)}
+            {multiKit ? t(CF['CF-119'], locale) : t(CF['CF-066'], locale)}
           </Button>
         </div>
       </div>
@@ -256,11 +320,11 @@ function ShareIcon() {
   );
 }
 
-function Row({ label, value, tone }: { label: string; value: number; tone?: 'success' }) {
+function Row({ label, value, tone, dim }: { label: string; value: number; tone?: 'success'; dim?: boolean }) {
   return (
     <div className={`flex items-center justify-between gap-2 ${tone === 'success' ? 'text-success' : ''}`}>
       <dt className="text-steel">{label}</dt>
-      <dd className="mono">{formatPrice(value)}</dd>
+      <dd className={`mono ${dim ? 'opacity-60' : ''}`}>{formatPrice(value)}</dd>
     </div>
   );
 }

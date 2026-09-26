@@ -1,5 +1,5 @@
 import type { ConfigurationAccessorySelection, ShelfType, ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
-import { LEGACY_MAX_SECTIONS } from '@/lib/configurator/limits';
+import { LEGACY_MAX_SECTIONS, MAX_WORKSPACE_KITS } from '@/lib/configurator/limits';
 
 /**
  * Serialises a configuration to URL query parameters and back, so a shared
@@ -242,4 +242,98 @@ export function parseConfigurationFromSearchParams(
   }
 
   return result;
+}
+
+/**
+ * Workspace links (Configurator V2.5), marked by `v=3`:
+ *   /configurator?v=3&active=2&k1=<kit>&k2=<kit>
+ * `k1`…`kN` (N = 1…MAX_WORKSPACE_KITS, contiguous, in kit order) each hold
+ * one kit as its complete v2 share query above (`v=2&model=…&sections=…
+ * &qty=…&acc=…`), percent-encoded as one parameter value — so every kit is
+ * read by exactly the same strict single-kit parser, section-scoped
+ * accessories keep their section positions, and each kit value is itself a
+ * valid v2 link. `active` is the 1-based position of the active kit.
+ *
+ * Parsing is all-or-nothing: a missing/extra kit key, a kit that is not a
+ * complete v2 configuration, or more than MAX_WORKSPACE_KITS kits makes the
+ * whole link invalid (null), and the configurator keeps the current
+ * workspace. An unusable `active` only selects the first kit. Section and
+ * kit ids are never in the link; opening one mints fresh ids.
+ *
+ * Old single-kit links (v2, and the unversioned V2.1 format) are still read,
+ * as a one-kit workspace.
+ */
+export const WORKSPACE_URL_VERSION = '3';
+
+/** `k1`…`k5`: one query key per possible kit, in kit order. */
+export const WORKSPACE_KIT_KEYS: readonly string[] = Array.from({ length: MAX_WORKSPACE_KITS }, (_, i) => `k${i + 1}`);
+
+/** Kits to open, as parsed from a link (the store fills in fresh ids). */
+export interface WorkspaceLink {
+  kits: Partial<ShelvingConfiguration>[];
+  /** 0-based index of the kit to make active. */
+  activeIndex: number;
+}
+
+/** Every value a complete v2 kit carries — a v3 kit missing one is invalid. */
+const REQUIRED_KIT_FIELDS: (keyof ShelvingConfiguration)[] = [
+  'modelSlug',
+  'depth',
+  'sections',
+  'loadCapacity',
+  'shelfType',
+  'colorId',
+  'assemblyId',
+  'deliveryId',
+  'quantity',
+  'accessories',
+];
+
+export function workspaceToSearchParams(configurations: readonly ShelvingConfiguration[], activeIndex: number): URLSearchParams {
+  const params = new URLSearchParams();
+  params.set('v', WORKSPACE_URL_VERSION);
+  params.set('active', String(activeIndex + 1));
+  configurations.forEach((config, i) => params.set(`k${i + 1}`, configurationToShareQuery(config)));
+  return params;
+}
+
+export function workspaceToShareQuery(configurations: readonly ShelvingConfiguration[], activeIndex: number): string {
+  return workspaceToSearchParams(configurations, activeIndex).toString();
+}
+
+function parseWorkspaceKit(value: string): Partial<ShelvingConfiguration> | undefined {
+  const params = new URLSearchParams(value);
+  if (params.get('v') !== CONFIGURATION_URL_VERSION) return undefined;
+  const kit = parseConfigurationFromSearchParams(params);
+  return REQUIRED_KIT_FIELDS.every((field) => kit[field] !== undefined) ? kit : undefined;
+}
+
+/**
+ * The workspace a configurator link describes: a v3 workspace link, or an
+ * old single-kit link (anything carrying `model`) as a one-kit workspace.
+ * Null when the link carries no configuration or an invalid v3 workspace.
+ */
+export function parseWorkspaceFromSearchParams(params: URLSearchParams): WorkspaceLink | null {
+  const version = params.get('v');
+  if (version !== WORKSPACE_URL_VERSION) {
+    return params.has('model') ? { kits: [parseConfigurationFromSearchParams(params)], activeIndex: 0 } : null;
+  }
+
+  const kits: Partial<ShelvingConfiguration>[] = [];
+  for (const key of WORKSPACE_KIT_KEYS) {
+    const value = params.get(key);
+    if (value === null) break;
+    const kit = parseWorkspaceKit(value);
+    if (!kit) return null;
+    kits.push(kit);
+  }
+  if (kits.length === 0) return null;
+  // Contiguous and bounded: a gap (k1, k3) or a kit past the maximum (k6…)
+  // is not a workspace this app generates.
+  const extraKit = [...params.keys()].some((key) => /^k\d+$/.test(key) && !WORKSPACE_KIT_KEYS.slice(0, kits.length).includes(key));
+  if (extraKit) return null;
+
+  const activeRaw = params.get('active') ?? '';
+  const active = POSITIVE_INT.test(activeRaw) ? Number(activeRaw) : 1;
+  return { kits, activeIndex: active <= kits.length ? active - 1 : 0 };
 }

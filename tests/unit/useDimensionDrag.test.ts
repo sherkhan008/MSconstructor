@@ -4,6 +4,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDimensionDrag } from '@/components/configurator/resize/useDimensionDrag';
 import { useConfiguratorStore, DEFAULT_CONFIGURATION } from '@/store/configurator-store';
+import { activeConfig, loadSingleKit } from '../helpers/workspace';
 
 /**
  * These exercise the hook directly rather than through simulated DOM pointer
@@ -310,12 +311,7 @@ describe('useDimensionDrag — keyboard stepping', () => {
 
 describe('useDimensionDrag — configurator store synchronization', () => {
   beforeEach(() => {
-    useConfiguratorStore.setState({
-      config: DEFAULT_CONFIGURATION,
-      activeSectionId: DEFAULT_CONFIGURATION.sections[0].id,
-      priceResult: null,
-      pricingError: null,
-    });
+    loadSingleKit(DEFAULT_CONFIGURATION);
   });
 
   it('a committed width drag value is written straight through to the active section in the zustand store', () => {
@@ -323,7 +319,7 @@ describe('useDimensionDrag — configurator store synchronization', () => {
     const { result } = renderHook(() =>
       useDimensionDrag({
         axis: 'width',
-        committedValue: useConfiguratorStore.getState().config.sections[0].width,
+        committedValue: activeConfig().sections[0].width,
         allowedValues: [700, 1000, 1200, 1500],
         containerRef: CONTAINER,
         pxPerMm: PX_PER_MM.width,
@@ -335,18 +331,18 @@ describe('useDimensionDrag — configurator store synchronization', () => {
       }),
     );
 
-    expect(useConfiguratorStore.getState().config.sections[0].width).toBe(1000);
+    expect(activeConfig().sections[0].width).toBe(1000);
 
     act(() => result.current.onPointerDown(fakePointerEvent(0, 0)));
     act(() => result.current.onPointerMove(fakePointerEvent(20, 0)));
     act(() => result.current.onPointerUp(fakePointerEvent(20, 0)));
 
-    expect(useConfiguratorStore.getState().config.sections[0].width).toBe(1200);
+    expect(activeConfig().sections[0].width).toBe(1200);
     // Every other field must be preserved untouched.
-    expect(useConfiguratorStore.getState().config.sections[0].height).toBe(DEFAULT_CONFIGURATION.sections[0].height);
-    expect(useConfiguratorStore.getState().config.sections[0].shelves).toBe(DEFAULT_CONFIGURATION.sections[0].shelves);
-    expect(useConfiguratorStore.getState().config.depth).toBe(DEFAULT_CONFIGURATION.depth);
-    expect(useConfiguratorStore.getState().config.sections.length).toBe(1);
+    expect(activeConfig().sections[0].height).toBe(DEFAULT_CONFIGURATION.sections[0].height);
+    expect(activeConfig().sections[0].shelves).toBe(DEFAULT_CONFIGURATION.sections[0].shelves);
+    expect(activeConfig().depth).toBe(DEFAULT_CONFIGURATION.depth);
+    expect(activeConfig().sections.length).toBe(1);
   });
 });
 

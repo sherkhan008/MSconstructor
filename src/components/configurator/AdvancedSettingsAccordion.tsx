@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useConfiguratorStore } from '@/store/configurator-store';
+import { selectConfig, useConfiguratorStore } from '@/store/configurator-store';
 import { InstallDeliveryPanel } from './InstallDeliveryPanel';
 import type { PublicCatalog } from '@/lib/data/public-catalog';
 import type { ConfigurationAccessorySelection } from '@/lib/types/domain';
@@ -54,7 +54,7 @@ export function isStaleCrossBrace(selection: ConfigurationAccessorySelection, se
 export function AdvancedSettingsAccordion({ catalog }: { catalog: PublicCatalog }) {
   const [open, setOpen] = useState(false);
   const locale = useLocale();
-  const config = useConfiguratorStore((s) => s.config);
+  const config = useConfiguratorStore(selectConfig);
   const setField = useConfiguratorStore((s) => s.setField);
   const setMany = useConfiguratorStore((s) => s.setMany);
   const setAccessoryQuantity = useConfiguratorStore((s) => s.setAccessoryQuantity);

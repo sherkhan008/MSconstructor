@@ -3,9 +3,16 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { trackEvent } from '@/lib/analytics';
-import { configurationToShareQuery, parseConfigurationFromSearchParams } from '@/lib/configurator/url';
-import { DEFAULT_CONFIGURATION, useConfiguratorStore } from '@/store/configurator-store';
+import { parseWorkspaceFromSearchParams, workspaceToShareQuery } from '@/lib/configurator/url';
+import {
+  DEFAULT_CONFIGURATION,
+  selectActiveKitPrice,
+  selectActiveSectionId,
+  selectConfig,
+  useConfiguratorStore,
+} from '@/store/configurator-store';
 import type { PublicCatalog } from '@/lib/data/public-catalog';
+import type { ShelvingConfiguration } from '@/lib/types/domain';
 import { normalizeMsStandardConfiguration } from '@/lib/pricing/ms-standard-compatibility';
 import { getAllowedKitDepths, getAllowedSectionWidths, getSectionLimits } from '@/lib/configurator/section-limits';
 import { computeFramedCrops, frameAspectVars, ShelvingPreview } from './ShelvingPreview';
@@ -25,18 +32,20 @@ import { registerSwitchQuery } from '@/components/i18n/switch-query';
 type PreviewMode = 'front' | 'top';
 
 export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
-  const config = useConfiguratorStore((s) => s.config);
-  const activeSectionId = useConfiguratorStore((s) => s.activeSectionId);
+  const config = useConfiguratorStore(selectConfig);
+  const kits = useConfiguratorStore((s) => s.kits);
+  const activeSectionId = useConfiguratorStore(selectActiveSectionId);
   const setActiveSectionId = useConfiguratorStore((s) => s.setActiveSectionId);
   const addSection = useConfiguratorStore((s) => s.addSection);
   const removeSection = useConfiguratorStore((s) => s.removeSection);
   const updateSection = useConfiguratorStore((s) => s.updateSection);
   const setField = useConfiguratorStore((s) => s.setField);
-  const setMany = useConfiguratorStore((s) => s.setMany);
-  const loadFromPartial = useConfiguratorStore((s) => s.loadFromPartial);
+  const patchKit = useConfiguratorStore((s) => s.patchKit);
+  const loadWorkspace = useConfiguratorStore((s) => s.loadWorkspace);
   const reset = useConfiguratorStore((s) => s.reset);
-  const priceResult = useConfiguratorStore((s) => s.priceResult);
-  const pricingError = useConfiguratorStore((s) => s.pricingError);
+  // The ACTIVE kit's last server answer: its kit contents and warnings are
+  // what the panels below show (the purchase card covers every kit).
+  const { result: priceResult, error: pricingError } = useConfiguratorStore(selectActiveKitPrice);
   const hydrated = useConfiguratorStore((s) => s.hydrated);
   const searchParams = useSearchParams();
   const locale = useLocale();
@@ -44,31 +53,35 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
   const openedTracked = useRef(false);
 
   // View-only state — deliberately never touches config/URL/pricing. See
-  // OrderSummaryBar/useLivePrice: only `config` drives price recalculation,
-  // so switching preview mode is guaranteed to trigger zero pricing requests.
+  // OrderSummaryBar/useLivePrice: only a kit's own configuration drives its
+  // price recalculation, so switching preview mode (or the active kit) is
+  // guaranteed to trigger zero pricing requests.
   const [previewMode, setPreviewMode] = useState<PreviewMode>('front');
 
-  useLivePrice(config);
+  useLivePrice();
 
-  // A language switch carries the CURRENT configuration (share-link format),
-  // not this page's original query — edits are never written back to the URL.
-  const latestConfig = useRef(config);
-  latestConfig.current = config;
+  // A language switch carries the CURRENT workspace (v3 share-link format:
+  // every kit, in order, and the active one), not this page's original query
+  // — edits are never written back to the URL.
   useEffect(
     () =>
-      registerSwitchQuery(() =>
-        useConfiguratorStore.getState().hydrated ? `?${configurationToShareQuery(latestConfig.current)}` : window.location.search,
-      ),
+      registerSwitchQuery(() => {
+        const state = useConfiguratorStore.getState();
+        if (!state.hydrated) return window.location.search;
+        const activeIndex = Math.max(0, state.kits.findIndex((k) => k.id === state.activeKitId));
+        return `?${workspaceToShareQuery(state.kits.map((k) => k.configuration), activeIndex)}`;
+      }),
     [],
   );
 
+  // A configurator link replaces the whole workspace: a v3 link with its
+  // kits, an old single-kit link as a one-kit workspace. An invalid link
+  // changes nothing.
   useEffect(() => {
     if (appliedShareLink.current) return;
     appliedShareLink.current = true;
-    if (searchParams.has('model')) {
-      const partial = parseConfigurationFromSearchParams(searchParams);
-      loadFromPartial(partial);
-    }
+    const link = parseWorkspaceFromSearchParams(searchParams);
+    if (link) loadWorkspace(link);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -85,16 +98,16 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
   // none of those are reachable from this UI anymore, so normalize them
   // once the persisted store (and any share-link) has finished loading,
   // rather than leaving the configurator stuck on an invalid/orphaned
-  // selection. Depends on the whole `config` object, not just
+  // selection. Depends on every kit's whole configuration, not just
   // `modelSlug`: a share link can carry the *same* modelSlug (there's only
   // ever one, ms-standard) alongside a now-invalid height/depth/width/
-  // shelf combination — loadFromPartial's own state update lands in a
+  // shelf combination — loadWorkspace's own state update lands in a
   // *separate* commit from this effect's first run, so watching only
   // modelSlug would silently miss dimension-only staleness entirely. Safe
-  // against a loop: needsFix below is a pure value comparison against the
-  // already-normalized result, so once setMany applies it, the next run of
-  // this same effect (config's reference changes on every store update)
-  // computes needsFix=false and does nothing further.
+  // against a loop: needsFix (normalizedKitPatch) is a pure value comparison
+  // against the already-normalized result, so once patchKit applies it, the
+  // next run of this same effect (`kits` changes on every store update)
+  // finds nothing to fix and does nothing further.
   //
   // Accessories are filtered, not wiped: CUSTOMER_ACCESSORY_IDS is the
   // small set the "Дополнительные параметры" checkboxes actually offer
@@ -114,59 +127,18 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
   // defined safe default" this is allowed to do — never an arbitrary or
   // fuzzy-matched substitute, and a genuinely valid non-default selection
   // (e.g. professional assembly) is left untouched.
+  //
+  // Every kit is normalized, not only the active one: each kit is priced on
+  // its own, so a stale kit that is not on screen must not sit there as a
+  // pricing error until the customer happens to open it.
   useEffect(() => {
     if (!hydrated) return;
-    const standard = catalog.models.find((m) => m.slug === 'ms-standard');
-    if (!standard) return;
-
-    const validAccessories = config.accessories.filter(
-      (a) => (CUSTOMER_ACCESSORY_IDS as readonly string[]).includes(a.accessoryId) && !isStaleCrossBrace(a, config.sections),
-    );
-    const assemblyValid = catalog.assemblyServices.some((a) => a.id === config.assemblyId);
-    const deliveryValid = catalog.deliveryMethods.some((d) => d.id === config.deliveryId);
-
-    // The cross-dimensional MS Standard rules (height×shelves, width×depth
-    // — see ms-standard-compatibility.ts) replace the old independent
-    // flat-list checks: an old persisted config or share link may carry an
-    // obsolete height, a depth no longer valid for its own section widths,
-    // or a shelf count too high for its height, none of which a simple
-    // per-field `standard.heights.includes(...)` check would catch. Each
-    // section is normalized with its own height/shelves only.
-    const normalizedDims = normalizeMsStandardConfiguration({
-      depth: config.depth,
-      sections: config.sections,
-    });
-    const dimsNeedFix =
-      normalizedDims.depth !== config.depth ||
-      normalizedDims.sections.some((s, i) => {
-        const current = config.sections[i];
-        return s.width !== current?.width || s.height !== current?.height || s.shelves !== current?.shelves;
-      });
-
-    const needsFix =
-      config.modelSlug !== standard.slug ||
-      dimsNeedFix ||
-      !standard.shelfTypes.includes(config.shelfType) ||
-      !standard.loadCapacities.includes(config.loadCapacity) ||
-      validAccessories.length !== config.accessories.length ||
-      config.colorId !== DEFAULT_CONFIGURATION.colorId ||
-      !assemblyValid ||
-      !deliveryValid;
-    if (!needsFix) return;
-
-    setMany({
-      modelSlug: standard.slug,
-      depth: normalizedDims.depth,
-      sections: normalizedDims.sections,
-      shelfType: standard.shelfTypes.includes(config.shelfType) ? config.shelfType : standard.shelfTypes[0],
-      loadCapacity: standard.loadCapacities.includes(config.loadCapacity) ? config.loadCapacity : standard.loadCapacities[0],
-      accessories: validAccessories,
-      colorId: DEFAULT_CONFIGURATION.colorId,
-      assemblyId: assemblyValid ? config.assemblyId : DEFAULT_CONFIGURATION.assemblyId,
-      deliveryId: deliveryValid ? config.deliveryId : DEFAULT_CONFIGURATION.deliveryId,
-    });
+    for (const kit of kits) {
+      const patch = normalizedKitPatch(kit.configuration, catalog);
+      if (patch) patchKit(kit.id, patch);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated, config]);
+  }, [hydrated, kits]);
 
   const color = catalog.colors.find((c) => c.id === config.colorId);
   const model = catalog.models.find((m) => m.slug === config.modelSlug);
@@ -196,7 +168,7 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
   // read from the store at commit time so a selection made in the same
   // gesture (pressing another section's top edge) is always the one changed.
   function handleCommitDimension(axis: DimensionAxis, value: number) {
-    const targetId = useConfiguratorStore.getState().activeSectionId;
+    const targetId = selectActiveSectionId(useConfiguratorStore.getState());
     if (axis === 'width') {
       updateSection(targetId, { width: value });
     } else if (axis === 'height') {
@@ -337,6 +309,62 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
       </div>
     </div>
   );
+}
+
+/**
+ * The normalization patch one kit needs against the current catalog (see the
+ * effect above), or null when it is already valid. Pure: compares only.
+ */
+function normalizedKitPatch(config: ShelvingConfiguration, catalog: PublicCatalog): Partial<ShelvingConfiguration> | null {
+  const standard = catalog.models.find((m) => m.slug === 'ms-standard');
+  if (!standard) return null;
+
+  const validAccessories = config.accessories.filter(
+    (a) => (CUSTOMER_ACCESSORY_IDS as readonly string[]).includes(a.accessoryId) && !isStaleCrossBrace(a, config.sections),
+  );
+  const assemblyValid = catalog.assemblyServices.some((a) => a.id === config.assemblyId);
+  const deliveryValid = catalog.deliveryMethods.some((d) => d.id === config.deliveryId);
+
+  // The cross-dimensional MS Standard rules (height×shelves, width×depth
+  // — see ms-standard-compatibility.ts) replace the old independent
+  // flat-list checks: an old persisted config or share link may carry an
+  // obsolete height, a depth no longer valid for its own section widths,
+  // or a shelf count too high for its height, none of which a simple
+  // per-field `standard.heights.includes(...)` check would catch. Each
+  // section is normalized with its own height/shelves only.
+  const normalizedDims = normalizeMsStandardConfiguration({
+    depth: config.depth,
+    sections: config.sections,
+  });
+  const dimsNeedFix =
+    normalizedDims.depth !== config.depth ||
+    normalizedDims.sections.some((s, i) => {
+      const current = config.sections[i];
+      return s.width !== current?.width || s.height !== current?.height || s.shelves !== current?.shelves;
+    });
+
+  const needsFix =
+    config.modelSlug !== standard.slug ||
+    dimsNeedFix ||
+    !standard.shelfTypes.includes(config.shelfType) ||
+    !standard.loadCapacities.includes(config.loadCapacity) ||
+    validAccessories.length !== config.accessories.length ||
+    config.colorId !== DEFAULT_CONFIGURATION.colorId ||
+    !assemblyValid ||
+    !deliveryValid;
+  if (!needsFix) return null;
+
+  return {
+    modelSlug: standard.slug,
+    depth: normalizedDims.depth,
+    sections: normalizedDims.sections,
+    shelfType: standard.shelfTypes.includes(config.shelfType) ? config.shelfType : standard.shelfTypes[0],
+    loadCapacity: standard.loadCapacities.includes(config.loadCapacity) ? config.loadCapacity : standard.loadCapacities[0],
+    accessories: validAccessories,
+    colorId: DEFAULT_CONFIGURATION.colorId,
+    assemblyId: assemblyValid ? config.assemblyId : DEFAULT_CONFIGURATION.assemblyId,
+    deliveryId: deliveryValid ? config.deliveryId : DEFAULT_CONFIGURATION.deliveryId,
+  };
 }
 
 function ViewToggleButton({

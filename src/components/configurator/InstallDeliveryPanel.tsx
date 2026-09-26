@@ -1,6 +1,6 @@
 'use client';
 
-import { useConfiguratorStore } from '@/store/configurator-store';
+import { selectConfig, useConfiguratorStore } from '@/store/configurator-store';
 import type { PublicCatalog } from '@/lib/data/public-catalog';
 import { pick, t } from '@/lib/i18n/format';
 import { CF } from '@/lib/i18n/strings';
@@ -8,7 +8,7 @@ import { useLocale } from '@/components/i18n/LocaleProvider';
 
 /** Content-only — the disclosure toggle lives in AdvancedSettingsAccordion. */
 export function InstallDeliveryPanel({ catalog }: { catalog: PublicCatalog }) {
-  const config = useConfiguratorStore((s) => s.config);
+  const config = useConfiguratorStore(selectConfig);
   const setField = useConfiguratorStore((s) => s.setField);
   const locale = useLocale();
 

@@ -113,12 +113,26 @@ export const SWITCHABLE_QUERY_KEYS: Record<string, readonly string[]> = {
     'promo',
     'metalFootPad',
     'shelfCornerBrackets',
+    // V2.5 workspace links (`v=3`): the active kit and one key per kit
+    // (WORKSPACE_KIT_KEYS in url.ts — MAX_WORKSPACE_KITS of them).
+    'active',
+    'k1',
+    'k2',
+    'k3',
+    'k4',
+    'k5',
   ],
   '/catalog': ['model', 'useCase', 'availability', 'sort'],
   '/order/success': ['number'],
 };
 
 const MAX_QUERY_VALUE_LENGTH = 500;
+/**
+ * A workspace kit value is one whole kit's v2 share query (sections,
+ * accessories, promo …), so it gets a larger — still bounded — allowance:
+ * dropping one kit on a language switch would silently lose it.
+ */
+const LONG_QUERY_VALUE_LENGTH: Record<string, number> = { k1: 4000, k2: 4000, k3: 4000, k4: 4000, k5: 4000 };
 
 /** Keeps only the allow-listed, reasonably sized query parameters for `path`. */
 export function safeSwitchQuery(path: string, search: string): string {
@@ -128,7 +142,7 @@ export function safeSwitchQuery(path: string, search: string): string {
   const kept = new URLSearchParams();
   for (const key of allowed) {
     const value = source.get(key);
-    if (value !== null && value.length <= MAX_QUERY_VALUE_LENGTH) kept.set(key, value);
+    if (value !== null && value.length <= (LONG_QUERY_VALUE_LENGTH[key] ?? MAX_QUERY_VALUE_LENGTH)) kept.set(key, value);
   }
   const query = kept.toString();
   return query ? `?${query}` : '';
