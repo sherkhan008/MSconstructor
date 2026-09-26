@@ -125,6 +125,9 @@ Development-only: `E2E_BASE_URL`, `NEXT_PUBLIC_APP_URL`, empty
 8. **Seed the catalog and the first admin — once.** `prisma/seed.ts` is
    idempotent and refuses a weak or default admin password in production.
    Its catalog prices are placeholders: correct them in `/admin/prices` before launch.
+   It seeds **no promo codes** in production: the demo codes in
+   `src/lib/data/seed-data.ts` are public and development-only. A promo code
+   stops being accepted once its `validUntil` instant has passed (server time).
    ```sh
    read -r ADMIN_EMAIL; read -rs ADMIN_INITIAL_PASSWORD; export ADMIN_EMAIL ADMIN_INITIAL_PASSWORD
    docker compose --env-file .env.production run --rm --no-deps \
@@ -303,7 +306,7 @@ sources. Details: [production-client-ip-and-rate-limiting.md](production-client-
   `next/font/local`. To make builds fully offline later, add the OFL-licensed
   Inter, Oswald and IBM Plex Mono files (from their official releases) to the
   repository and switch `src/app/layout.tsx` to `next/font/local`.
-- Base images float within a major line (`node:20-alpine`, `postgres:16-alpine`,
+- Base images float within a major line (`node:22-alpine`, `postgres:16-alpine`,
   `redis:7-alpine`, `nginx:1.27-alpine`) to receive security patches; pin
   digests if you need bit-for-bit rebuilds.
 

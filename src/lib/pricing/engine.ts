@@ -26,6 +26,12 @@ export interface PricingContext {
    * which is also what orders and admin screens store.
    */
   locale?: Locale;
+  /**
+   * Server time a promo code's `validUntil` is checked against. Defaults to
+   * the current time; a caller pricing several items of one request passes
+   * one instant so every item sees the same answer.
+   */
+  now?: Date;
 }
 
 /**
@@ -153,7 +159,7 @@ export function calculatePrice(rawConfig: unknown, catalog: Catalog, context: Pr
 
   const promoCodeText = context.promoCode ?? config.promoCode;
   if (promoCodeText) {
-    const promo = findPromoCode(catalog, promoCodeText);
+    const promo = findPromoCode(catalog, promoCodeText, context.now ?? new Date());
     const preDiscountTotal = itemsNet + assemblyTotal;
     if (!promo) {
       warnings.push(t(ER['ER-025'], locale, { code: promoCodeText }));

@@ -63,6 +63,22 @@ function isOrderNumberConflict(error: unknown): boolean {
 }
 
 /**
+ * Customer is `@@unique([phone, type])`. Two first orders from one phone
+ * arriving together can both try to create that row; the loser's whole
+ * order write fails atomically with a P2002, and simply running it again
+ * (same order number — nothing of it was stored) connects to the row the
+ * winner created.
+ */
+function isCustomerConflict(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { code?: unknown; meta?: { target?: unknown } };
+  if (candidate.code !== 'P2002') return false;
+  const target = candidate.meta?.target;
+  if (Array.isArray(target)) return target.includes('phone');
+  return typeof target === 'string' && target.includes('phone');
+}
+
+/**
  * 32^5 ≈ 33.5M suffixes per calendar day, so a collision is already
  * improbable — but "improbable" is not "impossible", and losing a real
  * customer's order to one would be unacceptable. The database's unique
@@ -90,7 +106,9 @@ export async function saveOrder(order: OrderRecord): Promise<OrderRecord> {
       try {
         return await saveOrderToDb(candidate);
       } catch (error) {
-        if (attempt >= MAX_ORDER_NUMBER_ATTEMPTS || !isOrderNumberConflict(error)) throw error;
+        if (attempt >= MAX_ORDER_NUMBER_ATTEMPTS) throw error;
+        if (isCustomerConflict(error)) continue;
+        if (!isOrderNumberConflict(error)) throw error;
         candidate = { ...candidate, orderNumber: generateOrderNumber() };
       }
     }

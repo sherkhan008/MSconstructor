@@ -225,9 +225,21 @@ export function findDelivery(catalog: Catalog, id: string): DeliveryMethod | und
   return catalog.deliveryMethods.find((d) => d.id === id && d.active);
 }
 
-export function findPromoCode(catalog: Catalog, code: string): PromoCode | undefined {
+/**
+ * `validUntil` is the last instant a code is accepted, compared with the
+ * server clock at the moment of pricing (never at catalog load: the catalog
+ * is cached). A code without it does not expire; one whose date cannot be
+ * read is treated as expired rather than as valid forever.
+ */
+export function isPromoCodeExpired(promo: Pick<PromoCode, 'validUntil'>, now: Date): boolean {
+  if (!promo.validUntil) return false;
+  const until = Date.parse(promo.validUntil);
+  return Number.isNaN(until) || now.getTime() > until;
+}
+
+export function findPromoCode(catalog: Catalog, code: string, now: Date = new Date()): PromoCode | undefined {
   const normalized = code.trim().toUpperCase();
-  return catalog.promoCodes.find((p) => p.code === normalized && p.active);
+  return catalog.promoCodes.find((p) => p.code === normalized && p.active && !isPromoCodeExpired(p, now));
 }
 
 export interface ComponentQuery {

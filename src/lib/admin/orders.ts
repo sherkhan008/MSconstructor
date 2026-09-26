@@ -25,6 +25,7 @@ import {
   type OrderStatusChannel,
   type OrderStatusTransitionRejection,
 } from '@/lib/orders/status-transitions';
+import { orderBuyer } from '@/lib/orders/buyer';
 import type { OrderItemRecord } from '@/lib/orders/types';
 import type {
   AdminRole,
@@ -190,6 +191,9 @@ export async function listOrders(params: AdminOrderListParams): Promise<AdminOrd
         status: true,
         grandTotal: true,
         paymentPreference: true,
+        // This order's own buyer, frozen at checkout — the Customer row is
+        // shared by every order from that phone (src/lib/orders/buyer.ts).
+        buyerSnapshot: true,
         customer: {
           select: { fullName: true, phone: true, city: true, type: true, companyName: true },
         },
@@ -206,20 +210,23 @@ export async function listOrders(params: AdminOrderListParams): Promise<AdminOrd
   ]);
 
   return {
-    orders: rows.map((row) => ({
-      id: row.id,
-      orderNumber: row.orderNumber,
-      createdAt: row.createdAt.toISOString(),
-      status: row.status as OrderStatus,
-      customerName: row.customer.fullName,
-      customerPhone: row.customer.phone,
-      customerCity: row.customer.city ?? '',
-      customerType: row.customer.type as CustomerType,
-      customerCompanyName: row.customer.companyName ?? undefined,
-      grandTotal: Number(row.grandTotal),
-      paymentPreference: row.paymentPreference as PaymentPreference,
-      manager: row.manager ? { id: row.manager.id, name: row.manager.name } : null,
-    })),
+    orders: rows.map((row) => {
+      const buyer = orderBuyer(row.buyerSnapshot, row.customer);
+      return {
+        id: row.id,
+        orderNumber: row.orderNumber,
+        createdAt: row.createdAt.toISOString(),
+        status: row.status as OrderStatus,
+        customerName: buyer.fullName,
+        customerPhone: buyer.phone,
+        customerCity: buyer.city,
+        customerType: buyer.type,
+        customerCompanyName: buyer.companyName,
+        grandTotal: Number(row.grandTotal),
+        paymentPreference: row.paymentPreference as PaymentPreference,
+        manager: row.manager ? { id: row.manager.id, name: row.manager.name } : null,
+      };
+    }),
     total,
     page,
     pageSize: PAGE_SIZE,
@@ -405,16 +412,7 @@ export async function getOrderById(id: string): Promise<AdminOrderDetail | null>
     vatTotal: Number(row.vatTotal),
     discountTotal: Number(row.discountTotal),
     grandTotal: Number(row.grandTotal),
-    customer: {
-      fullName: row.customer.fullName,
-      phone: row.customer.phone,
-      whatsapp: row.customer.whatsapp ?? undefined,
-      email: row.customer.email ?? undefined,
-      city: row.customer.city ?? '',
-      companyName: row.customer.companyName ?? undefined,
-      binIin: row.customer.binIin ?? undefined,
-      type: row.customer.type as CustomerType,
-    },
+    customer: orderBuyer(row.buyerSnapshot, row.customer),
     items: row.items.map((item) => ({
       id: item.id,
       // Persisted at order-creation time by calculatePrice() — read

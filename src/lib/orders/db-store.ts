@@ -1,7 +1,8 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { parseOrderBuyerSnapshot, parseOrderItemDocumentSnapshot } from '@/lib/documents/snapshots';
-import type { CustomerType, OrderStatus, PaymentPreference } from '@/lib/types/domain';
+import type { OrderStatus, PaymentPreference } from '@/lib/types/domain';
+import { orderBuyer } from './buyer';
 import type { OrderItemRecord, OrderRecord } from './types';
 
 /**
@@ -9,33 +10,39 @@ import type { OrderItemRecord, OrderRecord } from './types';
  * src/lib/orders/store.ts only when DATABASE_URL points at PostgreSQL.
  */
 
+/**
+ * ONE write: the order, its items, its first status entry and — on a phone
+ * number's first order — its Customer row are created by a single nested
+ * create, which Prisma runs atomically. A failure leaves nothing behind: no
+ * customer without the order that created it, no order without its items.
+ *
+ * The Customer row (one per phone number + customer type) is connected if it
+ * exists and created otherwise, never updated: checkout is public, and typing
+ * someone's phone number must not replace their name, email or company. What
+ * this order's buyer entered is its buyer snapshot, which every order view
+ * reads first (src/lib/orders/buyer.ts). Two first orders from one phone at
+ * the same moment can both try to create the row; the loser fails with a
+ * P2002 on (phone, type) and saveOrder runs it again.
+ */
 export async function saveOrderToDb(order: OrderRecord): Promise<OrderRecord> {
-  const customer = await prisma.customer.upsert({
-    where: { phone_type: { phone: order.customer.phone, type: order.customer.type } },
-    update: {
-      fullName: order.customer.fullName,
-      email: order.customer.email,
-      whatsapp: order.customer.whatsapp,
-      city: order.customer.city,
-      companyName: order.customer.companyName,
-      binIin: order.customer.binIin,
-    },
-    create: {
-      type: order.customer.type,
-      fullName: order.customer.fullName,
-      phone: order.customer.phone,
-      whatsapp: order.customer.whatsapp,
-      email: order.customer.email,
-      city: order.customer.city,
-      companyName: order.customer.companyName,
-      binIin: order.customer.binIin,
-    },
-  });
-
   await prisma.order.create({
     data: {
       orderNumber: order.orderNumber,
-      customerId: customer.id,
+      customer: {
+        connectOrCreate: {
+          where: { phone_type: { phone: order.customer.phone, type: order.customer.type } },
+          create: {
+            type: order.customer.type,
+            fullName: order.customer.fullName,
+            phone: order.customer.phone,
+            whatsapp: order.customer.whatsapp,
+            email: order.customer.email,
+            city: order.customer.city,
+            companyName: order.customer.companyName,
+            binIin: order.customer.binIin,
+          },
+        },
+      },
       // Written once here and never updated (see src/lib/documents/snapshots.ts).
       buyerSnapshot: order.buyerSnapshot as unknown as Prisma.InputJsonValue | undefined,
       status: order.status,
@@ -76,16 +83,7 @@ export async function getOrderByNumberFromDb(orderNumber: string): Promise<Order
     id: row.id,
     orderNumber: row.orderNumber,
     status: row.status as OrderStatus,
-    customer: {
-      fullName: row.customer.fullName,
-      phone: row.customer.phone,
-      whatsapp: row.customer.whatsapp ?? undefined,
-      email: row.customer.email ?? undefined,
-      city: row.customer.city ?? '',
-      companyName: row.customer.companyName ?? undefined,
-      binIin: row.customer.binIin ?? undefined,
-      type: row.customer.type as CustomerType,
-    },
+    customer: orderBuyer(row.buyerSnapshot, row.customer),
     buyerSnapshot: parseOrderBuyerSnapshot(row.buyerSnapshot) ?? undefined,
     deliveryAddress: row.deliveryAddress ?? undefined,
     paymentPreference: row.paymentPreference as PaymentPreference,

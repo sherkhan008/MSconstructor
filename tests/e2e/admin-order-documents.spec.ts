@@ -376,11 +376,14 @@ test('a later order from the same customer with new details does not change an e
   const pdfBefore = await (await page.request.get(path)).body();
   expect((await pdfText(pdfBefore)).flat).toContain('ТОО «Первое Название»');
 
-  // Order B: same phone and type → the shared Customer row is overwritten.
+  // Order B: same phone and type → the same shared Customer row, which a
+  // public checkout never rewrites; B's own details live in B's snapshot.
   const second = { fullName: `${checkoutPrefix} Второе Имя`, companyName: 'ТОО «Второе Название»', email: 'second@e2e.invalid' };
-  await place(page, second);
+  const orderB = await prisma.order.findUniqueOrThrow({ where: { orderNumber: await place(page, second) } });
+  expect(orderB.customerId).toBe(orderA.customerId);
+  expect(orderB.buyerSnapshot).toMatchObject({ version: 1, fullName: second.fullName, companyName: second.companyName, email: second.email });
   const customer = await prisma.customer.findUniqueOrThrow({ where: { id: orderA.customerId } });
-  expect(customer).toMatchObject({ fullName: second.fullName, companyName: second.companyName, email: second.email });
+  expect(customer).toMatchObject({ fullName: first.fullName, companyName: first.companyName, email: first.email });
 
   const pdfAfter = await (await page.request.get(path)).body();
   expect(pdfAfter.equals(pdfBefore)).toBe(true);

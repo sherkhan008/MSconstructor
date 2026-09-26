@@ -7,6 +7,7 @@ export { CN } from './CN';
 export { CR } from './CR';
 export { CT } from './CT';
 export { DL } from './DL';
+export { EP } from './EP';
 export { ER } from './ER';
 export { F } from './F';
 export { FQ } from './FQ';

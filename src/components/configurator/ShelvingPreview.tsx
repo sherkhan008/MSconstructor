@@ -301,6 +301,20 @@ const CONTROL_SPACING_PX = 44;
 const ADD_DISC_CLEARANCE_PX = 16;
 /** Radius of a resize-handle disc (18 px) plus a small margin. */
 const HANDLE_DISC_CLEARANCE_PX = 11;
+/** Smallest centre-to-centre distance between neighbouring sections' on-rack
+ * "+"/"−" at which a neighbour's 44 px hit area still stays off this
+ * control's visible 27 px disc (22 + 13.5). Below it — five sections, or a
+ * corner's narrow front, on the smallest phones — the discs touch and a tap
+ * can land on the wrong section, so the on-rack pairs are left out and the
+ * full-size add/remove controls in the section list below are used instead. */
+const SECTION_CONTROL_MIN_PITCH_PX = 22 + 27 / 2;
+/** Room kept between a corner's outward width label ("↗ 1000") and the
+ * frame edge. On phones the frame is the screen edge itself, so a label drawn
+ * 0–3 px from it reads as cut off; one without this room is left out like
+ * any other label that does not fit (the section list states it). Measured
+ * against the label's estimated width, it leaves every drawn label at least
+ * ~5 px clear of the edge. */
+const LABEL_EDGE_CLEARANCE_PX = 5;
 
 /* ---------------------------------------------------------------------------
    Framed workspace crop (see `computeFramedCrop`).
@@ -913,6 +927,18 @@ export function ShelvingPreview({
       : compactCrop
     : null;
   const addTopLimit = appliedCrop ? appliedCrop.y + pxToUnits(ADD_DISC_CLEARANCE_PX) : Number.NEGATIVE_INFINITY;
+  // Measured on the COMMITTED layout, so a width drag never makes the
+  // on-rack section controls flicker in or out mid-gesture. Unmeasured
+  // (static render, tests) they stay shown, as before.
+  const sectionControlPitchPx = stageUnitPx
+    ? Math.min(
+        ...committedFrames
+          .slice(1)
+          .map((f, i) => (f.x + f.width / 2 - (committedFrames[i].x + committedFrames[i].width / 2)) * stageUnitPx),
+      )
+    : Number.POSITIVE_INFINITY;
+  const showSectionControls = sectionControlPitchPx >= SECTION_CONTROL_MIN_PITCH_PX;
+  const labelEdgeClearance = Math.max(2, pxToUnits(LABEL_EDGE_CLEARANCE_PX));
   /** Each section's "+": at least one touch target above its own top edge
    * (never less than the default 24 units), as far as the frame allows. */
   const addButtonY = (top: number) => Math.min(top - 24, Math.max(top - Math.max(24, spacing), addTopLimit));
@@ -1430,13 +1456,14 @@ export function ShelvingPreview({
             // It may only extend outward, and only as far as the visible
             // crop: a value that does not fit there is left out, like any
             // other (the section list always states it). "↗ " is two more
-            // characters than the value.
+            // characters than the value. It keeps LABEL_EDGE_CLEARANCE_PX off
+            // the frame edge, which on the smallest phones is the screen edge.
             const labelW = sectionLabelWidth(label, labelScale) + 2 * 0.62 * LABEL_FONT * labelScale;
             const x = section.corner === 'LEFT' ? section.x + section.width - 1 : section.x + 1;
             const room =
               section.corner === 'LEFT'
-                ? x - (appliedCrop?.x ?? Number.NEGATIVE_INFINITY) - 2
-                : (appliedCrop ? appliedCrop.x + appliedCrop.w : Number.POSITIVE_INFINITY) - x - 2;
+                ? x - (appliedCrop?.x ?? Number.NEGATIVE_INFINITY) - labelEdgeClearance
+                : (appliedCrop ? appliedCrop.x + appliedCrop.w : Number.POSITIVE_INFINITY) - x - labelEdgeClearance;
             if (labelW > room) return null;
             return (
               <SectionWidthLabel
@@ -1524,8 +1551,10 @@ export function ShelvingPreview({
               and shelf-count controls sit at different heights that don't
               overlap anything, so they're left at the default stacking
               order — adding z-20 there too once regressed the width
-              handle, which shares their vertical band.) */}
-          {frames.map((section, i) => {
+              handle, which shares their vertical band.)
+              Where neighbouring sections are too close for their targets
+              (SECTION_CONTROL_MIN_PITCH_PX), neither row is drawn. */}
+          {showSectionControls && frames.map((section, i) => {
             const xPercent = ((section.x + section.width / 2) / VIEWBOX_W) * 100;
             const yPercent = (addButtonY(section.top) / VIEWBOX_H) * 100;
             const isActive = markActive && section.id === activeSection.id;
@@ -1551,7 +1580,7 @@ export function ShelvingPreview({
               </div>
             );
           })}
-          {frames.map((section, i) => {
+          {showSectionControls && frames.map((section, i) => {
             const xPercent = ((section.x + section.width / 2) / VIEWBOX_W) * 100;
             const yPercent = ((FLOOR_Y + 44) / VIEWBOX_H) * 100;
             const isActive = markActive && section.id === activeSection.id;

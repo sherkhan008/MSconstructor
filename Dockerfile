@@ -13,10 +13,12 @@
 #              `migrate` service in docker-compose.yml.
 # ==============================================================================
 
-# Node 20 line, >= 20.19.0 — the floor package.json "engines" declares (the
-# lint toolchain's @typescript-eslint needs it; pdfjs-dist 4.10.38, used by the
-# PDF tests, needs >= 20). The floating node:20 tag resolves to the latest 20.x.
-FROM node:20-alpine AS base
+# Node 22 LTS line. Node 20 reaches end of life in April 2026, so production
+# runs on 22; it is above the >= 20.19.0 floor package.json "engines" declares
+# (the lint toolchain's @typescript-eslint needs it; pdfjs-dist 4.10.38, used
+# by the PDF tests, needs >= 20). The floating node:22-alpine tag resolves to
+# the latest 22.x, the same way the other base images float within a line.
+FROM node:22-alpine AS base
 WORKDIR /app
 RUN corepack enable
 

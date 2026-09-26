@@ -183,7 +183,11 @@ describe('pricing engine', () => {
   });
 
   it('applies a valid promo code and never discounts below the minimum margin', () => {
-    const result = calculatePrice(baseConfig({ promoCode: 'SKLAD2026', quantity: 5 }), catalog);
+    // A fixed server time inside the demo code's validity, so this does not
+    // start failing once its validUntil passes.
+    const result = calculatePrice(baseConfig({ promoCode: 'SKLAD2026', quantity: 5 }), catalog, {
+      now: new Date('2026-09-26T12:00:00Z'),
+    });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.breakdown.discount).toBeGreaterThan(0);

@@ -63,15 +63,18 @@ export async function POST(request: NextRequest) {
   try {
     const catalog = await getCatalog();
     const items: OrderItemRecord[] = [];
+    // One server instant for the whole order: every item (and its localized
+    // re-run) checks a promo code's expiry against the same time.
+    const now = new Date();
 
     for (const rawItem of input.items) {
       const submitted = withoutClientPriceLevel(rawItem.configuration);
-      const result = calculatePrice(submitted, catalog);
+      const result = calculatePrice(submitted, catalog, { now });
       if (!result.ok) {
         // The same calculation in the customer's language — a pure,
         // deterministic function, so it fails identically; only its
         // message texts differ.
-        const localized = locale === 'ru' ? result : calculatePrice(submitted, catalog, { locale });
+        const localized = locale === 'ru' ? result : calculatePrice(submitted, catalog, { locale, now });
         const failure = localized.ok ? result : localized;
         // Through the public projection, never straight off the engine
         // result: a PriceFailure can carry server-only diagnostics
@@ -152,8 +155,9 @@ export async function POST(request: NextRequest) {
       orderNumber: generateOrderNumber(),
       status: 'NEW',
       customer,
-      // The shared Customer row is upserted (and overwritten) by the next
-      // order from the same phone; this copy is what documents print.
+      // The Customer row is shared by every order from this phone and is not
+      // rewritten by them; this copy is this order's own buyer, which the
+      // order views and documents read.
       buyerSnapshot: createOrderBuyerSnapshot(customer),
       deliveryAddress: input.deliveryAddress,
       paymentPreference: input.paymentPreference,

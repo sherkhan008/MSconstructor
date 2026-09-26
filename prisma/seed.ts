@@ -13,7 +13,7 @@ import {
   LOAD_CAPACITIES,
   MODELS,
   PRICING_SETTINGS,
-  PROMO_CODES,
+  promoCodesToSeed,
   WIDTHS,
   CATALOG_PRODUCTS,
 } from '../src/lib/data/seed-data';
@@ -354,7 +354,12 @@ async function seedPricingSettings() {
       quantityBreaks: PRICING_SETTINGS.quantityBreaks,
     },
   });
-  for (const p of PROMO_CODES) {
+  // The demo codes are published in this public repository: a production
+  // seed must never make them redeemable. Real codes are created by the
+  // business directly in the production database.
+  const promoCodes = promoCodesToSeed(isProduction);
+  if (promoCodes.length === 0) console.info('Promo codes: none seeded (production — demo codes are development-only).');
+  for (const p of promoCodes) {
     await prisma.promoCode.upsert({
       where: { code: p.code },
       update: {},

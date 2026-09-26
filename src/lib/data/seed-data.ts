@@ -1198,6 +1198,12 @@ export const PRICING_SETTINGS: PricingSettings = {
   ],
 };
 
+/**
+ * DEMO promo codes for local development and tests only. This repository is
+ * public, so anyone can read them: they are never written to a production
+ * database (see promoCodesToSeed). Real codes are created in the production
+ * database by the business, not committed here.
+ */
 export const PROMO_CODES: PromoCode[] = [
   {
     code: 'SKLAD2026',
@@ -1216,6 +1222,12 @@ export const PROMO_CODES: PromoCode[] = [
     validUntil: '2026-12-31',
   },
 ];
+
+/** The promo codes prisma/seed.ts writes: the demo codes outside production,
+ * none at all in production. */
+export function promoCodesToSeed(production: boolean): PromoCode[] {
+  return production ? [] : PROMO_CODES;
+}
 
 /* -------------------------------------------------------------------------- */
 /* Catalog products — pre-built popular configurations shown on / and /catalog */

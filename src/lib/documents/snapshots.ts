@@ -25,8 +25,9 @@ export const DOCUMENT_SNAPSHOT_VERSION = 1;
 /* Buyer                                                                       */
 /* -------------------------------------------------------------------------- */
 
-/** Commercial-party data captured at checkout, before the shared Customer
- * profile (upserted by phone + type on every order) can change. */
+/** Commercial-party data captured at checkout. The shared Customer profile
+ * (one per phone + type) keeps the details of its first order, so this is
+ * the only record of what THIS order's buyer entered. */
 export interface OrderBuyerSnapshot {
   version: typeof DOCUMENT_SNAPSHOT_VERSION;
   type: CustomerType;

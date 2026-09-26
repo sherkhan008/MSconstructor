@@ -173,7 +173,44 @@ describe('saveOrder collision handling', () => {
     expect(saveOrderToDb).toHaveBeenCalledTimes(5);
   });
 
-  it('never retries a failure that is not an order-number collision', async () => {
+  it('never retries a failure that is not a collision', async () => {
+    for (const failure of [
+      Object.assign(new Error('foreign key'), { code: 'P2003', meta: { field_name: 'customerId' } }),
+      Object.assign(new Error('database unreachable'), { code: 'P1001' }),
+      new Error('unexpected'),
+    ]) {
+      vi.resetModules();
+      const saveOrderToDb = vi.fn(async () => {
+        throw failure;
+      });
+      vi.doMock('@/lib/orders/db-store', () => ({ saveOrderToDb, getOrderByNumberFromDb: vi.fn() }));
+
+      const { saveOrder } = await import('@/lib/orders/store');
+      await expect(saveOrder(orderFixture('MS-20260101-AAAAA'))).rejects.toBe(failure);
+      expect(saveOrderToDb).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('re-runs the same order when a concurrent first order from that phone created the Customer row', async () => {
+    // The whole nested write failed atomically, so nothing of this order was
+    // stored: the retry keeps its number and connects to the winner's row.
+    const attempted: string[] = [];
+    const saveOrderToDb = vi.fn(async (order: OrderRecord) => {
+      attempted.push(order.orderNumber);
+      if (attempted.length === 1) {
+        throw Object.assign(new Error('customer conflict'), { code: 'P2002', meta: { target: ['phone', 'type'] } });
+      }
+      return order;
+    });
+    vi.doMock('@/lib/orders/db-store', () => ({ saveOrderToDb, getOrderByNumberFromDb: vi.fn() }));
+
+    const { saveOrder } = await import('@/lib/orders/store');
+    const saved = await saveOrder(orderFixture('MS-20260101-AAAAA'));
+    expect(attempted).toEqual(['MS-20260101-AAAAA', 'MS-20260101-AAAAA']);
+    expect(saved.orderNumber).toBe('MS-20260101-AAAAA');
+  });
+
+  it('bounds the customer-conflict retry as well', async () => {
     const saveOrderToDb = vi.fn(async () => {
       throw Object.assign(new Error('customer conflict'), { code: 'P2002', meta: { target: ['phone', 'type'] } });
     });
@@ -181,7 +218,7 @@ describe('saveOrder collision handling', () => {
 
     const { saveOrder } = await import('@/lib/orders/store');
     await expect(saveOrder(orderFixture('MS-20260101-AAAAA'))).rejects.toThrow('customer conflict');
-    expect(saveOrderToDb).toHaveBeenCalledTimes(1);
+    expect(saveOrderToDb).toHaveBeenCalledTimes(5);
   });
 
   it('does not reuse a number already held in the in-memory dev store', async () => {
