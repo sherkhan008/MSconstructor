@@ -31,6 +31,20 @@ export const shelfTypeSchema = z.enum([
 
 export const priceLevelSchema = z.enum(['RETAIL', 'WHOLESALE', 'DEALER', 'CORPORATE', 'GOVERNMENT']);
 
+/**
+ * A price level is a discount the SELLER assigns to a customer; it is never
+ * something a caller may claim. The public pricing and order routes pass
+ * every submitted configuration through this before pricing, so a forged
+ * `priceLevel` (e.g. "DEALER") is ignored and the configuration is priced —
+ * and stored — exactly as if it had not been sent. Server code that prices a
+ * configuration it built itself calls calculatePrice() directly.
+ */
+export function withoutClientPriceLevel(input: unknown): unknown {
+  if (input === null || typeof input !== 'object' || Array.isArray(input) || !('priceLevel' in input)) return input;
+  const { priceLevel: _ignored, ...rest } = input as Record<string, unknown>;
+  return rest;
+}
+
 export const configurationAccessorySchema = z.object({
   accessoryId: z.string().min(1).max(100),
   quantity: z.number().int().min(1).max(200),

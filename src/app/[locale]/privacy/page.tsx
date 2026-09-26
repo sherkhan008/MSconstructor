@@ -11,6 +11,12 @@ export async function generateMetadata({ params }: { params: LocaleParams }): Pr
   return buildMetadata({ title: t(SE['SE-036'], locale), description: t(SE['SE-037'], locale), path: '/privacy', locale });
 }
 
+// Canonical, hreflang, Open Graph and JSON-LD URLs come from the runtime
+// APP_URL (src/lib/seo.ts). The production image is built without it
+// (Dockerfile), so a prerendered copy would freeze http://localhost:3000 into
+// them — this page renders per request instead.
+export const dynamic = 'force-dynamic';
+
 export default async function PrivacyPage({ params }: { params: LocaleParams }) {
   const locale = await resolveLocale(params);
 

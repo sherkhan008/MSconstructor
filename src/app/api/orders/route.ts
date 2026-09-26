@@ -3,7 +3,7 @@ import { findDelivery, findModel, getCatalog } from '@/lib/data/repository';
 import { calculatePrice } from '@/lib/pricing';
 import { stripBomCosts } from '@/lib/pricing/bom';
 import { toPublicPriceFailure } from '@/lib/pricing/public-result';
-import { schemasFor } from '@/lib/pricing/schema';
+import { schemasFor, withoutClientPriceLevel } from '@/lib/pricing/schema';
 import { apiError, apiOk, internalError, toPublicFieldErrors, validationError } from '@/lib/api/response';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { generateOrderNumber, saveOrder } from '@/lib/orders/store';
@@ -65,12 +65,13 @@ export async function POST(request: NextRequest) {
     const items: OrderItemRecord[] = [];
 
     for (const rawItem of input.items) {
-      const result = calculatePrice(rawItem.configuration, catalog);
+      const submitted = withoutClientPriceLevel(rawItem.configuration);
+      const result = calculatePrice(submitted, catalog);
       if (!result.ok) {
         // The same calculation in the customer's language — a pure,
         // deterministic function, so it fails identically; only its
         // message texts differ.
-        const localized = locale === 'ru' ? result : calculatePrice(rawItem.configuration, catalog, { locale });
+        const localized = locale === 'ru' ? result : calculatePrice(submitted, catalog, { locale });
         const failure = localized.ok ? result : localized;
         // Through the public projection, never straight off the engine
         // result: a PriceFailure can carry server-only diagnostics

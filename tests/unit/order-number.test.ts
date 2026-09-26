@@ -67,10 +67,19 @@ describe('generateOrderNumber', () => {
   });
 
   it('produces distinct values across many calls', () => {
+    const draws = 2000;
     const generated = new Set<string>();
-    for (let i = 0; i < 2000; i += 1) generated.add(generateOrderNumber());
-    // 32^5 is about 33.5M suffixes: 2000 draws collide with probability ~6e-5.
-    expect(generated.size).toBe(2000);
+    for (let i = 0; i < draws; i += 1) generated.add(generateOrderNumber());
+    // Birthday bound, not a per-draw chance: 2000 draws form C(2000, 2) ≈
+    // 2.0M pairs over 32^5 ≈ 33.5M suffixes, so the expected number of
+    // colliding pairs is λ ≈ 0.06 — about 1 run in 17 sees at least one
+    // duplicate by pure chance, which is why demanding exactly 2000 was
+    // flaky. Real uniqueness is the database's unique index plus saveOrder's
+    // retry (tested below), not this sample. What this does catch is a
+    // low-entropy or stuck generator: with a Poisson(0.06) count, more than
+    // 5 duplicates happens with probability ~6e-11 for the real generator,
+    // while a generator with even 2^16 distinct values would produce ~30.
+    expect(draws - generated.size).toBeLessThanOrEqual(5);
   });
 
   it('spreads suffix symbols across the whole alphabet (no masked-off range)', () => {

@@ -54,11 +54,11 @@ const FORBIDDEN_VOCABULARY = [
 /**
  * Internal price-level enum values. These are checked in the customer-facing
  * TEXT channels only, not across the whole payload: `configuration` echoes
- * back the configuration the server priced — including a `priceLevel` the
- * caller itself sent — because the client stores that echo in the cart. The
- * public configurator never sets, serializes or renders `priceLevel`, so the
- * only way it appears is as the caller's own input coming back. What must
- * never happen is the enum being written into a sentence a customer reads.
+ * back the configuration the server priced, which the client stores in the
+ * cart. A caller-submitted `priceLevel` is dropped before pricing (it is
+ * seller-assigned, never claimed), and the public configurator never sets,
+ * serializes or renders it. What must never happen is the enum being written
+ * into a sentence a customer reads.
  */
 const PRICE_LEVEL_ENUM_VALUES = ['retail', 'wholesale', 'dealer', 'corporate', 'government'];
 
@@ -180,15 +180,30 @@ describe('POST /api/pricing/calculate — customer-facing text', () => {
     });
   }
 
-  it('never returns the price-level enum in a discount reason', async () => {
-    const { json } = await postPricing(config({ priceLevel: 'DEALER', quantity: 12 }));
-    expect(json.ok).toBe(true);
-    const reasons: string[] = json.breakdown.discountReasons;
+  it('never returns the price-level enum in a discount reason', () => {
+    // A price level is seller-assigned (the public route ignores a submitted
+    // one — see the next test), so the reason text is exercised through the
+    // same public projection the route uses, on a server-side calculation.
+    const result = calculatePrice(config({ priceLevel: 'DEALER', quantity: 12 }), catalog);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const reasons = toPublicPriceResult(result).breakdown.discountReasons;
     expect(reasons.length).toBeGreaterThan(0);
     expect(reasons.some((reason) => reason.includes('уровню цены'))).toBe(true);
     for (const reason of reasons) {
       expect(reason).not.toMatch(/RETAIL|WHOLESALE|DEALER|CORPORATE|GOVERNMENT/);
     }
+  });
+
+  it('ignores a price level submitted by the caller (no self-assigned dealer discount)', async () => {
+    const plain = await postPricing(config({ quantity: 2 }));
+    const forged = await postPricing(config({ priceLevel: 'DEALER', quantity: 2 }));
+    expect(plain.json.ok).toBe(true);
+    expect(forged.json.ok).toBe(true);
+    expect(forged.json.breakdown.total).toBe(plain.json.breakdown.total);
+    expect(forged.json.breakdown.discount).toBe(plain.json.breakdown.discount);
+    expect(forged.json.configuration.priceLevel).toBeUndefined();
+    expect(forged.json.breakdown.discountReasons.some((reason: string) => reason.includes('уровню цены'))).toBe(false);
   });
 
   it('still delivers the genuinely useful commercial notices', async () => {
@@ -353,6 +368,11 @@ describe('POST /api/orders — customer-facing text', () => {
     expect(response.status).toBe(201);
     expectNoForbiddenVocabulary(json, '/api/orders (accepted)');
     expectNoEnumInCustomerText(json, '/api/orders (accepted)');
+    // The forged DEALER level above was ignored: the stored total is the
+    // server's own price for the same configuration without it.
+    const expected = calculatePrice(config({ quantity: 5 }), catalog);
+    expect(expected.ok).toBe(true);
+    if (expected.ok) expect(json.grandTotal).toBe(expected.breakdown.total);
     clearMemoryOrders();
   });
 });

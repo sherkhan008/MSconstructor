@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 import { getCatalog } from '@/lib/data/repository';
 import { calculatePrice } from '@/lib/pricing';
 import { toPublicPriceFailure, toPublicPriceResult } from '@/lib/pricing/public-result';
+import { withoutClientPriceLevel } from '@/lib/pricing/schema';
 import { apiError, apiOk, internalError, type ApiErrorCode } from '@/lib/api/response';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { requestLocale } from '@/lib/i18n/request';
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const catalog = await getCatalog();
-    const result = calculatePrice(body, catalog, { locale });
+    const result = calculatePrice(withoutClientPriceLevel(body), catalog, { locale });
 
     if (!result.ok) {
       const statusByCode: Record<typeof result.code, number> = {

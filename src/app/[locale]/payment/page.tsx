@@ -19,6 +19,12 @@ const METHODS = [
   { title: { ru: 'Kaspi Pay', kk: 'Kaspi Pay' }, description: PY['PY-009'], available: false },
 ];
 
+// Canonical, hreflang, Open Graph and JSON-LD URLs come from the runtime
+// APP_URL (src/lib/seo.ts). The production image is built without it
+// (Dockerfile), so a prerendered copy would freeze http://localhost:3000 into
+// them — this page renders per request instead.
+export const dynamic = 'force-dynamic';
+
 export default async function PaymentPage({ params }: { params: LocaleParams }) {
   const locale = await resolveLocale(params);
 
