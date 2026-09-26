@@ -112,3 +112,35 @@ export function computeRenderDepthVecForSections(
   }
   return computeRenderDepthVec(rawDepthVec, densest, options);
 }
+
+/**
+ * Corner sections (V2.6) recede by their own WIDTH instead of the kit depth:
+ * the whole rack still shares one receding direction, so a corner that reaches
+ * `recedeMm` back is drawn along `depthVec × recedeMm / depthMm`. Its shelves
+ * then rise `recedeMm / depthMm` times as far as a straight section's, so its
+ * own shelf spacing caps `depthVec.dy` at `maxRise × depthMm / recedeMm`.
+ * `depthVec` is the straight sections' already-capped vector (unchanged when
+ * there is no corner); `dx` is never touched, as everywhere here.
+ *
+ * `recedeMm` must not change during a drag (the interactive preview passes a
+ * corner's largest possible width), or the direction a width drag follows
+ * would change under the pointer.
+ */
+export function capDepthVecForCorners(
+  depthVec: DepthVec,
+  depthMm: number,
+  corners: readonly { shelfYs: readonly number[]; recedeMm: number }[],
+  options: { lipHeightPx?: number; minAirGapPx?: number } = {},
+): DepthVec {
+  const lipHeightPx = options.lipHeightPx ?? SHELF_LIP_HEIGHT_PX;
+  const minAirGapPx = options.minAirGapPx ?? MIN_SHELF_AIR_GAP_PX;
+  let rise = Math.abs(depthVec.dy);
+  for (const corner of corners) {
+    const spacing = minShelfSpacingPx(corner.shelfYs);
+    if (!Number.isFinite(spacing) || !(corner.recedeMm > 0) || !(depthMm > 0)) continue;
+    const maxRise = Math.max(0, spacing - lipHeightPx - minAirGapPx);
+    rise = Math.min(rise, (maxRise * depthMm) / corner.recedeMm);
+  }
+  if (rise === Math.abs(depthVec.dy)) return depthVec;
+  return { dx: depthVec.dx, dy: Math.sign(depthVec.dy) * rise };
+}

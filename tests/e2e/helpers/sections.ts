@@ -33,10 +33,12 @@ export interface StoredSection {
   rearWall: boolean;
   leftWall: boolean;
   rightWall: boolean;
+  /** V2.6 orientation: NONE | LEFT | RIGHT. */
+  corner: string;
 }
 
 /** Every section of the ACTIVE kit as the configurator store persisted it
- * (localStorage, V2.5 workspace) — the real configuration state, including
+ * (localStorage, V2.6 workspace) — the real configuration state, including
  * sections whose controls are collapsed. */
 export async function storedSections(page: Page): Promise<StoredSection[]> {
   return (await storedActiveConfiguration(page))?.sections ?? [];

@@ -1,5 +1,6 @@
 import type { ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
 import { LEGACY_MAX_SECTIONS } from '@/lib/configurator/limits';
+import { areSectionCornersValid, isSectionCorner } from '@/lib/configurator/corners';
 
 /**
  * Structural readers for configurations persisted in the browser (the
@@ -13,6 +14,13 @@ import { LEGACY_MAX_SECTIONS } from '@/lib/configurator/limits';
  * Section count is accepted up to LEGACY_MAX_SECTIONS (not MAX_SECTIONS), so
  * a draft saved before the 5-section limit is kept intact and shown as over
  * the limit instead of being silently cut down — see limits.ts.
+ *
+ * Corners (V2.6): every current section carries its own `corner`, one of the
+ * three orientations, placed where the rules allow (corners.ts). A missing,
+ * unknown or misplaced corner makes the whole configuration unreadable —
+ * never guessed, moved or dropped. Only the explicit upgrades below (for data
+ * saved before corners existed) add `corner: 'NONE'`, which is exactly what
+ * every section of such data was.
  */
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -25,10 +33,11 @@ const isNonEmptyString = (value: unknown): value is string => typeof value === '
 
 function readSection(raw: unknown): ShelvingSection | undefined {
   if (!isRecord(raw)) return undefined;
-  const { id, width, height, shelves, rearWall, leftWall, rightWall } = raw;
+  const { id, width, height, shelves, rearWall, leftWall, rightWall, corner } = raw;
   if (!isNonEmptyString(id) || !isPositiveInt(width) || !isPositiveInt(height) || !isPositiveInt(shelves)) return undefined;
   if (typeof rearWall !== 'boolean' || typeof leftWall !== 'boolean' || typeof rightWall !== 'boolean') return undefined;
-  return { id, width, height, shelves, rearWall, leftWall, rightWall };
+  if (!isSectionCorner(corner)) return undefined;
+  return { id, width, height, shelves, rearWall, leftWall, rightWall, corner };
 }
 
 function readSections(raw: unknown): ShelvingSection[] | undefined {
@@ -39,13 +48,15 @@ function readSections(raw: unknown): ShelvingSection[] | undefined {
     if (!section) return undefined;
     sections.push(section);
   }
-  return new Set(sections.map((s) => s.id)).size === sections.length ? sections : undefined;
+  if (new Set(sections.map((s) => s.id)).size !== sections.length) return undefined;
+  return areSectionCornersValid(sections) ? sections : undefined;
 }
 
 /**
- * Reads a configuration in the current (V2.2A, per-section height/shelves)
- * shape. A configuration that still carries a row-level `height` or
- * `shelves` is NOT current — it is rejected rather than silently mixed.
+ * Reads a configuration in the current (V2.6: per-section height/shelves and
+ * orientation) shape. A configuration that still carries a row-level `height`
+ * or `shelves`, or a section without `corner`, is NOT current — it is
+ * rejected rather than silently mixed.
  */
 export function readPersistedConfiguration(raw: unknown): ShelvingConfiguration | undefined {
   if (!isRecord(raw)) return undefined;
@@ -74,16 +85,31 @@ export function readPersistedConfiguration(raw: unknown): ShelvingConfiguration 
 }
 
 /**
+ * Upgrades a configuration persisted before V2.6 (V2.2A–V2.5 shape), when
+ * every section was straight and had no `corner` field. Lossless: each
+ * section gets `corner: 'NONE'` — exactly what it was. A section that already
+ * carries a `corner` is not that shape, and anything malformed returns
+ * `undefined`.
+ */
+export function upgradeStraightConfiguration(raw: unknown): ShelvingConfiguration | undefined {
+  if (!isRecord(raw) || !Array.isArray(raw.sections)) return undefined;
+  if (raw.sections.some((section) => !isRecord(section) || 'corner' in section)) return undefined;
+  const sections = raw.sections.map((section) => ({ ...(section as Record<string, unknown>), corner: 'NONE' }));
+  return readPersistedConfiguration({ ...raw, sections });
+}
+
+/**
  * Upgrades a configuration persisted before V2.2A, when height and shelf
- * count were row-level fields shared by every section. The upgrade is
- * lossless and deterministic: that one height/shelf count is exactly what
- * every section had, so it is copied into each section and the row-level
- * fields are dropped. Anything malformed returns `undefined`.
+ * count were row-level fields shared by every section (and every section was
+ * straight). The upgrade is lossless and deterministic: that one height/shelf
+ * count is exactly what every section had, so it is copied into each section
+ * and the row-level fields are dropped; then as upgradeStraightConfiguration.
+ * Anything malformed returns `undefined`.
  */
 export function upgradeRowLevelConfiguration(raw: unknown): ShelvingConfiguration | undefined {
   if (!isRecord(raw)) return undefined;
   const { height, shelves, sections, ...rest } = raw;
   if (!isPositiveInt(height) || !isPositiveInt(shelves) || !Array.isArray(sections)) return undefined;
   const upgradedSections = sections.map((section) => (isRecord(section) ? { ...section, height, shelves } : section));
-  return readPersistedConfiguration({ ...rest, sections: upgradedSections });
+  return upgradeStraightConfiguration({ ...rest, sections: upgradedSections });
 }

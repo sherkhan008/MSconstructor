@@ -6,7 +6,12 @@ import type { PriceFailure, ShelvingConfiguration, ShelvingSection } from '@/lib
 import type { PublicPriceResult } from '@/lib/pricing/public-result';
 import { getAllowedWidthsForDepth, isValidMsStandardWidthDepth } from '@/lib/pricing/ms-standard-compatibility';
 import { MAX_SECTIONS, MAX_WORKSPACE_KITS, MIN_SECTIONS, MIN_WORKSPACE_KITS } from '@/lib/configurator/limits';
-import { readPersistedConfiguration, upgradeRowLevelConfiguration } from '@/lib/configurator/persisted-configuration';
+import {
+  readPersistedConfiguration,
+  upgradeRowLevelConfiguration,
+  upgradeStraightConfiguration,
+} from '@/lib/configurator/persisted-configuration';
+import { areSectionCornersValid } from '@/lib/configurator/corners';
 import {
   canAddWorkspaceRacks,
   createKit,
@@ -40,7 +45,7 @@ import type { WorkspaceLink } from '@/lib/configurator/url';
 // removeSection still works) and the server rejects it until it is reduced.
 export { MAX_SECTIONS, MIN_SECTIONS, MAX_WORKSPACE_KITS, MIN_WORKSPACE_KITS };
 
-/** A new section with the given dimensions and no wall panels. */
+/** A new straight section with the given dimensions and no wall panels. */
 function makeSection(dimensions: Pick<ShelvingSection, 'width' | 'height' | 'shelves'>): ShelvingSection {
   return {
     id: generateWorkspaceId('sec'),
@@ -50,7 +55,19 @@ function makeSection(dimensions: Pick<ShelvingSection, 'width' | 'height' | 'she
     rearWall: false,
     leftWall: false,
     rightWall: false,
+    corner: 'NONE',
   };
+}
+
+/**
+ * Where a section inserted "after" `index` goes (V2.6). Normally right after
+ * it; but a RIGHT corner must stay the last section, so a section inserted
+ * after it goes immediately BEFORE it instead — the corner keeps its place at
+ * the rack's right edge and the row grows in front of it. (A LEFT corner is
+ * always first, so inserting after it never moves it.)
+ */
+function insertionIndexAfter(sections: readonly ShelvingSection[], index: number): number {
+  return sections[index]?.corner === 'RIGHT' ? index : index + 1;
 }
 
 /** Every section owns its width, height and shelves — there is no row-level
@@ -106,7 +123,9 @@ interface ConfiguratorState extends ConfiguratorWorkspace {
   removeSection: (id: string) => void;
   duplicateSection: (id: string) => void;
   /** Changes one section only — every section owns its width, height,
-   * shelves and walls; there is no action that edits all sections at once. */
+   * shelves, walls and orientation; there is no action that edits all
+   * sections at once. A patch that would misplace a corner (see corners.ts)
+   * is refused as a whole. */
   updateSection: (id: string, patch: Partial<Omit<ShelvingSection, 'id'>>) => void;
   setSectionWidth: (id: string, width: number) => void;
   /** Resets the ACTIVE kit to DEFAULT_CONFIGURATION (other kits untouched). */
@@ -129,7 +148,7 @@ interface ConfiguratorState extends ConfiguratorWorkspace {
 
 export const CONFIGURATOR_STORAGE_KEY = 'ms-shelving-configurator';
 /** Persisted draft version — see migrateConfiguratorState. */
-export const CONFIGURATOR_STATE_VERSION = 4;
+export const CONFIGURATOR_STATE_VERSION = 5;
 
 /** Store bounds for one kit's quantity — the same as the server schema and the cart. */
 const MIN_QUANTITY = 1;
@@ -175,8 +194,10 @@ function updateActiveKit(
 }
 
 /** A configuration patch for `kit`, except that a quantity increase past the
- * workspace's physical-rack limit is refused (decreases always apply). */
+ * workspace's physical-rack limit is refused (decreases always apply), and a
+ * sections patch that would misplace a corner is refused as a whole. */
 function applyConfigPatch(state: ConfiguratorState, kit: ConfiguratorKit, patch: Partial<ShelvingConfiguration>): ConfiguratorKit {
+  if (patch.sections && !areSectionCornersValid(patch.sections)) return kit;
   let next = { ...kit.configuration, ...patch };
   const added = next.quantity - kit.configuration.quantity;
   if (added > 0 && !canAddWorkspaceRacks(state.kits, added)) next = { ...next, quantity: kit.configuration.quantity };
@@ -233,8 +254,10 @@ export const useConfiguratorStore = create<ConfiguratorState>()(
                 : template.width;
             // The new section copies the template's own height and shelf
             // count too (each section owns them); walls start off, as before.
+            // It is always straight: a corner is never copied into the row.
             const next = makeSection({ width: templateWidth, height: template.height, shelves: template.shelves });
-            const nextSections = [...sections.slice(0, insertAfter + 1), next, ...sections.slice(insertAfter + 1)];
+            const at = insertionIndexAfter(sections, insertAfter);
+            const nextSections = [...sections.slice(0, at), next, ...sections.slice(at)];
             return { ...kit, configuration: { ...config, sections: nextSections }, activeSectionId: next.id };
           }),
         ),
@@ -263,22 +286,24 @@ export const useConfiguratorStore = create<ConfiguratorState>()(
             const index = sections.findIndex((s) => s.id === id);
             if (index === -1) return kit;
             const source = sections[index];
-            // Width, height, shelves and walls are all copied; only the id is new.
-            const copy: ShelvingSection = { ...source, id: generateWorkspaceId('sec') };
-            const nextSections = [...sections.slice(0, index + 1), copy, ...sections.slice(index + 1)];
+            // Width, height, shelves and walls are all copied; the id is new
+            // and the copy is straight — duplicating a corner never creates a
+            // second corner. The copy of a RIGHT corner goes before it, so the
+            // corner stays the last section (see insertionIndexAfter).
+            const copy: ShelvingSection = { ...source, id: generateWorkspaceId('sec'), corner: 'NONE' };
+            const at = insertionIndexAfter(sections, index);
+            const nextSections = [...sections.slice(0, at), copy, ...sections.slice(at)];
             return { ...kit, configuration: { ...kit.configuration, sections: nextSections }, activeSectionId: copy.id };
           }),
         ),
 
       updateSection: (id, patch) =>
         set((state) =>
-          updateActiveKit(state, (kit) => ({
-            ...kit,
-            configuration: {
-              ...kit.configuration,
-              sections: kit.configuration.sections.map((s) => (s.id === id ? { ...s, ...patch } : s)),
-            },
-          })),
+          updateActiveKit(state, (kit) => {
+            const sections = kit.configuration.sections.map((s) => (s.id === id ? { ...s, ...patch } : s));
+            if (!areSectionCornersValid(sections)) return kit;
+            return { ...kit, configuration: { ...kit.configuration, sections } };
+          }),
         ),
 
       setSectionWidth: (id, width) => get().updateSection(id, { width }),
@@ -381,7 +406,8 @@ export const useConfiguratorStore = create<ConfiguratorState>()(
     }),
     {
       name: CONFIGURATOR_STORAGE_KEY,
-      // v4 (V2.5): one configuration → a workspace of kits. See
+      // v5 (V2.6): every section carries its orientation (`corner`); v4
+      // (V2.5): one configuration → a workspace of kits. See
       // migrateConfiguratorState for what is migrated.
       version: CONFIGURATOR_STATE_VERSION,
       partialize: (state) => ({ kits: state.kits, activeKitId: state.activeKitId }),
@@ -400,17 +426,21 @@ export const useConfiguratorStore = create<ConfiguratorState>()(
   ),
 );
 
-/** A current-shape (v4) persisted workspace, or a fresh default one when malformed. */
+/** A current-shape (v5) persisted workspace, or a fresh default one when malformed. */
 export function readPersistedConfiguratorState(persistedState: unknown): ConfiguratorWorkspace {
   return readPersistedWorkspace(persistedState) ?? defaultWorkspace();
 }
 
 /** The V2.4 (v3) single-configuration draft as a one-kit workspace, or
- * undefined when malformed. Lossless: the configuration, its section ids
- * and its active section are kept exactly. */
-function readSingleConfigurationDraft(persistedState: unknown): ConfiguratorWorkspace | undefined {
+ * undefined when malformed. Lossless: the configuration (every section
+ * straight, as it was), its section ids and its active section are kept
+ * exactly. `readConfiguration` reads the draft's configuration. */
+function readSingleConfigurationDraft(
+  persistedState: unknown,
+  readConfiguration: (raw: unknown) => ShelvingConfiguration | undefined = upgradeStraightConfiguration,
+): ConfiguratorWorkspace | undefined {
   const state = persistedState as { config?: unknown; activeSectionId?: unknown } | null | undefined;
-  const config = readPersistedConfiguration(state?.config);
+  const config = readConfiguration(state?.config);
   if (!config) return undefined;
   const activeSectionId = config.sections.some((s) => s.id === state?.activeSectionId)
     ? (state!.activeSectionId as string)
@@ -421,10 +451,16 @@ function readSingleConfigurationDraft(persistedState: unknown): ConfiguratorWork
 /**
  * Persisted-draft policy (pre-launch project, no real customer data):
  *
- *   v4 (current)   loaded as-is after a structural check; malformed → default.
+ *   v5 (current)   loaded as-is after a structural check (including every
+ *                  section's corner and its placement); malformed → default.
+ *   v4 (V2.5)      MIGRATED: the workspace is kept exactly (kit ids, section
+ *                  ids, active kit and sections) and every section becomes
+ *                  straight (`corner: 'NONE'`) — lossless, V2.5 had no
+ *                  corners. A section that already has a `corner`, or any
+ *                  other malformed value → default.
  *   v3 (V2.4)      MIGRATED: the one configuration becomes kit 1 of a one-kit
- *                  workspace, with its section ids and active section kept
- *                  (lossless). Malformed → default.
+ *                  workspace, with its section ids and active section kept,
+ *                  every section straight (lossless). Malformed → default.
  *   v2 (V2.1)      MIGRATED: its one row-level height/shelf count is copied
  *                  into every section (lossless — every section had exactly
  *                  those values), then as v3. Malformed → default.
@@ -436,11 +472,16 @@ function readSingleConfigurationDraft(persistedState: unknown): ConfiguratorWork
 export function migrateConfiguratorState(persistedState: unknown, version: number): ConfiguratorWorkspace {
   try {
     if (version >= CONFIGURATOR_STATE_VERSION) return readPersistedConfiguratorState(persistedState);
+    if (version === 4) return readPersistedWorkspace(persistedState, upgradeStraightConfiguration) ?? defaultWorkspace();
     if (version === 3) return readSingleConfigurationDraft(persistedState) ?? defaultWorkspace();
     if (version === 2) {
+      // upgradeRowLevelConfiguration already yields the current shape.
       const state = persistedState as { config?: unknown; activeSectionId?: unknown } | null | undefined;
       const config = upgradeRowLevelConfiguration(state?.config);
-      return (config && readSingleConfigurationDraft({ config, activeSectionId: state?.activeSectionId })) ?? defaultWorkspace();
+      return (
+        (config && readSingleConfigurationDraft({ config, activeSectionId: state?.activeSectionId }, readPersistedConfiguration)) ??
+        defaultWorkspace()
+      );
     }
     return defaultWorkspace();
   } catch {

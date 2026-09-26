@@ -1,5 +1,6 @@
-import type { ShelvingSection } from '@/lib/types/domain';
+import type { SectionCorner, ShelvingSection } from '@/lib/types/domain';
 import { getMaxSectionHeight } from '@/lib/configurator/section-dimensions';
+import { layoutRackWorld, sectionFrontSpanMm, sectionRecedeMm, type SectionPlacement } from '@/lib/configurator/rack-world';
 import { mmToPx, type RackEnvelopeMm } from './dimension-scale';
 
 /* ---------------------------------------------------------------------------
@@ -34,14 +35,24 @@ export interface DimensionCapacityMm {
  * the rack can never be drawn outside its frame.
  */
 export function rackEnvelopeMm(sections: readonly ShelvingSection[], depthMm: number, capacity?: DimensionCapacityMm): RackEnvelopeMm {
-  const rowWidth = sections.reduce((sum, s) => sum + s.width, 0);
   const height = getMaxSectionHeight(sections);
-  if (!capacity) return { rowWidth, height, depth: depthMm };
+  if (!capacity) {
+    // The world plan bounds (rack-world.ts): for a straight rack exactly the
+    // summed widths and the depth; a corner adds the depth to the front line
+    // and reaches back by its own width.
+    const { bounds } = layoutRackWorld(sections, depthMm);
+    return { rowWidth: bounds.x1 - bounds.x0, height, depth: bounds.z1 - bounds.z0 };
+  }
+  // Corners (V2.6): a corner's front span is the kit depth — which no drag
+  // changes — and its width reaches backward, so it is reserved as depth.
+  const straight = sections.filter((s) => s.corner === 'NONE');
+  const corners = sections.filter((s) => s.corner !== 'NONE');
   const widest = sections.reduce((max, s) => Math.max(max, s.width), capacity.width);
+  const deepest = Math.max(capacity.depth, depthMm);
   return {
-    rowWidth: sections.length * widest,
+    rowWidth: straight.length * widest + corners.length * deepest,
     height: Math.max(capacity.height, height),
-    depth: Math.max(capacity.depth, depthMm),
+    depth: corners.length > 0 ? Math.max(deepest, widest) : deepest,
   };
 }
 
@@ -68,7 +79,15 @@ export function computeShelfYs(top: number, heightPx: number, shelves: number): 
   });
 }
 
-/** One section's world geometry in viewBox units. */
+/**
+ * One section's world geometry in viewBox units: its footprint box seen from
+ * the front. `x`/`width` are the box's extent along the front line — the
+ * section's own width when straight, the kit depth when it is a corner (V2.6)
+ * — and `recedeMm` how far it reaches backward — the depth when straight, the
+ * corner's own width when it is a corner. The stored values themselves are
+ * never swapped: `section` is untouched, and `placement` is its explicit world
+ * transform (src/lib/configurator/rack-world.ts).
+ */
 export interface SectionFrame extends SectionLayout {
   /** The section's own height (section.height × pxPerMm). */
   height: number;
@@ -76,24 +95,48 @@ export interface SectionFrame extends SectionLayout {
   top: number;
   /** Its own shelf planes, from its own height and shelf count. */
   shelfYs: number[];
+  corner: SectionCorner;
+  /** World extent along z (backward), in mm. */
+  recedeMm: number;
+  placement: SectionPlacement;
 }
 
 /**
- * Lays sections out left to right from `leftX`, contiguous, each at
- * `width × pxPerMm` wide and `height × pxPerMm` tall, all standing on
- * `floorY`. A section's x depends only on the widths before it, so changing
- * one section's width moves only the sections after it — the section itself
- * keeps its left edge, earlier sections are untouched.
+ * Lays sections out left to right from `leftX`, contiguous, each at its front
+ * span × pxPerMm wide and `height × pxPerMm` tall, all standing on `floorY`.
+ * A section's x depends only on the spans before it, so changing one section's
+ * width moves only the sections after it — the section itself keeps its left
+ * edge, earlier sections are untouched. A corner's width runs backward, so
+ * changing it moves nothing else at all. `depthMm` (the kit depth) is the
+ * front span of a corner; it is unused by a straight row.
  */
-export function layoutSectionFrames(sections: readonly ShelvingSection[], pxPerMm: number, leftX: number, floorY: number): SectionFrame[] {
+export function layoutSectionFrames(
+  sections: readonly ShelvingSection[],
+  pxPerMm: number,
+  leftX: number,
+  floorY: number,
+  depthMm = 0,
+): SectionFrame[] {
+  const { placements } = layoutRackWorld(sections, depthMm);
   let cursor = leftX;
-  return sections.map((section) => {
+  return sections.map((section, i) => {
     const x = cursor;
-    const width = section.width * pxPerMm;
+    const width = sectionFrontSpanMm(section, depthMm) * pxPerMm;
     const height = section.height * pxPerMm;
     const top = floorY - height;
     cursor += width;
-    return { id: section.id, x, width, section, height, top, shelfYs: computeShelfYs(top, height, section.shelves) };
+    return {
+      id: section.id,
+      x,
+      width,
+      section,
+      height,
+      top,
+      shelfYs: computeShelfYs(top, height, section.shelves),
+      corner: section.corner,
+      recedeMm: sectionRecedeMm(section, depthMm),
+      placement: placements[i],
+    };
   });
 }
 

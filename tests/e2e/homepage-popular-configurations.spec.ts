@@ -84,11 +84,12 @@ for (const [index, depth] of [300, 400, 600].entries()) {
     await page.waitForURL(/\/configurator\?/);
 
     const params = new URL(page.url()).searchParams;
-    expect(params.get('v')).toBe('2');
+    expect(params.get('v')).toBe('4');
     expect(params.get('model')).toBe('ms-standard');
     expect(params.get('depth')).toBe(dims.depth);
-    // Each section carries its own width:height:shelves (V2.2A share-link format).
-    expect(params.get('sections')).toBe(`${dims.width}:${dims.height}:${dims.shelves}:0:0:0`);
+    // Each section carries its own width:height:shelves, walls and orientation
+    // (V2.6 share-link format) — a catalog rack is straight (N).
+    expect(params.get('sections')).toBe(`${dims.width}:${dims.height}:${dims.shelves}:0:0:0:N`);
   });
 }
 

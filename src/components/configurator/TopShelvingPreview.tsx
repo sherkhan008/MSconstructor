@@ -18,6 +18,7 @@ import {
   WIDE_FRAME,
 } from './ShelvingPreview';
 import { resolveRackFill } from './rack-colors';
+import { hasCorners } from '@/lib/configurator/corners';
 import { t } from '@/lib/i18n/format';
 import { CF } from '@/lib/i18n/strings';
 import { useLocale } from '@/components/i18n/LocaleProvider';
@@ -41,6 +42,12 @@ import { useLocale } from '@/components/i18n/LocaleProvider';
  * wired straight to the same `activeSectionId`/`onSelectSection` the front
  * view and the section table already share; there is no separate top-view
  * selection state.
+ *
+ * Straight racks only (V2.6). This plan draws every section as one straight
+ * row, which is false for a corner section (its width runs backward). Until
+ * the top view is redesigned for corners, a kit with a corner shows a short
+ * notice here instead of a drawing — never an invented plan. Nothing else
+ * changes: the frame, the preview mode and the configuration are untouched.
  */
 
 const TOP_Y = 26;
@@ -62,7 +69,22 @@ interface Props {
   onSelectSection?: (id: string) => void;
 }
 
-export function TopShelvingPreview({ config, color, className = '', interactive = false, activeSectionId, onSelectSection }: Props) {
+export function TopShelvingPreview(props: Props) {
+  const locale = useLocale();
+  if (hasCorners(props.config.sections)) {
+    return (
+      <div
+        data-testid="top-view-corner-notice"
+        className={`relative flex w-full items-center justify-center border border-line bg-surface px-6 text-center text-sm leading-snug text-steel ${props.className ?? ''}`}
+      >
+        <p className="max-w-sm">{t(CF['CF-125'], locale)}</p>
+      </div>
+    );
+  }
+  return <StraightTopView {...props} />;
+}
+
+function StraightTopView({ config, color, className = '', interactive = false, activeSectionId, onSelectSection }: Props) {
   const locale = useLocale();
   const layout = useMemo(() => {
     const centered = computeSectionLayout(config.sections, MAX_ROW_WIDTH_PX, VIEWBOX_W, TARGET_FILL_PX);

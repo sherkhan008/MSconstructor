@@ -66,6 +66,14 @@ function wallsSummary(section: { rearWall: boolean; leftWall: boolean; rightWall
   return walls.length > 0 ? `${walls.join(' + ')} стенка` : 'без стенок';
 }
 
+/** A section's orientation (V2.6); orders placed before corners existed
+ * stored none — every section of them was straight. */
+function cornerSummary(section: { corner?: string }): string {
+  if (section.corner === 'LEFT') return ' — угол слева';
+  if (section.corner === 'RIGHT') return ' — угол справа';
+  return '';
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
@@ -95,7 +103,7 @@ function ConfigurationSummary({ item }: { item: AdminOrderItem }) {
         <dd>
           {c.sections.map((s, i) => (
             <div key={s.id}>
-              {i + 1}. {s.width} мм{anyWalls ? ` — ${wallsSummary(s)}` : ''}
+              {i + 1}. {s.width} мм{cornerSummary(s)}{anyWalls ? ` — ${wallsSummary(s)}` : ''}
             </div>
           ))}
         </dd>

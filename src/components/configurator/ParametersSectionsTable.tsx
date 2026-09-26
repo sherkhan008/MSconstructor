@@ -16,10 +16,11 @@ import {
 import { NumberStepper } from './NumberStepper';
 import { CROSS_BRACE_ID, CROSS_BRACE_WIDTH_MM, OptionCheckbox } from './AdvancedSettingsAccordion';
 import type { PublicCatalog } from '@/lib/data/public-catalog';
-import type { ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
+import type { SectionCorner, ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
 import { getAllowedKitDepths, getAllowedSectionWidths, getSectionLimits } from '@/lib/configurator/section-limits';
+import { allowedCornersAt } from '@/lib/configurator/corners';
 import { shelvesLabel } from '@/lib/plural';
-import { t } from '@/lib/i18n/format';
+import { t, type Entry } from '@/lib/i18n/format';
 import { dimensionOptionLabel, loadCapacityOptionLabel } from '@/lib/i18n/catalog-labels';
 import { CF, CR, G, VL } from '@/lib/i18n/strings';
 import { formatPrice } from '@/lib/money';
@@ -43,7 +44,9 @@ type ProductModel = PublicCatalog['models'][number];
  *     others collapse to a one-line summary of their own values that selects
  *     them. Each control edits its own section only (`updateSection`), with a
  *     range read from that section's own values (see section-limits.ts) —
- *     there is no height or shelf control shared by every section.
+ *     there is no height or shelf control shared by every section. An edge
+ *     section also offers its orientation (V2.6): straight, or a corner on
+ *     its own edge only (corners.ts) — a middle section has no such choice.
  *
  * Reuses the existing store state/actions only; no new configuration state
  * is introduced (every control edits the active kit's configuration). Every control exists exactly once in the DOM (only the
@@ -177,6 +180,7 @@ export function ParametersSectionsTable({ catalog, onReset }: { catalog: PublicC
                 <SectionFields
                   section={section}
                   index={i}
+                  corners={allowedCornersAt(i, config.sections.length)}
                   model={model}
                   catalog={catalog}
                   widths={getAllowedSectionWidths(model, config.depth)}
@@ -244,9 +248,14 @@ export function ParametersSectionsTable({ catalog, onReset }: { catalog: PublicC
   );
 }
 
-/** "1200 × 2500 мм · 8 полок" — one section's own values, for its collapsed row. */
+/** Customer label of each orientation (V2.6). */
+const CORNER_LABELS: Record<SectionCorner, Entry> = { NONE: CF['CF-121'], LEFT: CF['CF-122'], RIGHT: CF['CF-123'] };
+
+/** "1200 × 2500 мм · 8 полок" — one section's own values, for its collapsed
+ * row; a corner adds its orientation ("… · Угол слева"). */
 function sectionSummary(section: ShelvingSection, locale: Locale): string {
-  return `${section.width} × ${section.height} ${t(G['G-008'], locale)} · ${shelvesLabel(section.shelves, locale)}`;
+  const base = `${section.width} × ${section.height} ${t(G['G-008'], locale)} · ${shelvesLabel(section.shelves, locale)}`;
+  return section.corner === 'NONE' ? base : `${base} · ${t(CORNER_LABELS[section.corner], locale)}`;
 }
 
 /** Shared field chrome: readable sentence-case label over a 44px control. */
@@ -399,6 +408,7 @@ function KitParamsFields({
 function SectionFields({
   section,
   index,
+  corners,
   model,
   catalog,
   widths,
@@ -408,6 +418,8 @@ function SectionFields({
 }: {
   section: ShelvingSection;
   index: number;
+  /** The orientations this section's position allows (corners.ts). */
+  corners: SectionCorner[];
   model: ProductModel;
   catalog: PublicCatalog;
   widths: number[];
@@ -472,6 +484,29 @@ function SectionFields({
           />
         </div>
       </div>
+
+      {/* Orientation (V2.6) — only on an edge section, and only the corner of
+          its own edge: a middle section is always straight, so it gets no
+          control at all. The same section, turned 90° backward — no price
+          or component changes. */}
+      {corners.length > 1 && (
+        <label className="flex min-w-0 flex-col gap-1.5">
+          <span className={FIELD_LABEL}>{t(CF['CF-120'], locale)}</span>
+          <select
+            value={section.corner}
+            data-section-index={index}
+            aria-label={t(CF['CF-124'], locale, { N: index + 1 })}
+            onChange={(e) => onChange({ corner: e.target.value as SectionCorner })}
+            className={`${SELECT_CLASS} !font-sans`}
+          >
+            {corners.map((corner) => (
+              <option key={corner} value={corner}>
+                {t(CORNER_LABELS[corner], locale)}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       <div className="grid grid-cols-3 gap-2">
         <WallCheckbox label={t(CF['CF-037'], locale)} checked={section.rearWall} onChange={(checked) => onChange({ rearWall: checked })} />

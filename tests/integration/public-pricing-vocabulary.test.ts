@@ -130,7 +130,7 @@ function config(overrides: Partial<ShelvingConfiguration> = {}): ShelvingConfigu
   return {
     modelSlug: 'ms-standard',
     depth: 500,
-    sections: [{ id: 'sec-1', width: 1000, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false }],
+    sections: [{ id: 'sec-1', width: 1000, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false, corner: 'NONE' }],
     loadCapacity: 150,
     shelfType: 'STANDARD',
     colorId: 'color-grey',

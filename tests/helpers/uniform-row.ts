@@ -1,7 +1,9 @@
 import type { ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
 
-/** A section that may leave its height/shelves to the row default. */
-export type LooseSection = Omit<ShelvingSection, 'height' | 'shelves'> & Partial<Pick<ShelvingSection, 'height' | 'shelves'>>;
+/** A section that may leave its height/shelves to the row default (and its
+ * orientation to straight). */
+export type LooseSection = Omit<ShelvingSection, 'height' | 'shelves' | 'corner'> &
+  Partial<Pick<ShelvingSection, 'height' | 'shelves' | 'corner'>>;
 
 /** A uniform row described with one height/shelf count for every section. */
 export type UniformRowInput = Omit<ShelvingConfiguration, 'sections'> & {
@@ -18,5 +20,5 @@ export type UniformRowInput = Omit<ShelvingConfiguration, 'sections'> & {
  * own, and no row-level height/shelves left on the configuration.
  */
 export function uniformRow({ height, shelves, sections, ...rest }: UniformRowInput): ShelvingConfiguration {
-  return { ...rest, sections: sections.map((section) => ({ height, shelves, ...section }) as ShelvingSection) };
+  return { ...rest, sections: sections.map((section) => ({ height, shelves, corner: 'NONE', ...section }) as ShelvingSection) };
 }

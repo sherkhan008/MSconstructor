@@ -56,7 +56,7 @@ const CAPACITY = { width: 1500, height: 3000, depth: 800 };
 const DEPTH = 400;
 
 function section(id: string, width: number): ShelvingSection {
-  return { id, width, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false };
+  return { id, width, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false, corner: 'NONE' };
 }
 
 /** The configurator's scale for a committed row. */

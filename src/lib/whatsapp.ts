@@ -59,6 +59,18 @@ function selectedOptionNames(config: ShelvingConfiguration, accessories: PublicA
   return names;
 }
 
+/** One line per corner section (V2.6) — "Секция 1: угол слева"; nothing
+ * for a straight rack. */
+function cornerLines(config: ShelvingConfiguration, locale: Locale): string[] {
+  return config.sections.flatMap((section, i) =>
+    section.corner === 'LEFT'
+      ? [t(WA['WA-023'], locale, { N: i + 1 })]
+      : section.corner === 'RIGHT'
+        ? [t(WA['WA-024'], locale, { N: i + 1 })]
+        : [],
+  );
+}
+
 /** One line per section, only when at least one section actually has a wall
  * selected anywhere in the row — an all-"без стенок" row omits this block
  * entirely rather than padding the message with rows that say nothing. */
@@ -134,6 +146,7 @@ function configurationLines(c: ShelvingConfiguration, accessories: PublicAccesso
     t(WA['WA-008'], locale, { W: widths }),
     t(WA['WA-009'], locale, { N: sectionShelvesSummary(c.sections) }),
     t(WA['WA-010'], locale, { N: c.loadCapacity }),
+    ...cornerLines(c, locale),
     ...wallSummaryLines(c, locale),
   ];
 

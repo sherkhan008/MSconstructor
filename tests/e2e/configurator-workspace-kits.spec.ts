@@ -69,6 +69,7 @@ const section = (width: number, height: number, shelves: number, walls: Partial<
   rearWall: false,
   leftWall: false,
   rightWall: false,
+  corner: 'NONE',
   ...walls,
 });
 

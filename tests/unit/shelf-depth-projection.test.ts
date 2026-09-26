@@ -96,6 +96,7 @@ function configuratorScale(count: number): number {
     rearWall: false,
     leftWall: false,
     rightWall: false,
+    corner: 'NONE' as const,
   }));
   return fitPxPerMm(rackEnvelopeMm(sections, 400, CAPACITY));
 }

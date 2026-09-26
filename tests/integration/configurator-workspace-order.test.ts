@@ -37,6 +37,7 @@ const section = (id: string, width: number, height: number, shelves: number, wal
   rearWall: false,
   leftWall: false,
   rightWall: false,
+  corner: 'NONE',
   ...walls,
 });
 

@@ -1,12 +1,26 @@
-import type { ConfigurationAccessorySelection, ShelfType, ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
+import type { ConfigurationAccessorySelection, SectionCorner, ShelfType, ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
 import { LEGACY_MAX_SECTIONS, MAX_WORKSPACE_KITS } from '@/lib/configurator/limits';
+import { areSectionCornersValid } from '@/lib/configurator/corners';
 
 /**
  * Serialises a configuration to URL query parameters and back, so a shared
  * configurator link fully restores the customer's selections — including
- * each section's own width, height, shelf count and wall panels, in order.
+ * each section's own width, height, shelf count, wall panels and
+ * orientation, in order.
  *
- * Format v2 (Configurator V2.2A), marked by `v=2`:
+ * Format v4 (Configurator V2.6), marked by `v=4` — the one the app generates:
+ *   /configurator?v=4&model=ms-standard&depth=400
+ *     &sections=700:1500:4:1:0:0:L,1000:1500:4:0:0:0:N,1200:1500:4:0:1:1:R
+ * Each `sections` entry is exactly
+ *   `width:height:shelves:rearWall:leftWall:rightWall:corner`
+ * — the v2 entry below plus the section's orientation: `N` straight, `L`
+ * left corner, `R` right corner. The whole list must also satisfy the corner
+ * placement rules (src/lib/configurator/corners.ts: L only first, R only
+ * last); a list that does not is malformed and discarded as a whole, like
+ * any other malformed entry — a corner is never moved or dropped.
+ *
+ * Format v2 (Configurator V2.2A–V2.5), marked by `v=2`, is still read — with
+ * every section straight, which is what every v2 section was:
  *   /configurator?v=2&model=ms-standard&depth=400
  *     &sections=700:1500:4:1:0:0,1000:1500:4:0:0:0,1200:1500:4:0:1:1
  * Each `sections` entry is exactly
@@ -25,7 +39,7 @@ import { LEGACY_MAX_SECTIONS, MAX_WORKSPACE_KITS } from '@/lib/configurator/limi
  * `width:rearWall:leftWall:rightWall` entries is still read, by copying
  * that one height/shelf count into every section (lossless — that is what
  * every section had). Anything else unversioned, or an unknown `v`, leaves
- * the sections untouched. The app itself only ever generates v2.
+ * the sections untouched. The app itself only ever generates v4.
  *
  * Section count: parsed up to LEGACY_MAX_SECTIONS, not MAX_SECTIONS, so a
  * link shared before the limit dropped opens with all its sections (shown as
@@ -33,7 +47,12 @@ import { LEGACY_MAX_SECTIONS, MAX_WORKSPACE_KITS } from '@/lib/configurator/limi
  * silently losing some. See src/lib/configurator/limits.ts.
  */
 
-export const CONFIGURATION_URL_VERSION = '2';
+export const CONFIGURATION_URL_VERSION = '4';
+/** The pre-corner (V2.2A–V2.5) kit format: read, never generated. */
+export const LEGACY_CONFIGURATION_URL_VERSION = '2';
+
+const CORNER_CODES: Record<SectionCorner, string> = { NONE: 'N', LEFT: 'L', RIGHT: 'R' };
+const CORNER_BY_CODE: Record<string, SectionCorner> = { N: 'NONE', L: 'LEFT', R: 'RIGHT' };
 
 const SHELF_TYPES: ShelfType[] = ['STANDARD', 'REINFORCED', 'EXTRA_REINFORCED', 'PERFORATED', 'GALVANIZED'];
 
@@ -62,14 +81,26 @@ function encodeSection(section: ShelvingSection): string {
     section.rearWall ? 1 : 0,
     section.leftWall ? 1 : 0,
     section.rightWall ? 1 : 0,
+    CORNER_CODES[section.corner],
   ].join(':');
 }
 
 const POSITIVE_INT = /^[1-9]\d{0,5}$/;
 const FLAG = /^[01]$/;
 
-/** Parses one v2 `width:height:shelves:rear:left:right` entry; undefined unless exactly well-formed. */
+/** Parses one v4 `width:height:shelves:rear:left:right:corner` entry; undefined unless exactly well-formed. */
 function decodeSection(token: string): ShelvingSection | undefined {
+  const parts = token.split(':');
+  if (parts.length !== 7) return undefined;
+  const corner = Object.prototype.hasOwnProperty.call(CORNER_BY_CODE, parts[6]) ? CORNER_BY_CODE[parts[6]] : undefined;
+  if (!corner) return undefined;
+  const straight = decodeStraightSection(parts.slice(0, 6).join(':'));
+  return straight && { ...straight, corner };
+}
+
+/** Parses one v2 `width:height:shelves:rear:left:right` entry (always
+ * straight); undefined unless exactly well-formed. */
+function decodeStraightSection(token: string): ShelvingSection | undefined {
   const parts = token.split(':');
   if (parts.length !== 6) return undefined;
   const [width, height, shelves, rear, left, right] = parts;
@@ -84,6 +115,7 @@ function decodeSection(token: string): ShelvingSection | undefined {
     rearWall: rear === '1',
     leftWall: left === '1',
     rightWall: right === '1',
+    corner: 'NONE',
   };
 }
 
@@ -102,10 +134,12 @@ function decodeLegacySection(token: string, height: number, shelves: number): Sh
     rearWall: rear === '1',
     leftWall: left === '1',
     rightWall: right === '1',
+    corner: 'NONE',
   };
 }
 
-/** All-or-nothing: any malformed entry discards the whole list. */
+/** All-or-nothing: any malformed entry — or a corner placed where the rules
+ * do not allow one — discards the whole list. */
 function decodeAll(tokens: string[], decode: (token: string) => ShelvingSection | undefined): ShelvingSection[] | undefined {
   if (tokens.length === 0 || tokens.length > LEGACY_MAX_SECTIONS) return undefined;
   const sections: ShelvingSection[] = [];
@@ -114,7 +148,7 @@ function decodeAll(tokens: string[], decode: (token: string) => ShelvingSection 
     if (!section) return undefined;
     sections.push(section);
   }
-  return sections;
+  return areSectionCornersValid(sections) ? sections : undefined;
 }
 
 function parseSections(params: URLSearchParams): ShelvingSection[] | undefined {
@@ -123,6 +157,7 @@ function parseSections(params: URLSearchParams): ShelvingSection[] | undefined {
   const tokens = sectionsParam.split(',');
   const version = params.get('v');
   if (version === CONFIGURATION_URL_VERSION) return decodeAll(tokens, decodeSection);
+  if (version === LEGACY_CONFIGURATION_URL_VERSION) return decodeAll(tokens, decodeStraightSection);
   if (version !== null) return undefined;
 
   // The row-level values are copied into every section, so they get the
@@ -221,9 +256,10 @@ export function parseConfigurationFromSearchParams(
   // a row position, resolved against the *freshly generated* section ids
   // above (decodeSection never reuses the original sender's ids).
   const acc = params.get('acc');
-  // v2 links always describe the whole kit: no `acc` means no accessories,
-  // so opening one never keeps accessories left over in the current draft.
-  if (!acc && params.get('v') === CONFIGURATION_URL_VERSION) result.accessories = [];
+  // v2/v4 links always describe the whole kit: no `acc` means no
+  // accessories, so opening one never keeps accessories left over in the
+  // current draft.
+  if (!acc && isKitVersion(params.get('v'))) result.accessories = [];
   if (acc) {
     const accessories: ConfigurationAccessorySelection[] = [];
     for (const entry of acc.split(',')) {
@@ -248,19 +284,22 @@ export function parseConfigurationFromSearchParams(
  * Workspace links (Configurator V2.5), marked by `v=3`:
  *   /configurator?v=3&active=2&k1=<kit>&k2=<kit>
  * `k1`…`kN` (N = 1…MAX_WORKSPACE_KITS, contiguous, in kit order) each hold
- * one kit as its complete v2 share query above (`v=2&model=…&sections=…
- * &qty=…&acc=…`), percent-encoded as one parameter value — so every kit is
- * read by exactly the same strict single-kit parser, section-scoped
- * accessories keep their section positions, and each kit value is itself a
- * valid v2 link. `active` is the 1-based position of the active kit.
+ * one kit as its complete single-kit share query above (`v=4&model=…
+ * &sections=…&qty=…&acc=…`), percent-encoded as one parameter value — so
+ * every kit is read by exactly the same strict single-kit parser,
+ * section-scoped accessories keep their section positions, and each kit value
+ * is itself a valid single-kit link. `active` is the 1-based position of the
+ * active kit. The wrapper did not change with corners (V2.6): each kit
+ * carries its own format version, v4 as generated today or v2 in a link
+ * shared before corners existed (read with every section straight).
  *
  * Parsing is all-or-nothing: a missing/extra kit key, a kit that is not a
- * complete v2 configuration, or more than MAX_WORKSPACE_KITS kits makes the
+ * complete v2/v4 configuration, or more than MAX_WORKSPACE_KITS kits makes the
  * whole link invalid (null), and the configurator keeps the current
  * workspace. An unusable `active` only selects the first kit. Section and
  * kit ids are never in the link; opening one mints fresh ids.
  *
- * Old single-kit links (v2, and the unversioned V2.1 format) are still read,
+ * Single-kit links (v4, v2, and the unversioned V2.1 format) are still read,
  * as a one-kit workspace.
  */
 export const WORKSPACE_URL_VERSION = '3';
@@ -275,7 +314,7 @@ export interface WorkspaceLink {
   activeIndex: number;
 }
 
-/** Every value a complete v2 kit carries — a v3 kit missing one is invalid. */
+/** Every value a complete v2/v4 kit carries — a v3 kit missing one is invalid. */
 const REQUIRED_KIT_FIELDS: (keyof ShelvingConfiguration)[] = [
   'modelSlug',
   'depth',
@@ -301,9 +340,14 @@ export function workspaceToShareQuery(configurations: readonly ShelvingConfigura
   return workspaceToSearchParams(configurations, activeIndex).toString();
 }
 
+/** The versioned single-kit formats (v4 current, v2 pre-corner). */
+function isKitVersion(version: string | null): boolean {
+  return version === CONFIGURATION_URL_VERSION || version === LEGACY_CONFIGURATION_URL_VERSION;
+}
+
 function parseWorkspaceKit(value: string): Partial<ShelvingConfiguration> | undefined {
   const params = new URLSearchParams(value);
-  if (params.get('v') !== CONFIGURATION_URL_VERSION) return undefined;
+  if (!isKitVersion(params.get('v'))) return undefined;
   const kit = parseConfigurationFromSearchParams(params);
   return REQUIRED_KIT_FIELDS.every((field) => kit[field] !== undefined) ? kit : undefined;
 }

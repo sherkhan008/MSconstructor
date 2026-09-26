@@ -27,8 +27,8 @@ function shelving(overrides: Partial<ShelvingConfiguration> = {}): ShelvingConfi
     modelSlug: 'ms-standard',
     depth: 400,
     sections: [
-      { id: 's-1', width: 1000, height: 2000, shelves: 5, rearWall: true, leftWall: false, rightWall: false },
-      { id: 's-2', width: 700, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false },
+      { id: 's-1', width: 1000, height: 2000, shelves: 5, rearWall: true, leftWall: false, rightWall: false, corner: 'NONE' },
+      { id: 's-2', width: 700, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false, corner: 'NONE' },
     ],
     loadCapacity: 150,
     shelfType: 'STANDARD',
@@ -160,7 +160,7 @@ describe('item snapshot from the real pricing engine', () => {
 describe('documents from real orders reconcile under both VAT rules', () => {
   const configurations = () => [
     shelving(),
-    shelving({ sections: [{ id: 'x', width: 1000, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false }], quantity: 1, assemblyId: 'assembly-full-install', accessories: [], metalFootPad: false }),
+    shelving({ sections: [{ id: 'x', width: 1000, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false, corner: 'NONE' }], quantity: 1, assemblyId: 'assembly-full-install', accessories: [], metalFootPad: false }),
   ];
 
   for (const pricesIncludeVat of [false, true]) {

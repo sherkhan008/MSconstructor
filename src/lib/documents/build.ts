@@ -1,6 +1,6 @@
 import { CUSTOMER_TYPE_FULL_LABEL_RU } from '@/lib/orders/customer-labels';
 import { PAYMENT_METHOD_LABEL } from '@/lib/orders/payment-methods';
-import type { PaymentPreference } from '@/lib/types/domain';
+import type { PaymentPreference, SectionCorner } from '@/lib/types/domain';
 import { ORDER_DOCUMENT_TITLE_RU, type OrderDocumentKind } from './kinds';
 import { amountInWordsRu, toTiyn, type Tiyn } from './money';
 import type { OrderDocumentSource, OrderDocumentSourceItem } from './order-source';
@@ -12,6 +12,8 @@ import {
   type OrderItemDocumentSnapshot,
 } from './snapshots';
 import { getMaxSectionHeight, sectionHeightsSummary, sectionShelvesSummary } from '@/lib/configurator/section-dimensions';
+import { areSectionCornersValid, isSectionCorner } from '@/lib/configurator/corners';
+import { getRackFootprintMm } from '@/lib/configurator/rack-world';
 
 /**
  * Persisted order + issuance → document model. Pure functions, no I/O.
@@ -204,6 +206,7 @@ interface PersistedSection {
   rearWall?: boolean;
   leftWall?: boolean;
   rightWall?: boolean;
+  corner: SectionCorner;
 }
 
 interface PersistedConfiguration {
@@ -224,10 +227,14 @@ function readConfiguration(raw: unknown, index: number): PersistedConfiguration 
   }
   if (!Array.isArray(c.sections) || c.sections.length === 0) throw fail();
   const sections = c.sections.map((s) => {
-    const section = s as PersistedSection;
+    const section = s as Record<string, unknown>;
     if (!s || typeof s !== 'object' || !isPositiveInt(section.width) || !isPositiveInt(section.height) || !isPositiveInt(section.shelves)) {
       throw fail();
     }
+    // Orders placed before corners existed (V2.6) stored no orientation:
+    // every one of their sections was straight. Anything else must be a
+    // valid orientation, placed where the rules allow (checked below).
+    if (section.corner !== undefined && !isSectionCorner(section.corner)) throw fail();
     return {
       width: section.width,
       height: section.height,
@@ -235,8 +242,10 @@ function readConfiguration(raw: unknown, index: number): PersistedConfiguration 
       rearWall: section.rearWall === true,
       leftWall: section.leftWall === true,
       rightWall: section.rightWall === true,
+      corner: section.corner ?? 'NONE',
     };
   });
+  if (!areSectionCornersValid(sections)) throw fail();
   return {
     depth: c.depth,
     loadCapacity: isPositiveInt(c.loadCapacity) ? c.loadCapacity : undefined,
@@ -318,7 +327,11 @@ function buildItem(
   const deliveryName = optionalText(snapshot.deliveryName, 120);
   const options = snapshot.options.map((o) => cleanText(o, 120)).filter(Boolean);
 
-  const totalWidth = config.sections.reduce((sum, s) => sum + s.width, 0);
+  // The rack's real plan size: for a straight rack the summed widths and the
+  // depth; with corners (V2.6) the front line including each corner's depth,
+  // and the deepest reach backward (rack-world.ts).
+  const footprint = getRackFootprintMm(config.sections, config.depth);
+  const totalWidth = footprint.width;
   // Height/shelves are per section: one value when every section agrees,
   // otherwise each section's own value in row order. The overall В×Ш×Г uses
   // the row's tallest section.
@@ -330,6 +343,12 @@ function buildItem(
   const wallsSummary = anyWalls
     ? config.sections
         .map((s, i) => `${config.sections.length > 1 ? `секция ${i + 1}: ` : ''}${wallsText(s) ?? 'без стенок'}`)
+        .join('; ')
+    : undefined;
+  // "секция 1 — угол слева; секция 3 — угол справа": only when there is one.
+  const cornersSummary = config.sections.some((s) => s.corner !== 'NONE')
+    ? config.sections
+        .flatMap((s, i) => (s.corner === 'NONE' ? [] : [`секция ${i + 1} — угол ${s.corner === 'LEFT' ? 'слева' : 'справа'}`]))
         .join('; ')
     : undefined;
 
@@ -344,15 +363,17 @@ function buildItem(
   ];
   if (config.loadCapacity) specs.push({ label: 'Нагрузка на полку', value: `до ${config.loadCapacity} кг` });
   if (colorName) specs.push({ label: 'Цвет', value: colorName });
+  if (cornersSummary) specs.push({ label: 'Угловые секции', value: cornersSummary });
   if (wallsSummary) specs.push({ label: 'Стенки', value: wallsSummary });
   if (options.length > 0) specs.push({ label: 'Дополнительно', value: options.join(', ') });
   if (assemblyName) specs.push({ label: 'Сборка', value: assemblyName });
   if (deliveryName) specs.push({ label: 'Доставка', value: deliveryName });
 
   const descriptionParts = [
-    `В×Ш×Г ${overallHeight}×${totalWidth}×${config.depth} мм`,
+    `В×Ш×Г ${overallHeight}×${totalWidth}×${footprint.depth} мм`,
     config.sections.length > 1 ? `секций: ${config.sections.length} (${sectionWidths} мм)` : 'секций: 1',
     `полок: ${shelves}`,
+    cornersSummary ? `угловые секции: ${cornersSummary}` : undefined,
     config.loadCapacity ? `нагрузка на полку до ${config.loadCapacity} кг` : undefined,
     colorName ? `цвет: ${colorName}` : undefined,
     wallsSummary ? `стенки: ${wallsSummary}` : undefined,

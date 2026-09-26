@@ -77,7 +77,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
 
 /**
- * Reads a persisted current-version (v4) workspace. Browser storage is
+ * Reads a persisted current-version (v5) workspace. Browser storage is
  * untrusted: anything that is not exactly the current shape — no kits, more
  * than MAX_WORKSPACE_KITS, a malformed configuration, duplicate kit ids or a
  * section id shared by two kits — returns `undefined` (the caller resets);
@@ -87,8 +87,16 @@ const isNonEmptyString = (value: unknown): value is string => typeof value === '
  * Σ quantity is NOT clamped here: a workspace over the physical-rack limit is
  * kept as it was and shown as over the limit (cart and order refuse it), the
  * same policy as a configuration over the section limit.
+ *
+ * `readConfiguration` reads each kit's configuration: the strict current
+ * reader by default; the V2.5 (v4) migration passes the straight-section
+ * upgrade instead (see migrateConfiguratorState) — the workspace shape itself
+ * did not change.
  */
-export function readPersistedWorkspace(raw: unknown): ConfiguratorWorkspace | undefined {
+export function readPersistedWorkspace(
+  raw: unknown,
+  readConfiguration: (raw: unknown) => ShelvingConfiguration | undefined = readPersistedConfiguration,
+): ConfiguratorWorkspace | undefined {
   if (!isRecord(raw) || !Array.isArray(raw.kits)) return undefined;
   if (raw.kits.length < MIN_WORKSPACE_KITS || raw.kits.length > MAX_WORKSPACE_KITS) return undefined;
   const kits: ConfiguratorKit[] = [];
@@ -96,7 +104,7 @@ export function readPersistedWorkspace(raw: unknown): ConfiguratorWorkspace | un
   const sectionIds = new Set<string>();
   for (const rawKit of raw.kits) {
     if (!isRecord(rawKit) || !isNonEmptyString(rawKit.id) || kitIds.has(rawKit.id)) return undefined;
-    const configuration = readPersistedConfiguration(rawKit.configuration);
+    const configuration = readConfiguration(rawKit.configuration);
     if (!configuration) return undefined;
     for (const section of configuration.sections) {
       if (sectionIds.has(section.id)) return undefined;

@@ -26,7 +26,7 @@ const Provider = LocaleProvider as ComponentType<{ locale: Locale; children?: Re
 const CAPACITY = { width: 1500, height: 3000, depth: 800 };
 
 function section(id: string, width: number, height: number, shelves: number, walls: Partial<ShelvingSection> = {}): ShelvingSection {
-  return { id, width, height, shelves, rearWall: false, leftWall: false, rightWall: false, ...walls };
+  return { id, width, height, shelves, rearWall: false, leftWall: false, rightWall: false, corner: 'NONE', ...walls };
 }
 
 function load(sections: ShelvingSection[], activeSectionId = sections[0].id) {

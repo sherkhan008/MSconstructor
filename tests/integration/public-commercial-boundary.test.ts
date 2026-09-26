@@ -108,7 +108,7 @@ function config(overrides: Partial<ShelvingConfiguration> = {}): ShelvingConfigu
   return {
     modelSlug: 'ms-standard',
     depth: 500,
-    sections: [{ id: 'sec-1', width: 1000, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false }],
+    sections: [{ id: 'sec-1', width: 1000, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false, corner: 'NONE' }],
     loadCapacity: 150,
     shelfType: 'STANDARD',
     colorId: 'color-grey',
@@ -128,8 +128,8 @@ const SCENARIOS: [string, ShelvingConfiguration][] = [
     'several sections, walls, accessories',
     config({
       sections: [
-        { id: 'sec-1', width: 1000, height: 2000, shelves: 5, rearWall: true, leftWall: true, rightWall: false },
-        { id: 'sec-2', width: 1000, height: 2000, shelves: 5, rearWall: true, leftWall: false, rightWall: true },
+        { id: 'sec-1', width: 1000, height: 2000, shelves: 5, rearWall: true, leftWall: true, rightWall: false, corner: 'NONE' },
+        { id: 'sec-2', width: 1000, height: 2000, shelves: 5, rearWall: true, leftWall: false, rightWall: true, corner: 'NONE' },
       ],
       accessories: [
         { accessoryId: 'acc-adjustable-feet', quantity: 1 },

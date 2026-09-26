@@ -169,7 +169,7 @@ describe('cart store — cross-tab freshness', () => {
   });
 });
 
-describe('cart store — persisted cart policy (V2.2A, version 2)', () => {
+describe('cart store — persisted cart policy (V2.6, version 3)', () => {
   /** A cart line as V2.1 (cart version 1) stored it: row-level height/shelves. */
   function v1Item(id: string, quantity: number, overrides: Record<string, unknown> = {}) {
     const { sections, ...rest } = DEFAULT_CONFIGURATION;
@@ -182,7 +182,7 @@ describe('cart store — persisted cart policy (V2.2A, version 2)', () => {
         height: 2200,
         shelves: 6,
         quantity,
-        sections: sections.map(({ height: _h, shelves: _s, ...section }) => ({ ...section, id: `${id}-s` })),
+        sections: sections.map(({ height: _h, shelves: _s, corner: _c, ...section }) => ({ ...section, id: `${id}-s` })),
         ...overrides,
       },
       priceSnapshot: { breakdown: { total: 1 } },
@@ -190,8 +190,42 @@ describe('cart store — persisted cart policy (V2.2A, version 2)', () => {
     };
   }
 
-  it('is version 2', () => {
-    expect(CART_STATE_VERSION).toBe(2);
+  /** A cart line as V2.2A–V2.5 (cart version 2) stored it: per-section
+   * height/shelves, no `corner`. */
+  function v2Item(id: string, quantity: number) {
+    return {
+      id,
+      modelSlug: 'ms-standard',
+      modelName: 'MS Стандарт',
+      configuration: {
+        ...DEFAULT_CONFIGURATION,
+        quantity,
+        sections: DEFAULT_CONFIGURATION.sections.map(({ corner: _c, ...section }) => ({ ...section, id: `${id}-s` })),
+      },
+      priceSnapshot: { breakdown: { total: 1 } },
+      addedAt: '2026-09-01T00:00:00.000Z',
+    };
+  }
+
+  it('is version 3', () => {
+    expect(CART_STATE_VERSION).toBe(3);
+  });
+
+  it('MIGRATES a V2.5 (version 2) cart: every section becomes straight, everything else kept, snapshot cleared', () => {
+    const migrated = migrateCartState({ items: [v2Item('a', 2), v2Item('b', 3)] }, 2);
+    expect(migrated.items.map((i) => i.id)).toEqual(['a', 'b']);
+    for (const item of migrated.items) {
+      expect(item.configuration.sections).toEqual([{ ...DEFAULT_CONFIGURATION.sections[0], id: `${item.id}-s`, corner: 'NONE' }]);
+      expect(item.priceSnapshot).toBeNull();
+      expect(item.addedAt).toBe('2026-09-01T00:00:00.000Z');
+    }
+    expect(getPhysicalKitCount(migrated.items)).toBe(5);
+  });
+
+  it('RESETS a version 2 cart when any line is malformed or already carries a corner', () => {
+    const withCorner = { ...v2Item('b', 1), configuration: { ...DEFAULT_CONFIGURATION, sections: [{ ...DEFAULT_CONFIGURATION.sections[0], corner: 'LEFT' }] } };
+    expect(migrateCartState({ items: [v2Item('a', 1), withCorner] }, 2)).toEqual({ items: [] });
+    expect(migrateCartState({ items: [v2Item('a', 1), { ...v2Item('b', 1), configuration: { depth: 1 } }] }, 2)).toEqual({ items: [] });
   });
 
   it('MIGRATES a V2.1 cart: height/shelves copied into every section, snapshot cleared for a server re-price', () => {

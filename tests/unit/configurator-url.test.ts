@@ -12,9 +12,9 @@ function baseConfig(overrides: Partial<ShelvingConfiguration> = {}): ShelvingCon
     modelSlug: 'ms-standard',
     depth: 400,
     sections: [
-      { id: 'a', width: 700, height: 2000, shelves: 5, rearWall: true, leftWall: false, rightWall: false },
-      { id: 'b', width: 1500, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: true },
-      { id: 'c', width: 1000, height: 2000, shelves: 5, rearWall: false, leftWall: true, rightWall: true },
+      { id: 'a', width: 700, height: 2000, shelves: 5, rearWall: true, leftWall: false, rightWall: false, corner: 'NONE' },
+      { id: 'b', width: 1500, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: true, corner: 'NONE' },
+      { id: 'c', width: 1000, height: 2000, shelves: 5, rearWall: false, leftWall: true, rightWall: true, corner: 'NONE' },
     ],
     loadCapacity: 150,
     shelfType: 'STANDARD',
@@ -47,10 +47,10 @@ describe('configurator URL v2 — exact round trip', () => {
   it('marks the format version and has no row-level height/shelves', () => {
     const params = configurationToSearchParams(baseConfig());
     expect(params.get('v')).toBe(CONFIGURATION_URL_VERSION);
-    expect(CONFIGURATION_URL_VERSION).toBe('2');
+    expect(CONFIGURATION_URL_VERSION).toBe('4');
     expect(params.has('height')).toBe(false);
     expect(params.has('shelves')).toBe(false);
-    expect(params.get('sections')).toBe('700:2000:5:1:0:0,1500:2000:5:0:0:1,1000:2000:5:0:1:1');
+    expect(params.get('sections')).toBe('700:2000:5:1:0:0:N,1500:2000:5:0:0:1:N,1000:2000:5:0:1:1:N');
   });
 
   it('configuration → URL → configuration is exact (ids aside) for a representative spread', () => {
@@ -60,8 +60,8 @@ describe('configurator URL v2 — exact round trip', () => {
       baseConfig({ metalFootPad: true, shelfCornerBrackets: true, assemblyId: 'assembly-professional' }),
       baseConfig({
         sections: [
-          { id: 'x', width: 700, height: 1000, shelves: 4, rearWall: false, leftWall: false, rightWall: false },
-          { id: 'y', width: 1000, height: 1000, shelves: 4, rearWall: true, leftWall: true, rightWall: true },
+          { id: 'x', width: 700, height: 1000, shelves: 4, rearWall: false, leftWall: false, rightWall: false, corner: 'NONE' },
+          { id: 'y', width: 1000, height: 1000, shelves: 4, rearWall: true, leftWall: true, rightWall: true, corner: 'NONE' },
         ],
         accessories: [
           { accessoryId: 'acc-adjustable-feet', quantity: 1 },
@@ -78,6 +78,7 @@ describe('configurator URL v2 — exact round trip', () => {
           rearWall: i % 2 === 0,
           leftWall: false,
           rightWall: false,
+          corner: 'NONE',
         })),
       }),
     ];
@@ -87,7 +88,7 @@ describe('configurator URL v2 — exact round trip', () => {
       depth: 300,
       quantity: 2,
       accessories: [{ accessoryId: 'acc-adjustable-feet', quantity: 1 }],
-      sections: [{ id: 'z', width: 1200, height: 1800, shelves: 6, rearWall: true, leftWall: true, rightWall: true }],
+      sections: [{ id: 'z', width: 1200, height: 1800, shelves: 6, rearWall: true, leftWall: true, rightWall: true, corner: 'NONE' }],
     });
     for (const config of cases) {
       expect(withoutIds({ ...otherDraft, ...roundTrip(config) })).toEqual(withoutIds(config));
@@ -97,9 +98,9 @@ describe('configurator URL v2 — exact round trip', () => {
   it('carries each section’s own height and shelf count (not a shared value)', () => {
     const config = baseConfig({
       sections: [
-        { id: 'a', width: 1000, height: 1500, shelves: 4, rearWall: false, leftWall: false, rightWall: false },
-        { id: 'b', width: 1000, height: 2500, shelves: 6, rearWall: false, leftWall: false, rightWall: false },
-        { id: 'c', width: 1000, height: 1000, shelves: 3, rearWall: false, leftWall: false, rightWall: false },
+        { id: 'a', width: 1000, height: 1500, shelves: 4, rearWall: false, leftWall: false, rightWall: false, corner: 'NONE' },
+        { id: 'b', width: 1000, height: 2500, shelves: 6, rearWall: false, leftWall: false, rightWall: false, corner: 'NONE' },
+        { id: 'c', width: 1000, height: 1000, shelves: 3, rearWall: false, leftWall: false, rightWall: false, corner: 'NONE' },
       ],
     });
     const restored = roundTrip(config);
@@ -190,8 +191,8 @@ describe('configurator URL — small V2.1 legacy reader', () => {
     );
     const sections = restored.sections as ShelvingSection[];
     expect(sections.map(({ id: _id, ...s }) => s)).toEqual([
-      { width: 1000, height: 2500, shelves: 6, rearWall: true, leftWall: false, rightWall: false },
-      { width: 700, height: 2500, shelves: 6, rearWall: false, leftWall: false, rightWall: true },
+      { width: 1000, height: 2500, shelves: 6, rearWall: true, leftWall: false, rightWall: false, corner: 'NONE' },
+      { width: 700, height: 2500, shelves: 6, rearWall: false, leftWall: false, rightWall: true, corner: 'NONE' },
     ]);
     expect(restored.depth).toBe(600);
   });

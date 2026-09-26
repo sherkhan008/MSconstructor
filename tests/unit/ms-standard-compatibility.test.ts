@@ -34,7 +34,7 @@ import type { ShelvingSection } from '@/lib/types/domain';
 type RowSection = Omit<ShelvingSection, 'height' | 'shelves'> & Partial<Pick<ShelvingSection, 'height' | 'shelves'>>;
 
 function section(width: number, overrides: Partial<ShelvingSection> = {}): RowSection {
-  return { id: `sec-${width}-${Math.random()}`, width, rearWall: false, leftWall: false, rightWall: false, ...overrides };
+  return { id: `sec-${width}-${Math.random()}`, width, rearWall: false, leftWall: false, rightWall: false, corner: 'NONE', ...overrides };
 }
 
 /** A UNIFORM row stated the V2.1 way (one height/shelf count) → the V2.2A
@@ -417,6 +417,7 @@ describe('V2.2A — every section is validated with its OWN height and shelf lim
     rearWall: false,
     leftWall: false,
     rightWall: false,
+    corner: 'NONE',
   });
 
   it.each(MS_STANDARD_HEIGHTS.map((h) => [h] as const))('height %d is valid on its own section', (height) => {

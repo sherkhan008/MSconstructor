@@ -687,8 +687,8 @@ describe('historical immutability — an order placed through the real pricing p
       modelSlug: 'ms-standard',
       depth: 400,
       sections: [
-        { id: 'h-1', width: 1000, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false },
-        { id: 'h-2', width: 700, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false },
+        { id: 'h-1', width: 1000, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false, corner: 'NONE' },
+        { id: 'h-2', width: 700, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false, corner: 'NONE' },
       ],
       loadCapacity: 150,
       shelfType: 'STANDARD',

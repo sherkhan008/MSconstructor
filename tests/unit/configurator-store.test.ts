@@ -195,6 +195,7 @@ function v3State(overrides: Record<string, unknown> = {}) {
   return { config: { ...DEFAULT_CONFIGURATION, ...overrides }, activeSectionId: DEFAULT_CONFIGURATION.sections[0].id };
 }
 
+/** A kit in the current (v5) persisted shape — every section carries `corner`. */
 function v4Kit(id: string, overrides: Record<string, unknown> = {}, sectionIds = [`${id}-s0`]) {
   const sections = sectionIds.map((sid) => ({ ...DEFAULT_CONFIGURATION.sections[0], id: sid }));
   return { id, configuration: { ...DEFAULT_CONFIGURATION, sections, ...overrides }, activeSectionId: sectionIds[0] };
@@ -212,15 +213,20 @@ function expectDefault(workspace: ConfiguratorWorkspace) {
   expect(onlyKit(workspace).configuration).toBe(DEFAULT_CONFIGURATION);
 }
 
-describe('configurator store — persisted state policy (v4 workspace)', () => {
-  it('uses version 4 and persists only the kits and the active kit', () => {
-    expect(CONFIGURATOR_STATE_VERSION).toBe(4);
+/** The same workspace as the V2.5 (v4) store persisted it: no `corner`. */
+function withoutCorners<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value, (key, v) => (key === 'corner' ? undefined : v)));
+}
+
+describe('configurator store — persisted state policy (v5 workspace)', () => {
+  it('uses version 5 and persists only the kits and the active kit', () => {
+    expect(CONFIGURATOR_STATE_VERSION).toBe(5);
     loadSingleKit(DEFAULT_CONFIGURATION);
     const persisted = useConfiguratorStore.persist.getOptions().partialize!(useConfiguratorStore.getState());
     expect(Object.keys(persisted as object).sort()).toEqual(['activeKitId', 'kits']);
   });
 
-  it('round-trips a current v4 workspace unchanged: kits, order, active kit, active section per kit', () => {
+  it('round-trips a current v5 workspace unchanged: kits, order, active kit, active section per kit, corners', () => {
     const stored = JSON.parse(
       JSON.stringify({
         kits: [
@@ -230,8 +236,36 @@ describe('configurator store — persisted state policy (v4 workspace)', () => {
         activeKitId: 'k-b',
       }),
     );
+    stored.kits[0].configuration.sections[0].corner = 'LEFT';
+    stored.kits[0].configuration.sections[2].corner = 'RIGHT';
     expect(readPersistedConfiguratorState(stored)).toEqual(stored);
-    expect(migrateConfiguratorState(stored, 4)).toEqual(stored);
+    expect(migrateConfiguratorState(stored, 5)).toEqual(stored);
+  });
+
+  it('MIGRATES a V2.5 (v4) workspace losslessly: everything kept, every section straight', () => {
+    const current = JSON.parse(
+      JSON.stringify({
+        kits: [
+          { ...v4Kit('k-a', { depth: 500, quantity: 2 }, ['a0', 'a1', 'a2']), activeSectionId: 'a2' },
+          { ...v4Kit('k-b', { accessories: [{ accessoryId: 'acc-cross-brace', quantity: 1, sectionId: 'b0' }] }, ['b0']) },
+        ],
+        activeKitId: 'k-b',
+      }),
+    );
+    const v4 = withoutCorners(current);
+    expect(v4.kits[0].configuration.sections[0]).not.toHaveProperty('corner');
+    const migrated = migrateConfiguratorState(v4, 4);
+    expect(migrated).toEqual(current);
+    expect(migrated.kits.flatMap((k) => k.configuration.sections.map((s) => s.corner))).toEqual(['NONE', 'NONE', 'NONE', 'NONE']);
+  });
+
+  it('RESETS a V2.5 (v4) workspace that is malformed or already carries a corner field', () => {
+    const v4 = withoutCorners({ kits: [v4Kit('k-a')], activeKitId: 'k-a' });
+    expect(migrateConfiguratorState(v4, 4).kits[0].id).toBe('k-a');
+    const withCorner = { kits: [v4Kit('k-a')], activeKitId: 'k-a' }; // not a v4 shape
+    expectDefault(migrateConfiguratorState(withCorner, 4));
+    expectDefault(migrateConfiguratorState({ kits: [], activeKitId: 'x' }, 4));
+    expectDefault(migrateConfiguratorState(null, 4));
   });
 
   it('repairs only UI pointers: a stale active kit → the first kit, a stale active section → that kit’s first section', () => {
@@ -258,16 +292,16 @@ describe('configurator store — persisted state policy (v4 workspace)', () => {
       accessories: [{ accessoryId: 'acc-cross-brace', quantity: 1, sectionId: 'q' }],
       metalFootPad: true,
     };
-    const stored = JSON.parse(JSON.stringify({ config, activeSectionId: 'q' }));
+    const stored = withoutCorners(JSON.parse(JSON.stringify({ config, activeSectionId: 'q' })));
     const kit = onlyKit(migrateConfiguratorState(stored, 3));
-    expect(kit.configuration).toEqual(stored.config);
+    expect(kit.configuration).toEqual({ ...stored.config, sections: stored.config.sections.map((s: object) => ({ ...s, corner: 'NONE' })) });
     expect(kit.activeSectionId).toBe('q');
     expect(typeof kit.id).toBe('string');
     expect(kit.configuration).not.toHaveProperty('kits');
   });
 
   it('a migrated v3 draft keeps a valid activeSectionId and repairs a stale one', () => {
-    expect(onlyKit(migrateConfiguratorState({ ...v3State(), activeSectionId: 'gone' }, 3)).activeSectionId).toBe(
+    expect(onlyKit(migrateConfiguratorState(withoutCorners({ ...v3State(), activeSectionId: 'gone' }), 3)).activeSectionId).toBe(
       DEFAULT_CONFIGURATION.sections[0].id,
     );
   });
@@ -291,8 +325,8 @@ describe('configurator store — persisted state policy (v4 workspace)', () => {
     expect(kit.configuration).not.toHaveProperty('shelves');
     expect(kit.configuration.depth).toBe(600);
     expect(kit.configuration.sections).toEqual([
-      { id: 'a', width: 1000, height: 2500, shelves: 6, rearWall: true, leftWall: false, rightWall: false },
-      { id: 'b', width: 700, height: 2500, shelves: 6, rearWall: false, leftWall: false, rightWall: true },
+      { id: 'a', width: 1000, height: 2500, shelves: 6, rearWall: true, leftWall: false, rightWall: false, corner: 'NONE' },
+      { id: 'b', width: 700, height: 2500, shelves: 6, rearWall: false, leftWall: false, rightWall: true, corner: 'NONE' },
     ]);
     expect(kit.activeSectionId).toBe('b');
   });
@@ -357,9 +391,16 @@ describe('configurator store — persisted state policy (v4 workspace)', () => {
       kit({ accessories: [{ accessoryId: 'acc-cross-brace', quantity: 1, sectionId: 7 }] }),
       kit({ metalFootPad: 'yes' }),
       kit({ promoCode: 42 }),
+      // Corners (V2.6): missing, unknown or misplaced → reset, never guessed.
+      kit({ sections: [{ ...DEFAULT_CONFIGURATION.sections[0], corner: undefined }] }),
+      kit({ sections: [{ ...DEFAULT_CONFIGURATION.sections[0], corner: 'BACK' }] }),
+      kit({ sections: [{ ...DEFAULT_CONFIGURATION.sections[0], corner: null }] }),
+      kit({ sections: ['a', 'b', 'c'].map((id) => ({ ...DEFAULT_CONFIGURATION.sections[0], id, corner: id === 'b' ? 'LEFT' : 'NONE' })) }),
+      kit({ sections: ['a', 'b'].map((id) => ({ ...DEFAULT_CONFIGURATION.sections[0], id, corner: id === 'a' ? 'RIGHT' : 'NONE' })) }),
+      kit({ sections: ['a', 'b'].map((id) => ({ ...DEFAULT_CONFIGURATION.sections[0], id, corner: 'LEFT' })) }),
     ];
     for (const state of bad) {
-      expect(() => migrateConfiguratorState(state, 4)).not.toThrow();
+      expect(() => migrateConfiguratorState(state, 5)).not.toThrow();
       expectDefault(readPersistedConfiguratorState(state));
     }
   });

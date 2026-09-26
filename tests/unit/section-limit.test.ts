@@ -23,7 +23,7 @@ import { activeConfig, loadSingleKit } from '../helpers/workspace';
  */
 
 function sections(n: number): ShelvingSection[] {
-  return Array.from({ length: n }, (_, i) => ({ id: `s${i}`, width: 1000, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false }));
+  return Array.from({ length: n }, (_, i) => ({ id: `s${i}`, width: 1000, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false, corner: 'NONE' }));
 }
 
 function config(n: number): ShelvingConfiguration {
@@ -77,15 +77,20 @@ describe('configurator store', () => {
     expect(activeConfig().sections).toHaveLength(5);
   });
 
-  it('keeps a persisted 8-section configuration intact — not truncated (v4, migrated V2.4 v3 and V2.1 v2)', () => {
-    const [current] = migrateConfiguratorState({ config: config(8), activeSectionId: 's3' }, 3).kits;
-    expect(current.configuration.sections.map((s) => s.id)).toEqual(sections(8).map((s) => s.id));
-    expect(current.activeSectionId).toBe('s3');
+  it('keeps a persisted 8-section configuration intact — not truncated (v5, migrated V2.5 v4, V2.4 v3 and V2.1 v2)', () => {
+    // Pre-V2.6 data carries no `corner` (every section was straight).
+    const straight = { ...config(8), sections: sections(8).map(({ corner: _c, ...rest }) => rest) };
+    const [v3] = migrateConfiguratorState({ config: straight, activeSectionId: 's3' }, 3).kits;
+    expect(v3.configuration.sections.map((s) => s.id)).toEqual(sections(8).map((s) => s.id));
+    expect(v3.activeSectionId).toBe('s3');
 
-    const [v4] = migrateConfiguratorState({ kits: [{ id: 'k', configuration: config(8), activeSectionId: 's3' }], activeKitId: 'k' }, 4).kits;
+    const [v5] = migrateConfiguratorState({ kits: [{ id: 'k', configuration: config(8), activeSectionId: 's3' }], activeKitId: 'k' }, 5).kits;
+    expect(v5.configuration.sections).toEqual(sections(8));
+
+    const [v4] = migrateConfiguratorState({ kits: [{ id: 'k', configuration: straight, activeSectionId: 's3' }], activeKitId: 'k' }, 4).kits;
     expect(v4.configuration.sections).toEqual(sections(8));
 
-    const rowLevelSections = sections(8).map(({ height: _h, shelves: _s, ...rest }) => rest);
+    const rowLevelSections = sections(8).map(({ height: _h, shelves: _s, corner: _c, ...rest }) => rest);
     const v21 = { config: { ...DEFAULT_CONFIGURATION, height: 2000, shelves: 5, sections: rowLevelSections }, activeSectionId: 's3' };
     const [migrated] = migrateConfiguratorState(v21, 2).kits;
     expect(migrated.configuration.sections).toEqual(sections(8));

@@ -26,6 +26,7 @@ const section = (width: number, height: number, shelves: number, walls: Partial<
   rearWall: false,
   leftWall: false,
   rightWall: false,
+  corner: 'NONE',
   ...walls,
 });
 
@@ -161,7 +162,7 @@ describe('workspace URL v3 — safe parsing', () => {
       }, // k4 without k3
       (p) => p.set('k2', 'garbage'),
       (p) => p.set('k2', ''),
-      (p) => p.set('k2', configurationToShareQuery(kit()).replace('v=2', 'v=9')),
+      (p) => p.set('k2', configurationToShareQuery(kit()).replace('v=4', 'v=9')),
       (p) => p.set('k2', configurationToShareQuery(kit()).replace(/&sections=[^&]*/, '')),
       (p) => p.set('k2', configurationToShareQuery(kit()).replace(/sections=[^&]*/, 'sections=1000%3A2000%3A5%3A0%3A0')),
       (p) => p.set('k2', configurationToShareQuery(kit()).replace(/&qty=\d+/, '')),

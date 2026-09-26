@@ -284,15 +284,33 @@ export interface ConfigurationAccessorySelection {
 }
 
 /**
+ * How a section stands in the layout (Configurator V2.6). A corner is not a
+ * product of its own: it is the same section, physically rotated 90° at an
+ * edge of the rack so that its width runs backward from the row.
+ *
+ *   NONE   straight — continues the row (the default);
+ *   LEFT   only the FIRST section: turns backward at the rack's left edge;
+ *   RIGHT  only the LAST section: turns backward at the rack's right edge.
+ *
+ * Stored width, height and depth never change meaning with the orientation
+ * (the width is still the section's width, the kit depth still its depth);
+ * only its world placement does — see src/lib/configurator/rack-world.ts.
+ * Placement rules live in src/lib/configurator/corners.ts. Orientation never
+ * reaches pricing: a corner section has exactly the BOM and price of the
+ * same straight section.
+ */
+export type SectionCorner = 'NONE' | 'LEFT' | 'RIGHT';
+
+/**
  * One physically independent section of the shelving row. Every section owns
- * its own width, height, shelf count and wall panels (Configurator V2.2A).
- * Depth, load capacity, shelf type and colour stay kit-wide — see
- * ShelvingConfiguration.
+ * its own width, height, shelf count, wall panels (Configurator V2.2A) and
+ * orientation (V2.6). Depth, load capacity, shelf type and colour stay
+ * kit-wide — see ShelvingConfiguration.
  *
  * Pricing (V2.2B): every section is priced from its own structural BOM —
  * its own four uprights, never shared with a neighbour — so sections of
  * different heights, shelf counts and widths are priced as built. See
- * buildBom in src/lib/pricing/bom.ts.
+ * buildBom in src/lib/pricing/bom.ts. `corner` is not a BOM input.
  */
 export interface ShelvingSection {
   id: string;
@@ -302,6 +320,7 @@ export interface ShelvingSection {
   rearWall: boolean;
   leftWall: boolean;
   rightWall: boolean;
+  corner: SectionCorner;
 }
 
 /**

@@ -45,6 +45,14 @@ export interface UseDimensionDragOptions {
    * with exactly the scale the rack is drawn at, so the dragged edge stays
    * under the pointer. Captured at pointer-down for the whole gesture. */
   pxPerMm: number;
+  /** Where the dragged edge moves on screen per millimetre of the value, in
+   * viewBox units, when that is not the axis's own screen direction. V2.6:
+   * a corner section's width runs backward in the world, so its far end
+   * moves along the drawing's receding diagonal — the preview passes that
+   * exact vector and the pointer is projected onto it (see projectOnVector).
+   * Omitted: the axis's own direction at `pxPerMm`. Captured at pointer-down
+   * for the whole gesture, like `pxPerMm`. */
+  axisVectorPx?: { x: number; y: number };
   onCommit: (axis: DimensionAxis, value: number) => void;
   /** Called once per commit (drag release or keyboard step) with a human-readable message. */
   onAnnounce?: (message: string) => void;
@@ -76,6 +84,16 @@ interface GestureScale {
   unitsPerClientX: number;
   unitsPerClientY: number;
   pxPerMm: number;
+  axisVectorPx: { x: number; y: number } | null;
+}
+
+/** Millimetres the pointer moved along `vector` (viewBox units per mm): the
+ * orthogonal projection of the pointer's movement onto the edge's own screen
+ * path, so the edge stays under the pointer wherever it points. */
+export function projectOnVector(dxViewBox: number, dyViewBox: number, vector: { x: number; y: number }): number {
+  const lengthSq = vector.x * vector.x + vector.y * vector.y;
+  if (!(lengthSq > 0)) return 0;
+  return (dxViewBox * vector.x + dyViewBox * vector.y) / lengthSq;
 }
 
 /** Pointer movement along the axis, in viewBox units. */
@@ -100,6 +118,7 @@ export function useDimensionDrag({
   allowedValues,
   containerRef,
   pxPerMm,
+  axisVectorPx,
   onCommit,
   onAnnounce,
 }: UseDimensionDragOptions): UseDimensionDragResult {
@@ -123,6 +142,8 @@ export function useDimensionDrag({
   committedRef.current = committedValue;
   const pxPerMmRef = useRef(pxPerMm);
   pxPerMmRef.current = pxPerMm;
+  const axisVectorRef = useRef(axisVectorPx);
+  axisVectorRef.current = axisVectorPx;
 
   // The whole client-px → viewBox → mm conversion of one gesture, frozen at
   // pointer-down: the container's size (so a stage that re-lays out mid-drag
@@ -133,7 +154,13 @@ export function useDimensionDrag({
     const rect = containerRef.current?.getBoundingClientRect();
     const scale = pxPerMmRef.current;
     if (!rect || rect.width === 0 || rect.height === 0 || !(scale > 0)) return null;
-    return { unitsPerClientX: VIEWBOX_W / rect.width, unitsPerClientY: VIEWBOX_H / rect.height, pxPerMm: scale };
+    const vector = axisVectorRef.current;
+    return {
+      unitsPerClientX: VIEWBOX_W / rect.width,
+      unitsPerClientY: VIEWBOX_H / rect.height,
+      pxPerMm: scale,
+      axisVectorPx: vector ? { x: vector.x, y: vector.y } : null,
+    };
   }, [containerRef]);
 
   // Cancel any in-flight animation frame on unmount so a late callback never
@@ -183,7 +210,10 @@ export function useDimensionDrag({
 
       const dxViewBox = (e.clientX - startClientRef.current.x) * gesture.unitsPerClientX;
       const dyViewBox = (e.clientY - startClientRef.current.y) * gesture.unitsPerClientY;
-      const rawMm = startValueRef.current + projectDelta(axis, dxViewBox, dyViewBox) / gesture.pxPerMm;
+      const deltaMm = gesture.axisVectorPx
+        ? projectOnVector(dxViewBox, dyViewBox, gesture.axisVectorPx)
+        : projectDelta(axis, dxViewBox, dyViewBox) / gesture.pxPerMm;
+      const rawMm = startValueRef.current + deltaMm;
 
       // Every axis is a catalog value with a hard min/max — once the pointer
       // drags past the allowed max/min, the rack must stop growing/shrinking

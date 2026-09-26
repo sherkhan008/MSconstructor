@@ -87,8 +87,8 @@ describe('language switcher target (equivalent page, never the homepage)', () =>
       modelSlug: 'ms-standard',
       depth: 400,
       sections: [
-        { id: 'a', width: 1000, height: 2000, shelves: 5, rearWall: true, leftWall: false, rightWall: false },
-        { id: 'b', width: 700, height: 2000, shelves: 5, rearWall: false, leftWall: true, rightWall: true },
+        { id: 'a', width: 1000, height: 2000, shelves: 5, rearWall: true, leftWall: false, rightWall: false, corner: 'NONE' },
+        { id: 'b', width: 700, height: 2000, shelves: 5, rearWall: false, leftWall: true, rightWall: true, corner: 'NONE' },
       ],
       loadCapacity: 150,
       shelfType: 'STANDARD',
@@ -113,7 +113,7 @@ describe('language switcher target (equivalent page, never the homepage)', () =>
   it('allow-lists every key the configurator share link can contain', () => {
     const everyKey = configurationToSearchParams({
       modelSlug: 'ms-standard', depth: 400,
-      sections: [{ id: 'a', width: 1000, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false }],
+      sections: [{ id: 'a', width: 1000, height: 2000, shelves: 5, rearWall: false, leftWall: false, rightWall: false, corner: 'NONE' }],
       loadCapacity: 150, shelfType: 'STANDARD', colorId: 'color-grey',
       accessories: [{ accessoryId: 'acc-adjustable-feet', quantity: 1 }],
       assemblyId: 'assembly-self', deliveryId: 'delivery-pickup', quantity: 1,

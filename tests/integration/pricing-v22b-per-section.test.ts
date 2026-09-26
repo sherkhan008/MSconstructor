@@ -91,7 +91,7 @@ function priced(config: unknown, catalog: Catalog): PriceResult {
 let sectionCounter = 0;
 function sec(width: number, height: number, shelves: number, walls: Partial<ShelvingSection> = {}): ShelvingSection {
   sectionCounter += 1;
-  return { id: `v22b-${sectionCounter}`, width, height, shelves, rearWall: false, leftWall: false, rightWall: false, ...walls };
+  return { id: `v22b-${sectionCounter}`, width, height, shelves, rearWall: false, leftWall: false, rightWall: false, corner: 'NONE', ...walls };
 }
 
 function config(sections: ShelvingSection[], overrides: Partial<ShelvingConfiguration> = {}): ShelvingConfiguration {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
+import { Fragment, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import { flushSync } from 'react-dom';
 import type { ColorOption, ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
 import {
@@ -11,12 +11,25 @@ import {
   fitPxPerMm,
   type DimensionAxis,
 } from './resize/dimension-scale';
-import { layoutSectionFrames, rackEnvelopeMm, SHELF_FACE_OFFSET_PX, type DimensionCapacityMm } from './resize/section-geometry';
+import {
+  layoutSectionFrames,
+  rackEnvelopeMm,
+  SHELF_FACE_OFFSET_PX,
+  type DimensionCapacityMm,
+  type SectionFrame,
+} from './resize/section-geometry';
 import { useDimensionDrag } from './resize/useDimensionDrag';
 import { ResizeHandle } from './resize/ResizeHandle';
 import { MAX_SECTIONS, MIN_SECTIONS } from '@/store/configurator-store';
 import { resolveRackFill, shade } from './rack-colors';
-import { computeRenderDepthVecForSections, SHELF_LIP_HEIGHT_PX } from './shelf-depth-projection';
+import {
+  capDepthVecForCorners,
+  computeRenderDepthVecForSections,
+  SHELF_LIP_HEIGHT_PX,
+  type DepthVec,
+} from './shelf-depth-projection';
+import { hasCorners } from '@/lib/configurator/corners';
+import { getRackFootprintMm, worldFaceOf, type BoxFace } from '@/lib/configurator/rack-world';
 import { t } from '@/lib/i18n/format';
 import { CF, CT, G } from '@/lib/i18n/strings';
 import { useLocale } from '@/components/i18n/LocaleProvider';
@@ -160,6 +173,83 @@ const TIGHT_LABEL_SCALE = 1.15;
 /** Approximate rendered width of a mono section-width label, in viewBox units. */
 function sectionLabelWidth(label: number, scale: number): number {
   return String(Math.round(label)).length * 0.62 * LABEL_FONT * scale;
+}
+
+/* ---------------------------------------------------------------------------
+   Corner sections (V2.6). The drawing is a cavalier oblique projection of the
+   world (rack-world.ts): x to the right, y up, and world z (backward) along
+   the one receding diagonal every section shares. A straight section reaches
+   back by the kit depth — `depthVec` exactly as before. A corner reaches back
+   by its own WIDTH (its width runs backward), so it is drawn along the same
+   diagonal scaled by width / depth, while its front span is the kit depth.
+   Nothing is swapped: the drawing just projects each section's real
+   footprint box.
+   --------------------------------------------------------------------------- */
+
+/**
+ * The one receding vector for a full kit depth, in viewBox units: the V2.3
+ * adaptive projection over the straight sections, further capped by every
+ * corner's own shelf density at its own reach (see capDepthVecForCorners).
+ * `cornerReachMm` — the interactive preview's catalog maximum width — stands in
+ * for a corner's live width, so a width drag can never change the direction
+ * it is being dragged along. Unchanged from V2.3 when there is no corner.
+ */
+export function computeRackDepthVec(
+  frames: readonly SectionFrame[],
+  depthMm: number,
+  pxPerMm: number,
+  cornerReachMm?: number,
+): DepthVec {
+  const straight = computeRenderDepthVecForSections(
+    depthVectorPx(depthMm, pxPerMm),
+    frames.filter((f) => f.corner === 'NONE').map((f) => f.shelfYs),
+  );
+  const corners = frames
+    .filter((f) => f.corner !== 'NONE')
+    .map((f) => ({ shelfYs: f.shelfYs, recedeMm: Math.max(cornerReachMm ?? 0, f.recedeMm) }));
+  return corners.length > 0 ? capDepthVecForCorners(straight, depthMm, corners) : straight;
+}
+
+/** How far one section reaches back on screen: `depthVec` itself for a
+ * straight section, scaled to the corner's own width for a corner. */
+export function frameRecedeVec(frame: Pick<SectionFrame, 'corner' | 'recedeMm'>, depthVec: DepthVec, depthMm: number): DepthVec {
+  if (frame.corner === 'NONE' || !(depthMm > 0)) return depthVec;
+  const k = frame.recedeMm / depthMm;
+  return { dx: depthVec.dx * k, dy: depthVec.dy * k };
+}
+
+/**
+ * How far any corner's receding body reaches past the row's front end, in
+ * viewBox units (0 without corners) — so the shelf-count column and the crop
+ * can clear a corner's back. Measured with each corner at its largest
+ * possible width when `cornerReachMm` is given (the interactive preview), so
+ * it never changes during a drag.
+ */
+export function cornerRightReachPx(frames: readonly SectionFrame[], depthMm: number, pxPerMm: number, cornerReachMm?: number): number {
+  if (frames.length === 0 || !frames.some((f) => f.corner !== 'NONE')) return 0;
+  const rowEnd = frames[frames.length - 1].x + frames[frames.length - 1].width;
+  const perMm = depthVectorPx(1, pxPerMm).dx;
+  return frames.reduce((reach, f) => {
+    const recede = f.corner === 'NONE' ? depthMm : Math.max(cornerReachMm ?? 0, f.recedeMm);
+    return Math.max(reach, f.x + f.width + recede * perMm - rowEnd);
+  }, 0);
+}
+
+/** A corner's outer side along the front line — the side facing away from
+ * the row (its front, see rack-world.ts): x0 for a left corner, x1 for a
+ * right one. Its far outer upright is this point receded by its width. */
+function cornerFarOuterX(f: Pick<SectionFrame, 'x' | 'width' | 'corner'>): number {
+  return f.corner === 'LEFT' ? f.x : f.x + f.width;
+}
+
+/** The outline of a corner's whole drawn box — front face plus its receding
+ * body — as one closed path, padded like the straight sections' rectangles. */
+function cornerHullPath(f: SectionFrame, recede: DepthVec, pad: number, padTop: number, padBottom: number): string {
+  const x0 = f.x - pad;
+  const x1 = f.x + f.width + pad;
+  const top = f.top - padTop;
+  const bottom = FLOOR_Y + padBottom;
+  return `M${x0} ${top}L${x0 + recede.dx} ${top + recede.dy}L${x1 + recede.dx} ${top + recede.dy}L${x1 + recede.dx} ${bottom + recede.dy}L${x1} ${bottom}L${x0} ${bottom}Z`;
 }
 
 /**
@@ -323,9 +413,12 @@ export function framedCropWidth(
   sectionCount: number,
   depthShiftPx = SHELF_COLUMN_DEPTH_SHIFT,
   rowCeilingPx?: number,
+  /** V2.6: how far a corner's receding body reaches past the row's end (see
+   * cornerRightReachPx) — the shelf column moves past it. 0 without corners. */
+  cornerReachPx = 0,
 ): number {
   const rowCeiling = rowCeilingPx ?? (sectionCount <= 1 ? TARGET_FILL_PX : MAX_ROW_WIDTH_PX);
-  const shelfColumn = profile.depthAllowance ?? clamp(depthShiftPx, 0, SHELF_COLUMN_DEPTH_SHIFT);
+  const shelfColumn = Math.max(profile.depthAllowance ?? clamp(depthShiftPx, 0, SHELF_COLUMN_DEPTH_SHIFT), cornerReachPx);
   const base = RACK_LEFT_MARGIN + rowCeiling + SHELF_COLUMN_OFFSET + shelfColumn - profile.left;
   const solved = base / (1 - TOUCH_RADIUS_PX / NARROWEST_FRAME_PX);
   return profile.touchReserve !== null ? Math.max(base + profile.touchReserve, solved) : solved;
@@ -366,8 +459,9 @@ export function computeFramedCrop(
   depthShiftPx?: number,
   rowCeilingPx?: number,
   rowCenterX?: number,
+  cornerReachPx?: number,
 ) {
-  const minW = framedCropWidth(profile, sectionCount, depthShiftPx, rowCeilingPx);
+  const minW = framedCropWidth(profile, sectionCount, depthShiftPx, rowCeilingPx, cornerReachPx);
   const needed = Math.max(contentBottom - contentTop, 1);
   const aspect = clamp(minW / needed, profile.minAspect, profile.maxAspect);
   const w = clamp(Math.max(needed * aspect, minW), 1, Math.min(VIEWBOX_W, VIEWBOX_H * aspect));
@@ -402,18 +496,19 @@ export function computeFramedCrops(
   depth: number,
   capacityMm?: DimensionCapacityMm,
 ): { wide: FramedCrop; compact: FramedCrop } {
+  // V2.6: the envelope is the world plan bounds (a corner adds the depth to
+  // the front line and reaches back by its width), so corner geometry is
+  // always inside the frame; `envelope.depth` is the deepest reach backward.
   const envelope = rackEnvelopeMm(sections, depth, capacityMm);
   const pxPerMm = fitPxPerMm(envelope);
-  const frames = layoutSectionFrames(sections, pxPerMm, RACK_LEFT_MARGIN, FLOOR_Y);
+  const frames = layoutSectionFrames(sections, pxPerMm, RACK_LEFT_MARGIN, FLOOR_Y, depth);
   const rowTop = Math.min(...frames.map((f) => f.top));
   const rowWidth = frames.reduce((sum, f) => sum + f.width, 0);
-  const depthVec = computeRenderDepthVecForSections(
-    depthVectorPx(depth, pxPerMm),
-    frames.map((f) => f.shelfYs),
-  );
+  const depthVec = computeRackDepthVec(frames, depth, pxPerMm, capacityMm?.width);
   const envelopeTop = FLOOR_Y - envelope.height * pxPerMm;
   const envelopeRearTop = envelopeTop + depthVectorPx(envelope.depth, pxPerMm).dy;
   const rowCeiling = Math.max(envelope.rowWidth * pxPerMm, rowWidth);
+  const cornerReach = cornerRightReachPx(frames, depth, pxPerMm, capacityMm?.width);
   const cropFor = (profile: FrameProfile) =>
     computeFramedCrop(
       profile,
@@ -423,6 +518,7 @@ export function computeFramedCrops(
       depthVec.dx,
       rowCeiling,
       RACK_LEFT_MARGIN + rowCeiling / 2,
+      cornerReach,
     );
   return { wide: cropFor(WIDE_FRAME), compact: cropFor(COMPACT_FRAME) };
 }
@@ -555,6 +651,18 @@ export function ShelvingPreview({
   // converts the pointer with this exact scale.
   const envelope = rackEnvelopeMm(config.sections, config.depth, capacityMm);
   const pxPerMm = fitPxPerMm(envelope);
+  // Committed layout (not live drag values): anchors the control positions
+  // below and the receding direction a corner's width is dragged along.
+  const committedFrames = layoutSectionFrames(config.sections, pxPerMm, RACK_LEFT_MARGIN, FLOOR_Y, config.depth);
+  const committedDepthVec = computeRackDepthVec(committedFrames, config.depth, pxPerMm, capacityMm?.width);
+  // V2.6: a corner's width runs backward, so its far end moves along the
+  // receding diagonal — exactly this many viewBox units per millimetre. Width
+  // drags never change it (see computeRackDepthVec), and the hook freezes it
+  // at pointer-down anyway. Straight sections keep the plain horizontal axis.
+  const widthAxisVectorPx =
+    activeSection.corner !== 'NONE' && config.depth > 0
+      ? { x: committedDepthVec.dx / config.depth, y: committedDepthVec.dy / config.depth }
+      : undefined;
 
   const heightDrag = useDimensionDrag({
     axis: 'height',
@@ -571,6 +679,7 @@ export function ShelvingPreview({
     allowedValues: allowedDimensions?.widths ?? NO_ALLOWED,
     containerRef,
     pxPerMm,
+    axisVectorPx: widthAxisVectorPx,
     onCommit: commit,
     onAnnounce: setAnnouncement,
   });
@@ -603,8 +712,10 @@ export function ShelvingPreview({
   // Per-section world geometry at the one scale: own x/width, own top on the
   // common floor, own shelf planes. Anchored at RACK_LEFT_MARGIN, so a live
   // width drag leaves the active section's left edge and every earlier
-  // section untouched and only translates the sections after it.
-  const frames = layoutSectionFrames(visualSections, pxPerMm, RACK_LEFT_MARGIN, FLOOR_Y);
+  // section untouched and only translates the sections after it. A corner's
+  // width runs backward (V2.6): dragging it moves only its own far end.
+  const frames = layoutSectionFrames(visualSections, pxPerMm, RACK_LEFT_MARGIN, FLOOR_Y, visualDepth);
+  const withCorners = hasCorners(visualSections);
   const firstFrame = frames[0];
   const lastFrame = frames[frames.length - 1];
   const rowStart = firstFrame.x;
@@ -616,12 +727,14 @@ export function ShelvingPreview({
   const activeGeom = frames.find((f) => f.id === activeSection.id) ?? firstFrame;
 
   // Each section's own two uprights, on the centrelines just inside its own
-  // width — neighbouring sections stand side by side, never on a shared post
-  // — each running from the floor up to its OWN section's top (flush top).
-  const uprights = frames.flatMap((f, sectionIndex) => [
+  // front span — neighbouring sections stand side by side, never on a shared
+  // post — each running from the floor up to its OWN section's top (flush
+  // top). With the rear pair drawn at the section's own reach (below), these
+  // are its four uprights; a corner has exactly the same four.
+  const uprightsOf = (f: SectionFrame, sectionIndex: number) => [
     { key: `${f.id}-left`, sectionIndex, x: f.x + POST_WIDTH / 2, top: f.top },
     { key: `${f.id}-right`, sectionIndex, x: f.x + f.width - POST_WIDTH / 2, top: f.top },
-  ]);
+  ];
 
   // One color for every physical surface — uprights, shelves, panels all
   // read this same value (see rack-colors.ts) so front/rear/left/right
@@ -635,8 +748,9 @@ export function ShelvingPreview({
 
   // The shared depth at the SAME pxPerMm as width and height, along the
   // receding diagonal — the natural offset from a front-plane point to its
-  // corresponding rear-plane point, before any density adjustment.
-  const rawDepthVec = depthVectorPx(visualDepth, pxPerMm);
+  // corresponding rear-plane point, before any density adjustment
+  // (depthVectorPx, inside computeRackDepthVec).
+  //
   // The one true depth offset actually used for every piece of rear-plane
   // geometry below — rear posts, wall panels and every shelf's rear corners
   // all use this exact same vector, so a shelf always reaches its own rear
@@ -651,34 +765,61 @@ export function ShelvingPreview({
   // untouched: it's the customer's actual visual cue for "how deep is this
   // rack", and a configuration that already has enough natural air gets its
   // ordinary, uncapped perspective back unchanged.
-  const depthVec = computeRenderDepthVecForSections(
-    rawDepthVec,
-    frames.map((f) => f.shelfYs),
-  );
+  //
+  // V2.6: corners recede by their own width along this same direction, and
+  // their shelf density caps it too (see computeRackDepthVec) — a corner's
+  // reach is taken at the catalog maximum in the configurator so a width drag
+  // never changes it. Without corners this is exactly the V2.3 vector.
+  const depthVec = computeRackDepthVec(frames, visualDepth, pxPerMm, capacityMm?.width);
+  // Each section's own reach backward: depthVec for a straight section, the
+  // same direction scaled to its width for a corner.
+  const recedes = frames.map((f) => frameRecedeVec(f, depthVec, visualDepth));
 
   // One set of shelf-corner coordinates per section, from that section's own
   // shelf planes and spanning its own two upright centrelines, reused across
   // all three shelf paint passes below (top surfaces, side lips, front lips)
   // — see the "3a/3b/3c" comment where they're rendered for why that split
   // exists and why every pass needs the exact same corners.
-  const shelfCornersBySection = frames.map((f) => {
+  const shelfCornersBySection = frames.map((f, si) => {
     const left = f.x + POST_WIDTH / 2;
     const right = f.x + f.width - POST_WIDTH / 2;
+    const r = recedes[si];
     return f.shelfYs.map((y) => ({
       frontLeft: { x: left, y: y - SHELF_FACE_OFFSET_PX },
       frontRight: { x: right, y: y - SHELF_FACE_OFFSET_PX },
-      rearLeft: { x: left + depthVec.dx, y: y - SHELF_FACE_OFFSET_PX + depthVec.dy },
-      rearRight: { x: right + depthVec.dx, y: y - SHELF_FACE_OFFSET_PX + depthVec.dy },
+      rearLeft: { x: left + r.dx, y: y - SHELF_FACE_OFFSET_PX + r.dy },
+      rearRight: { x: right + r.dx, y: y - SHELF_FACE_OFFSET_PX + r.dy },
     }));
   });
 
+  // Paint groups (V2.6), back to front. A left corner stands left of the row
+  // and reaches back behind it, so the row hides part of it: it is painted
+  // first. A right corner stands right of the row and hides the row's back
+  // right edge, so it is painted last. Each group keeps the full layer order
+  // below. A straight rack is one group — exactly the V2.3 drawing.
+  const paintGroups = [
+    frames.flatMap((f, si) => (f.corner === 'LEFT' ? [si] : [])),
+    frames.flatMap((f, si) => (f.corner === 'NONE' ? [si] : [])),
+    frames.flatMap((f, si) => (f.corner === 'RIGHT' ? [si] : [])),
+  ].filter((group) => group.length > 0);
+
   // Shelf-count column: far enough past the row's right edge to clear the
   // receding shelf surfaces of a deep rack instead of sitting on top of
-  // them, capped so a deep row never pushes it outside the framed crop.
+  // them, capped so a deep row never pushes it outside the framed crop. A
+  // corner's receding body is cleared entirely (V2.6) — measured from the
+  // committed layout at the corner's largest width, so it never moves while a
+  // corner is being dragged; the crop reserves the same distance.
+  const cornerReach = cornerRightReachPx(committedFrames, config.depth, pxPerMm, capacityMm?.width);
   const shelfColumnX = Math.min(
-    rowEnd + SHELF_COLUMN_OFFSET + Math.min(depthVec.dx, SHELF_COLUMN_DEPTH_SHIFT),
+    rowEnd + SHELF_COLUMN_OFFSET + Math.max(Math.min(depthVec.dx, SHELF_COLUMN_DEPTH_SHIFT), cornerReach),
     VIEWBOX_W - 16,
   );
+  // How far the drawing reaches right of the row's front end: the rear plane
+  // of a straight rack, or a corner's far end (live, for the drawing only).
+  const drawnRightReach = withCorners
+    ? Math.max(...frames.map((f, si) => f.x + f.width + recedes[si].dx)) - rowEnd
+    : depthVec.dx;
+  const drawnTop = withCorners ? Math.min(...frames.map((f, si) => f.top + recedes[si].dy)) : rowTop + depthVec.dy;
   // The height label stays to the left of the rack, measuring the ACTIVE
   // section's height from the floor to its own top plane (a hairline
   // extension carries that level across when the active section is not the
@@ -698,9 +839,13 @@ export function ShelvingPreview({
     y: (activeGeom.top + FLOOR_Y) / 2,
   };
   // Still used to position the read-only depth dimension tag below — see
-  // the SVG dimension-tags block.
+  // the SVG dimension-tags block. It follows the last section's own receding
+  // edge, which is the kit depth only when that section is straight: a right
+  // corner reaches back by its width, so there the tag is not drawn (the
+  // depth stays in the kit parameters and characteristics).
   const depthOrigin = { x: rowEnd, y: lastFrame.top + 10 };
   const depthEnd = { x: depthOrigin.x + depthVec.dx, y: depthOrigin.y + depthVec.dy };
+  const showDepthTag = !tightLabels && lastFrame.corner === 'NONE';
 
   // Height resize discovery/drag strips: one along each section's own top
   // edge (the row's two ends extended outward). Pressing a section's strip
@@ -722,7 +867,13 @@ export function ShelvingPreview({
     drag.onPointerDown(e);
   }
 
-  const totalLengthMm = visualSections.reduce((sum, s) => sum + s.width, 0);
+  // The total dimension spans the whole front line. Straight: the summed
+  // widths, as always. With corners (V2.6) the front line also holds each
+  // corner's depth, so its real length is the rack's plan width — never the
+  // sum of widths that partly run backward.
+  const totalLengthMm = withCorners
+    ? getRackFootprintMm(visualSections, visualDepth).width
+    : visualSections.reduce((sum, s) => sum + s.width, 0);
   const canAdd = config.sections.length < MAX_SECTIONS;
   const canRemove = config.sections.length > MIN_SECTIONS;
 
@@ -734,7 +885,7 @@ export function ShelvingPreview({
   const markActive = interactive && config.sections.length > 1;
   const sectionName = t(CF['CF-025'], locale, { N: activeIndex + 1 });
 
-  const frameTop = tightFraming ? rowTop + depthVec.dy - 30 : Math.min(0, rowTop + depthVec.dy - 30);
+  const frameTop = tightFraming ? drawnTop - 30 : Math.min(0, drawnTop - 30);
 
   // Framed workspace crop (see computeFramedCrops): frames the physical
   // envelope the scale was fitted to — in the configurator the largest rack
@@ -774,7 +925,6 @@ export function ShelvingPreview({
   // the missing distance, onto the top of the upright. Side and offset come
   // from the COMMITTED layout, so neither changes during a drag and the
   // handle keeps following the pointer 1:1.
-  const committedFrames = layoutSectionFrames(config.sections, pxPerMm, RACK_LEFT_MARGIN, FLOOR_Y);
   const committedActive = committedFrames[activeIndex] ?? committedFrames[0];
   const handleDrop = Math.min(
     Math.max(0, spacing - (committedActive.top - addButtonY(committedActive.top))),
@@ -799,11 +949,21 @@ export function ShelvingPreview({
   };
   // The width handle rides the active section's right upright at mid-height,
   // moved down (never below the floor) when that would be within one target
-  // of the height handle — the case of a short section.
-  const widthHandlePoint = {
-    x: activeGeom.x + activeGeom.width,
-    y: Math.min(FLOOR_Y - pxToUnits(HANDLE_DISC_CLEARANCE_PX), Math.max((activeGeom.top + FLOOR_Y) / 2, heightHandlePoint.y + spacing)),
-  };
+  // of the height handle — the case of a short section. A corner's width
+  // runs backward (V2.6): its handle rides the corner's FAR outer upright at
+  // mid-height instead, and moves along the receding diagonal as it is
+  // dragged — the drag hook projects the pointer onto that same diagonal.
+  const activeRecede = recedes[activeIndex] ?? depthVec;
+  const widthHandlePoint =
+    activeGeom.corner === 'NONE'
+      ? {
+          x: activeGeom.x + activeGeom.width,
+          y: Math.min(FLOOR_Y - pxToUnits(HANDLE_DISC_CLEARANCE_PX), Math.max((activeGeom.top + FLOOR_Y) / 2, heightHandlePoint.y + spacing)),
+        }
+      : {
+          x: cornerFarOuterX(activeGeom) + activeRecede.dx,
+          y: (activeGeom.top + FLOOR_Y) / 2 + activeRecede.dy,
+        };
   const stageVars = (crop: FramedCrop, prefix: string) => ({
     [`--stage-${prefix}-w`]: `${(VIEWBOX_W / crop.w) * 100}%`,
     [`--stage-${prefix}-h`]: `${(VIEWBOX_H / crop.h) * 100}%`,
@@ -813,7 +973,7 @@ export function ShelvingPreview({
 
   const drawing = (
     <>
-      <svg viewBox={presentation && !interactive ? `0 ${frameTop} ${rowEnd + depthVec.dx + 50} ${FLOOR_Y + 110 - frameTop}` : `0 0 ${VIEWBOX_W} ${VIEWBOX_H}`} className="h-full w-full" role="img" aria-label={t(CF['CF-006'], locale)}>
+      <svg viewBox={presentation && !interactive ? `0 ${frameTop} ${rowEnd + drawnRightReach + 50} ${FLOOR_Y + 110 - frameTop}` : `0 0 ${VIEWBOX_W} ${VIEWBOX_H}`} className="h-full w-full" role="img" aria-label={t(CF['CF-006'], locale)}>
         {/* 0. Floor reference — one hairline for the rack's feet to stand on,
              in the lightest line token, behind every structural element. A
              single ground line, not a grid: no blueprint squares, no
@@ -821,7 +981,7 @@ export function ShelvingPreview({
         <line
           x1={rowStart - 34}
           y1={FLOOR_Y + FOOT_HEIGHT}
-          x2={rowEnd + depthVec.dx + 20}
+          x2={rowEnd + drawnRightReach + 20}
           y2={FLOOR_Y + FOOT_HEIGHT}
           stroke={DRAW_HAIRLINE}
           strokeWidth={1}
@@ -835,14 +995,20 @@ export function ShelvingPreview({
              centreline. Same fill as every other upright (see rack-colors.ts)
              — depth reads from the perspective offset and the thin edge
              stroke below, never from a darker "far" color. Every section has
-             its own rear pair, rising to its own top. */}
-        {uprights.map((u) => (
+             its own rear pair, rising to its own top, at its own reach back
+             (a corner's far pair — V2.6).
+
+             Layers 1–4 are painted once per paint group (see paintGroups):
+             left corner, straight row, right corner. */}
+        {paintGroups.map((group, gi) => (
+          <Fragment key={`paint-group-${gi}`}>
+        {group.flatMap((si) => uprightsOf(frames[si], si)).map((u) => (
           <g key={`rear-post-${u.key}`}>
             <rect
               data-upright="rear"
               data-section-index={u.sectionIndex}
-              x={u.x + depthVec.dx - POST_WIDTH / 2}
-              y={u.top + depthVec.dy}
+              x={u.x + recedes[u.sectionIndex].dx - POST_WIDTH / 2}
+              y={u.top + recedes[u.sectionIndex].dy}
               width={POST_WIDTH}
               height={FLOOR_Y - u.top}
               fill={fill}
@@ -850,27 +1016,34 @@ export function ShelvingPreview({
               strokeWidth={0.5}
             />
             {perforationYs(u.top, FLOOR_Y).map((y, hi) => (
-              <circle key={hi} cx={u.x + depthVec.dx} cy={y + depthVec.dy} r={HOLE_RADIUS} fill="#FFFFFF" />
+              <circle key={hi} cx={u.x + recedes[u.sectionIndex].dx} cy={y + recedes[u.sectionIndex].dy} r={HOLE_RADIUS} fill="#FFFFFF" />
             ))}
           </g>
         ))}
 
         {/* 2. Wall panels — only when the customer actually selected them,
-             each on its own section's uprights and up to its own top. */}
-        {frames.map((f, si) => (
-          <g key={`walls-${f.id}`} data-section-index={si}>
-            <WallPanels
-              section={f.section}
-              left={f.x + POST_WIDTH / 2}
-              right={f.x + f.width - POST_WIDTH / 2}
-              top={f.top}
-              bottom={FLOOR_Y}
-              depthVec={depthVec}
-              darkFill={darkFill}
-              lightFill={lightFill}
-            />
-          </g>
-        ))}
+             each on its own section's uprights and up to its own top, on the
+             face its orientation puts it (rack-world.ts's worldFaceOf). A
+             panel on a corner's near end (facing the viewer) is painted after
+             the shelves instead — see 3d. */}
+        {group.map((si) => {
+          const f = frames[si];
+          return (
+            <g key={`walls-${f.id}`} data-section-index={si}>
+              <WallPanels
+                frame={f}
+                left={f.x + POST_WIDTH / 2}
+                right={f.x + f.width - POST_WIDTH / 2}
+                top={f.top}
+                bottom={FLOOR_Y}
+                depthVec={recedes[si]}
+                darkFill={darkFill}
+                lightFill={lightFill}
+                faces="behind"
+              />
+            </g>
+          );
+        })}
 
         {/* 3. Shelf planes — a receding top surface plus folded lips on the
              front edge AND both depth (side) edges, all fully opaque painted
@@ -908,8 +1081,8 @@ export function ShelvingPreview({
              gives the correct visual priority: horizontal front lip on top
              (primary cue), side lips beneath it but above the top surfaces
              (secondary detail), top surfaces as the base wash. */}
-        {frames.map((f, si) => (
-          <g key={`shelf-tops-${f.id}`}>
+        {group.map((si) => (
+          <g key={`shelf-tops-${frames[si].id}`}>
             {shelfCornersBySection[si].map((c, i) => (
               <polygon
                 key={i}
@@ -926,8 +1099,8 @@ export function ShelvingPreview({
              left lip land on the exact same coincident line, and stacking
              two identical opaque fills there is visually inert, but a
              stroke would double up into a visibly darker seam. */}
-        {frames.map((f, si) => (
-          <g key={`shelf-sidelips-${f.id}`}>
+        {group.map((si) => (
+          <g key={`shelf-sidelips-${frames[si].id}`}>
             {shelfCornersBySection[si].map((c, i) => (
               <g key={i}>
                 <polygon
@@ -945,8 +1118,8 @@ export function ShelvingPreview({
         {/* 3c. Front lips — see the paint-order note above: always the last
              shelf layer, so every one of these stays visible regardless of
              shelf count or depth. */}
-        {frames.map((f, si) => (
-          <g key={`shelf-frontlips-${f.id}`}>
+        {group.map((si) => (
+          <g key={`shelf-frontlips-${frames[si].id}`}>
             {shelfCornersBySection[si].map((c, i) => (
               <rect
                 key={i}
@@ -965,6 +1138,30 @@ export function ShelvingPreview({
           </g>
         ))}
 
+        {/* 3d. A wall panel on a corner's near end (V2.6) — the only panel
+             that faces the viewer, so it stands in front of that corner's
+             shelves; its own uprights (4) are still painted over it. */}
+        {group.some((si) => hasNearEndPanel(frames[si])) &&
+          group.map((si) => {
+            const f = frames[si];
+            if (!hasNearEndPanel(f)) return null;
+            return (
+              <g key={`near-walls-${f.id}`} data-section-index={si}>
+                <WallPanels
+                  frame={f}
+                  left={f.x + POST_WIDTH / 2}
+                  right={f.x + f.width - POST_WIDTH / 2}
+                  top={f.top}
+                  bottom={FLOOR_Y}
+                  depthVec={recedes[si]}
+                  darkFill={darkFill}
+                  lightFill={lightFill}
+                  faces="near"
+                />
+              </g>
+            );
+          })}
+
         {/* 4. Front posts + feet. Same fill as the rear posts above — a tiny
              highlight stroke is the only thing distinguishing "closer to the
              viewer" from the rear posts' edge-shade stroke, per the "same
@@ -973,7 +1170,7 @@ export function ShelvingPreview({
              plain bar — subtle (small, evenly spaced) so the rack doesn't
              turn visually noisy. Each section's own pair, each ending flush
              with its own section's top shelf. */}
-        {uprights.map((u) => (
+        {group.flatMap((si) => uprightsOf(frames[si], si)).map((u) => (
           <g key={`front-post-${u.key}`}>
             <rect
               data-upright="front"
@@ -992,6 +1189,8 @@ export function ShelvingPreview({
             <rect x={u.x - FOOT_WIDTH / 2} y={FLOOR_Y} width={FOOT_WIDTH} height={FOOT_HEIGHT} fill={STEEL_FOOT} />
           </g>
         ))}
+          </Fragment>
+        ))}
 
         {/* 4b. Selected section — a single hairline graphite rectangle just
              outside the section's own uprights. Deliberately an outline and
@@ -1002,18 +1201,23 @@ export function ShelvingPreview({
              pick up a graphite ring — so selection stays legible without
              flooding the rack with accent colour. Only drawn when there is
              more than one section to tell apart. */}
-        {markActive && (
-          <rect
-            x={activeGeom.x - 3}
-            y={activeGeom.top - 7}
-            width={activeGeom.width + 6}
-            height={FLOOR_Y - activeGeom.top + 14}
-            fill="none"
-            stroke={DRAW_INK}
-            strokeWidth={1}
-            pointerEvents="none"
-          />
-        )}
+        {markActive &&
+          (activeGeom.corner === 'NONE' ? (
+            <rect
+              x={activeGeom.x - 3}
+              y={activeGeom.top - 7}
+              width={activeGeom.width + 6}
+              height={FLOOR_Y - activeGeom.top + 14}
+              fill="none"
+              stroke={DRAW_INK}
+              strokeWidth={1}
+              pointerEvents="none"
+            />
+          ) : (
+            // A corner's outline follows its whole drawn box, receding body
+            // included (V2.6).
+            <path d={cornerHullPath(activeGeom, activeRecede, 3, 7, 7)} fill="none" stroke={DRAW_INK} strokeWidth={1} pointerEvents="none" />
+          ))}
 
         {/* 5. Interactive hit-areas + hover-only outline. `activeSectionId`
              keeps driving real selection (width drag, SectionTable), but the
@@ -1025,12 +1229,22 @@ export function ShelvingPreview({
           // outline (4b above), so hovering it must not stack a second box
           // on top of the first.
           const isHovered = interactive && section.id === hoveredSectionId && !(markActive && isActive);
+          // A corner's hit area and hover outline cover its whole drawn box
+          // (V2.6). Hit areas are painted in row order — left corner first,
+          // right corner last — so where two overlap on screen the section
+          // drawn in front wins, exactly as in the drawing.
+          const hull = section.corner === 'NONE' ? null : (pad: number, padY: number) => cornerHullPath(section, recedes[i], pad, padY, padY);
+          const cornerLabel = section.corner === 'LEFT' ? CF['CF-122'] : section.corner === 'RIGHT' ? CF['CF-123'] : null;
           return (
             <g
               key={`hit-${section.id}`}
               role={interactive ? 'button' : undefined}
               tabIndex={interactive ? 0 : undefined}
-              aria-label={interactive ? t(CF['CF-008'], locale, { N: i + 1, W: section.section.width }) : undefined}
+              aria-label={
+                interactive
+                  ? `${t(CF['CF-008'], locale, { N: i + 1, W: section.section.width })}${cornerLabel ? ` · ${t(cornerLabel, locale)}` : ''}`
+                  : undefined
+              }
               aria-pressed={interactive ? isActive : undefined}
               onClick={interactive ? () => onSelectSection?.(section.id) : undefined}
               onKeyDown={
@@ -1056,8 +1270,15 @@ export function ShelvingPreview({
               className={interactive ? 'outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blueprint' : undefined}
               style={interactive ? { cursor: 'pointer' } : undefined}
             >
-              <rect x={section.x} y={section.top - 6} width={section.width} height={FLOOR_Y - section.top + 12} fill="transparent" />
-              {isHovered && (
+              {hull ? (
+                <path d={hull(0, 6)} fill="transparent" />
+              ) : (
+                <rect x={section.x} y={section.top - 6} width={section.width} height={FLOOR_Y - section.top + 12} fill="transparent" />
+              )}
+              {isHovered && hull && (
+                <path d={hull(3, 7)} fill="none" stroke={DRAW_INK_SOFT} strokeWidth={1} strokeDasharray="3 3" pointerEvents="none" />
+              )}
+              {isHovered && !hull && (
                 <rect
                   x={section.x - 3}
                   y={section.top - 7}
@@ -1125,17 +1346,21 @@ export function ShelvingPreview({
             })}
             {frames.map((section, i) => {
               const isActiveZone = section.id === activeSection.id;
+              // A corner's width moves its far end (V2.6): its zone is its far
+              // outer upright, where its width handle rides.
+              const r = section.corner === 'NONE' ? { dx: 0, dy: 0 } : recedes[i];
+              const edgeX = section.corner === 'NONE' ? section.x + section.width : cornerFarOuterX(section) + r.dx;
               return (
                 <rect
                   key={`width-zone-${section.id}`}
                   data-testid="width-resize-zone"
                   data-section-index={i}
-                  x={section.x + section.width - 16}
-                  y={section.top}
+                  x={edgeX - 16}
+                  y={section.top + r.dy}
                   width={32}
                   height={FLOOR_Y - section.top + 10}
                   fill="transparent"
-                  style={{ cursor: 'ew-resize' }}
+                  style={{ cursor: section.corner === 'NONE' ? 'ew-resize' : 'nesw-resize' }}
                   onPointerEnter={isActiveZone ? () => setWidthZoneHovered(true) : undefined}
                   onPointerLeave={isActiveZone ? () => setWidthZoneHovered(false) : undefined}
                   onPointerDown={(e) => startZoneDrag(widthDrag, e, section.id)}
@@ -1178,7 +1403,7 @@ export function ShelvingPreview({
           )}
           {/* Depth: a leader following the rack's own perspective diagonal,
                from the front upright back to the rear plane. */}
-          {!tightLabels && <line x1={depthOrigin.x} y1={depthOrigin.y} x2={depthEnd.x} y2={depthEnd.y} stroke={DRAW_LINE} strokeWidth={0.75} />}
+          {showDepthTag && <line x1={depthOrigin.x} y1={depthOrigin.y} x2={depthEnd.x} y2={depthEnd.y} stroke={DRAW_LINE} strokeWidth={0.75} />}
         </g>
         <DimensionTag
           x={heightLabelPoint.x}
@@ -1189,13 +1414,43 @@ export function ShelvingPreview({
           scale={labelScale}
           testId="height-dimension-tag"
         />
-        {!tightLabels && (
+        {showDepthTag && (
           <DimensionTag x={depthEnd.x} y={depthEnd.y} label={`${config.depth}`} active={false} orientation="horizontal" testId="depth-dimension-tag" scale={labelScale} />
         )}
 
         {frames.map((section) => {
           const isDraggingThis = widthDrag.isDragging && section.id === activeSection.id;
           const label = isDraggingThis ? (widthDrag.snapTarget ?? section.section.width) : section.section.width;
+          const active = isDraggingThis || (markActive && section.id === activeSection.id);
+          // A corner's front span is the kit depth, not its width, which runs
+          // backward (V2.6): its value is marked ↗ and anchored at its edge
+          // facing the row, so it may extend outward past the rack's end —
+          // it is the stored width, never the drawn span.
+          if (section.corner !== 'NONE') {
+            // It may only extend outward, and only as far as the visible
+            // crop: a value that does not fit there is left out, like any
+            // other (the section list always states it). "↗ " is two more
+            // characters than the value.
+            const labelW = sectionLabelWidth(label, labelScale) + 2 * 0.62 * LABEL_FONT * labelScale;
+            const x = section.corner === 'LEFT' ? section.x + section.width - 1 : section.x + 1;
+            const room =
+              section.corner === 'LEFT'
+                ? x - (appliedCrop?.x ?? Number.NEGATIVE_INFINITY) - 2
+                : (appliedCrop ? appliedCrop.x + appliedCrop.w : Number.POSITIVE_INFINITY) - x - 2;
+            if (labelW > room) return null;
+            return (
+              <SectionWidthLabel
+                key={`label-${section.id}`}
+                x={x}
+                y={FLOOR_Y + 13}
+                label={label}
+                active={active}
+                scale={labelScale}
+                receding
+                anchor={section.corner === 'LEFT' ? 'end' : 'start'}
+              />
+            );
+          }
           // A value that would not fit under its own section is left out
           // rather than overlapping its neighbour's — every section's width
           // is always in the section list, and the total stays drawn.
@@ -1206,7 +1461,7 @@ export function ShelvingPreview({
               x={section.x + section.width / 2}
               y={FLOOR_Y + 13}
               label={label}
-              active={isDraggingThis || (markActive && section.id === activeSection.id)}
+              active={active}
               scale={labelScale}
             />
           );
@@ -1280,8 +1535,10 @@ export function ShelvingPreview({
                   type="button"
                   disabled={!canAdd}
                   onClick={() => onAddSectionAfter?.(section.id)}
-                  title={t(CF['CF-015'], locale, { N: i + 1 })}
-                  aria-label={t(CF['CF-016'], locale, { N: i + 1 })}
+                  // A right corner stays the last section, so the store inserts
+                  // the new section before it (V2.6) — and the label says so.
+                  title={section.corner === 'RIGHT' ? t(CF['CF-126'], locale, { N: i + 1 }) : t(CF['CF-015'], locale, { N: i + 1 })}
+                  aria-label={section.corner === 'RIGHT' ? t(CF['CF-126'], locale, { N: i + 1 }) : t(CF['CF-016'], locale, { N: i + 1 })}
                   className={CIRCLE_HIT}
                 >
                   <span
@@ -1439,13 +1696,36 @@ export function ShelvingPreview({
 // the flush-top offset now live alongside the rest of its world geometry).
 export { computeShelfYs, SHELF_FACE_OFFSET_PX } from './resize/section-geometry';
 
+const WALLS = [
+  { wall: 'rear', key: 'rearWall' },
+  { wall: 'left', key: 'leftWall' },
+  { wall: 'right', key: 'rightWall' },
+] as const;
+
+/** The selected walls of one section with the face of its box each one
+ * stands on — from the section's own world transform (V2.6): a straight
+ * section's rear wall is its back face and its end walls its sides; a
+ * corner's rear wall is a side of its box and its end walls are its near and
+ * far faces. */
+function sectionWallFaces(frame: Pick<SectionFrame, 'section' | 'placement'>): { wall: 'rear' | 'left' | 'right'; face: BoxFace }[] {
+  return WALLS.filter(({ key }) => frame.section[key]).map(({ wall }) => ({ wall, face: worldFaceOf(frame.placement, wall) }));
+}
+
+/** True when a selected wall stands on the section's near face (z = 0) —
+ * only ever an end wall of a corner. */
+function hasNearEndPanel(frame: Pick<SectionFrame, 'section' | 'placement'>): boolean {
+  return sectionWallFaces(frame).some(({ face }) => face === 'zMin');
+}
+
 /** Rear wall / left wall / right wall — only rendered when the customer
  * actually selected them, on the section's own upright centrelines (`left`,
- * `right`) and up to its own `top`. Fully opaque painted metal panels, same
- * light-grey family as the rest of the rack — no transparency, subtle
- * shading only. */
+ * `right`) and up to its own `top`, on the box face its orientation puts
+ * them (see sectionWallFaces). `faces` picks the panels behind the shelves
+ * (every face but the near one) or the near-face panels painted in front of
+ * them. Fully opaque painted metal panels, same light-grey family as the rest
+ * of the rack — no transparency, subtle shading only. */
 function WallPanels({
-  section: s,
+  frame,
   left,
   right,
   top,
@@ -1453,35 +1733,33 @@ function WallPanels({
   depthVec,
   darkFill,
   lightFill,
+  faces,
 }: {
-  section: ShelvingSection;
+  frame: Pick<SectionFrame, 'section' | 'placement'>;
   left: number;
   right: number;
   top: number;
   bottom: number;
+  /** This section's own reach backward (a corner's is its width). */
   depthVec: { dx: number; dy: number };
   darkFill: string;
   lightFill: string;
+  faces: 'behind' | 'near';
 }) {
+  const { dx, dy } = depthVec;
+  const points: Record<BoxFace, string> = {
+    zMax: `${left + dx},${top + dy} ${right + dx},${top + dy} ${right + dx},${bottom + dy} ${left + dx},${bottom + dy}`,
+    xMin: `${left},${top} ${left},${bottom} ${left + dx},${bottom + dy} ${left + dx},${top + dy}`,
+    xMax: `${right},${top} ${right},${bottom} ${right + dx},${bottom + dy} ${right + dx},${top + dy}`,
+    zMin: `${left},${top} ${right},${top} ${right},${bottom} ${left},${bottom}`,
+  };
   return (
     <>
-      {s.rearWall && (
-        <polygon
-          data-wall="rear"
-          points={`${left + depthVec.dx},${top + depthVec.dy} ${right + depthVec.dx},${top + depthVec.dy} ${right + depthVec.dx},${bottom + depthVec.dy} ${left + depthVec.dx},${bottom + depthVec.dy}`}
-          fill={darkFill}
-        />
-      )}
-      {s.leftWall && (
-        <polygon data-wall="left" points={`${left},${top} ${left},${bottom} ${left + depthVec.dx},${bottom + depthVec.dy} ${left + depthVec.dx},${top + depthVec.dy}`} fill={lightFill} />
-      )}
-      {s.rightWall && (
-        <polygon
-          data-wall="right"
-          points={`${right},${top} ${right},${bottom} ${right + depthVec.dx},${bottom + depthVec.dy} ${right + depthVec.dx},${top + depthVec.dy}`}
-          fill={lightFill}
-        />
-      )}
+      {sectionWallFaces(frame)
+        .filter(({ face }) => (faces === 'near' ? face === 'zMin' : face !== 'zMin'))
+        .map(({ wall, face }) => (
+          <polygon key={wall} data-wall={wall} data-face={face} points={points[face]} fill={face === 'zMax' ? darkFill : lightFill} />
+        ))}
     </>
   );
 }
@@ -1497,6 +1775,8 @@ export function SectionWidthLabel({
   label,
   active,
   scale = 1,
+  receding = false,
+  anchor = 'middle',
 }: {
   x: number;
   y: number;
@@ -1504,19 +1784,23 @@ export function SectionWidthLabel({
   active: boolean;
   /** Readability enlargement (see ShelvingPreview's labelScale); 1 elsewhere. */
   scale?: number;
+  /** V2.6: a corner's width, which runs backward — prefixed "↗", the
+   * drawing's receding direction. */
+  receding?: boolean;
+  anchor?: 'start' | 'middle' | 'end';
 }) {
   return (
     <text
       x={x}
       y={y + 3.5 * scale}
-      textAnchor="middle"
+      textAnchor={anchor}
       fontFamily="IBM Plex Mono, monospace"
       fontSize={LABEL_FONT * scale}
       fontWeight={active ? 700 : 500}
       fill={active ? DRAW_INK : DRAW_INK_SOFT}
       pointerEvents="none"
     >
-      {String(Math.round(label))}
+      {receding ? `↗ ${Math.round(label)}` : String(Math.round(label))}
     </text>
   );
 }

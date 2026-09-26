@@ -3,6 +3,7 @@ import type { Locale } from '@/lib/i18n/locales';
 import { t } from '@/lib/i18n/format';
 import { VL } from '@/lib/i18n/strings';
 import { MAX_SECTIONS, MIN_SECTIONS } from '@/lib/configurator/limits';
+import { areSectionCornersValid, SECTION_CORNERS } from '@/lib/configurator/corners';
 import { getPhysicalKitCount, MAX_KITS_PER_ORDER } from '@/lib/orders/limits';
 
 /**
@@ -38,9 +39,16 @@ export const configurationAccessorySchema = z.object({
 
 export { MAX_SECTIONS, MIN_SECTIONS };
 
+export const sectionCornerSchema = z.enum(SECTION_CORNERS);
+
 /** Every section owns its own width, height and shelf count (V2.2A). There
  * is no row-level height/shelves field; the per-model matrix (which heights,
- * how many shelves for that height) is checked in compatibility.ts. */
+ * how many shelves for that height) is checked in compatibility.ts.
+ *
+ * `corner` (V2.6): any value other than the three orientations is rejected.
+ * Only an ABSENT value means straight — a configuration saved or ordered
+ * before corners existed (every section of it was straight). Where a corner
+ * may stand is checked on the whole section list below. */
 export const shelvingSectionSchema = z.object({
   id: z.string().min(1).max(64),
   width: z.number().int().min(300).max(6000),
@@ -49,6 +57,7 @@ export const shelvingSectionSchema = z.object({
   rearWall: z.boolean(),
   leftWall: z.boolean(),
   rightWall: z.boolean(),
+  corner: sectionCornerSchema.default('NONE'),
 });
 
 const kzPhoneRegex = /^\+?7\d{10}$/;
@@ -102,7 +111,11 @@ function buildSchemas(locale: Locale) {
       .array(shelvingSectionSchema)
       .min(MIN_SECTIONS, t(VL['VL-010'], locale))
       .max(MAX_SECTIONS, t(VL['VL-011'], locale, { N: MAX_SECTIONS }))
-      .refine((sections) => new Set(sections.map((s) => s.id)).size === sections.length, t(VL['VL-012'], locale)),
+      .refine((sections) => new Set(sections.map((s) => s.id)).size === sections.length, t(VL['VL-012'], locale))
+      // Corner placement (V2.6, src/lib/configurator/corners.ts): LEFT only
+      // on the first section, RIGHT only on the last, at most two. Rejected,
+      // never re-interpreted — a forged corner is not moved or dropped.
+      .refine((sections) => areSectionCornersValid(sections), t(VL['VL-019'], locale)),
     loadCapacity: z.number().int().min(1).max(2000),
     shelfType: shelfTypeSchema,
     colorId: z.string().min(1).max(100),

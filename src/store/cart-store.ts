@@ -5,7 +5,7 @@ import { persist } from 'zustand/middleware';
 import type { ShelvingConfiguration } from '@/lib/types/domain';
 import type { PublicPriceResult } from '@/lib/pricing/public-result';
 import { canAddKits } from '@/lib/orders/limits';
-import { upgradeRowLevelConfiguration } from '@/lib/configurator/persisted-configuration';
+import { upgradeRowLevelConfiguration, upgradeStraightConfiguration } from '@/lib/configurator/persisted-configuration';
 
 /**
  * Cart state. Persisted to localStorage so a customer's cart survives a
@@ -25,7 +25,7 @@ import { upgradeRowLevelConfiguration } from '@/lib/configurator/persisted-confi
 
 export const CART_STORAGE_KEY = 'ms-shelving-cart';
 /** Persisted cart version — see migrateCartState. */
-export const CART_STATE_VERSION = 2;
+export const CART_STATE_VERSION = 3;
 
 /** Why a cart mutation was refused. The cart is unchanged whenever `ok` is false. */
 export type CartMutationFailure = { ok: false; reason: 'KIT_LIMIT' | 'NOT_FOUND' };
@@ -166,6 +166,7 @@ export const useCartStore = create<CartState>()(
     }),
     {
       name: CART_STORAGE_KEY,
+      // v3 (V2.6): every section carries its orientation (`corner`);
       // v2 (V2.2A): configurations carry height/shelves per section.
       version: CART_STATE_VERSION,
       migrate: (persistedState, version) => migrateCartState(persistedState, version),
@@ -176,12 +177,17 @@ export const useCartStore = create<CartState>()(
 /**
  * Persisted-cart policy (pre-launch project, no real customer carts):
  *
- *   v2 (current)  loaded as-is.
+ *   v3 (current)  loaded as-is.
+ *   v2 (V2.2A–V2.5) MIGRATED item by item: every section becomes straight
+ *                 (`corner: 'NONE'` — lossless, it had no corners), and the
+ *                 price snapshot is cleared so the cart re-prices against the
+ *                 server. If ANY item is malformed the whole cart is RESET.
  *   v1 (V2.1)     MIGRATED item by item: each configuration's one row-level
  *                 height/shelf count is copied into every section (lossless),
- *                 and the price snapshot is cleared so the cart re-prices
- *                 against the server. If ANY item is malformed the whole
- *                 test cart is RESET to empty — never partially kept.
+ *                 every section straight, and the price snapshot is cleared
+ *                 so the cart re-prices against the server. If ANY item is
+ *                 malformed the whole test cart is RESET to empty — never
+ *                 partially kept.
  *   anything else RESET to empty.
  *
  * Quantities are carried over unchanged, so the Σ quantity ≤ 5 limit is
@@ -190,13 +196,14 @@ export const useCartStore = create<CartState>()(
  */
 export function migrateCartState(persistedState: unknown, version: number): { items: CartItem[] } {
   try {
-    if (version !== 1) return { items: [] };
+    const upgrade = version === 1 ? upgradeRowLevelConfiguration : version === 2 ? upgradeStraightConfiguration : undefined;
+    if (!upgrade) return { items: [] };
     const rawItems = (persistedState as { items?: unknown } | null | undefined)?.items;
     if (!Array.isArray(rawItems)) return { items: [] };
     const items: CartItem[] = [];
     for (const raw of rawItems) {
       const item = raw as Partial<CartItem> | null;
-      const configuration = upgradeRowLevelConfiguration(item?.configuration);
+      const configuration = upgrade(item?.configuration);
       if (!item || !configuration || typeof item.id !== 'string' || typeof item.modelSlug !== 'string') return { items: [] };
       items.push({
         id: item.id,

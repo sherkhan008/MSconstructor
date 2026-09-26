@@ -82,9 +82,9 @@ function mixed(overrides: Partial<ShelvingConfiguration> = {}): ShelvingConfigur
     modelSlug: 'ms-standard',
     depth: 400,
     sections: [
-      { id: 'a', width: 1000, height: 1500, shelves: 4, rearWall: false, leftWall: false, rightWall: false },
-      { id: 'b', width: 1000, height: 2500, shelves: 4, rearWall: false, leftWall: false, rightWall: false },
-      { id: 'c', width: 1000, height: 1000, shelves: 4, rearWall: false, leftWall: false, rightWall: false },
+      { id: 'a', width: 1000, height: 1500, shelves: 4, rearWall: false, leftWall: false, rightWall: false, corner: 'NONE' },
+      { id: 'b', width: 1000, height: 2500, shelves: 4, rearWall: false, leftWall: false, rightWall: false, corner: 'NONE' },
+      { id: 'c', width: 1000, height: 1000, shelves: 4, rearWall: false, leftWall: false, rightWall: false, corner: 'NONE' },
     ],
     loadCapacity: 150,
     shelfType: 'STANDARD',

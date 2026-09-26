@@ -33,6 +33,8 @@ export function catalogProductToConfiguration(
       rearWall: false,
       leftWall: false,
       rightWall: false,
+      // Catalog products are straight racks; corners exist only in the configurator.
+      corner: 'NONE',
     })),
     loadCapacity: product.loadCapacity,
     shelfType: product.shelfType,
