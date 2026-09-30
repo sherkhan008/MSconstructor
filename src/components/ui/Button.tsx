@@ -1,16 +1,17 @@
 import Link from 'next/link';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
-/** `accent` is the configurator's CTA colour (see --color-accent-strong in
- * globals.css); `outline-dark` is the outline button for dark surfaces. */
+/** `accent` is the primary-action yellow (see --color-accent in globals.css),
+ * always with graphite text; `outline-dark` is the outline button for dark
+ * surfaces. */
 type Variant = 'primary' | 'secondary' | 'accent' | 'outline' | 'outline-dark' | 'ghost' | 'whatsapp';
 type Size = 'sm' | 'md' | 'lg';
 
 const VARIANT_CLASSES: Record<Variant, string> = {
-  primary: 'bg-foreground text-background hover:bg-blueprint border border-foreground hover:border-blueprint',
-  secondary: 'bg-accent text-foreground hover:bg-accent/90 border border-accent',
+  primary: 'bg-foreground text-background hover:bg-surface-dark-raised border border-foreground hover:border-surface-dark-raised',
+  secondary: 'bg-accent text-foreground hover:bg-accent-strong border border-accent',
   accent: 'bg-accent text-foreground font-semibold hover:bg-accent-strong border border-accent hover:border-accent-strong',
-  outline: 'bg-transparent text-foreground border border-line hover:border-foreground',
+  outline: 'bg-surface text-foreground border border-line-strong hover:border-foreground',
   'outline-dark': 'bg-transparent text-background border border-line-dark hover:border-background',
   ghost: 'bg-transparent text-foreground hover:bg-surface-muted border border-transparent',
   whatsapp: 'bg-success text-white hover:bg-success/90 border border-success',
@@ -23,7 +24,7 @@ const SIZE_CLASSES: Record<Size, string> = {
 };
 
 const base =
-  'inline-flex items-center justify-center gap-2 font-medium tracking-wide transition-colors duration-150 rounded-[3px] disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap';
+  'inline-flex items-center justify-center gap-2 font-medium transition-colors duration-150 rounded-md disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap';
 
 /** The same button look for elements that cannot be <Button>/<LinkButton> —
  * e.g. a plain <a> to a file download, where client-side routing must not

@@ -73,7 +73,7 @@ export default async function PublicRootLayout({ children, params }: { children:
 
   return (
     <html lang={HTML_LANG[locale]} className={fontVariables}>
-      <body className="flex min-h-screen flex-col bg-background text-foreground">
+      <body className="flex min-h-screen flex-col bg-surface text-foreground">
         <script {...jsonLdScriptProps(organizationJsonLd(locale))} type="application/ld+json" />
         <LocaleProvider locale={locale}>
           <Header />

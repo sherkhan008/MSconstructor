@@ -68,7 +68,7 @@ export function ProductCard({
   }
 
   return (
-    <div className="flex flex-col overflow-hidden border border-line bg-surface transition-shadow hover:shadow-sm">
+    <div className="flex flex-col overflow-hidden rounded-lg border border-line bg-surface transition-colors hover:border-line-strong">
       <Link href={localizePath(`/catalog/${product.modelSlug}`, locale)} className="block">
         {visual ?? (
           <ProductImage src={product.image} alt={name} className="h-48 w-full bg-surface-muted object-cover" />
@@ -76,10 +76,10 @@ export function ProductCard({
       </Link>
       <div className="flex flex-1 flex-col gap-2 p-4">
         <div className="flex items-start justify-between gap-2">
-          <h3 className="font-display text-lg leading-tight">{name}</h3>
+          <h3 className="text-[0.9375rem] font-semibold leading-snug tracking-normal">{name}</h3>
           {product.featured && <Badge tone="accent">{t(CT['CT-019'], locale)}</Badge>}
         </div>
-        <div className="tech-label flex flex-wrap gap-x-3 gap-y-1">
+        <div className="tech-label flex flex-wrap gap-x-3 gap-y-1 text-xs normal-case tracking-normal">
           <span>{product.height}×{product.width}×{product.depth} {t(G['G-008'], locale)}</span>
           <span>{shelvesLabel(product.shelves, locale)}</span>
           <span>{t(CT['CT-024'], locale, { N: product.loadCapacity })}</span>
@@ -89,10 +89,10 @@ export function ProductCard({
         </div>
 
         <div className="grid grid-cols-2 gap-2 pt-1" data-fab-avoid>
-          <LinkButton href={configureHref} variant="outline" size="sm">
+          <LinkButton href={configureHref} variant="outline" size="sm" className="min-h-11">
             {t(CT['CT-021'], locale)}
           </LinkButton>
-          <Button onClick={handleAddToCart} size="sm" disabled={status === 'loading'}>
+          <Button onClick={handleAddToCart} size="sm" disabled={status === 'loading'} className="min-h-11">
             {status === 'done' ? t(CT['CT-023'], locale) : t(CT['CT-022'], locale)}
           </Button>
         </div>

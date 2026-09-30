@@ -41,15 +41,15 @@ export function ConfiguratorCharacteristics({ config }: { config: Pick<ShelvingC
   if (corners.length > 0) rows.splice(2, 0, [t(CF['CF-120'], locale), corners.join(', ')]);
 
   return (
-    <section aria-labelledby="configurator-characteristics-heading" className="border border-line bg-surface">
-      <h2 id="configurator-characteristics-heading" className="px-4 pb-2 pt-3.5 font-display text-lg leading-tight">
+    <section aria-labelledby="configurator-characteristics-heading" className="rounded-lg bg-background p-4 sm:p-6">
+      <h2 id="configurator-characteristics-heading" className="font-display text-lg leading-tight sm:text-xl">
         {t(CF['CF-107'], locale)}
       </h2>
-      <dl data-testid="configurator-characteristics" className="flex flex-col divide-y divide-line border-t border-line text-sm">
+      <dl data-testid="configurator-characteristics" className="mt-3 flex flex-col text-sm sm:mt-4">
         {rows.map(([label, value]) => (
-          <div key={label} className="flex items-baseline justify-between gap-3 px-4 py-2">
+          <div key={label} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] items-baseline gap-3 rounded-md px-3 py-2 odd:bg-surface">
             <dt className="text-steel">{label}</dt>
-            <dd className="mono min-w-0 break-words text-right">{value}</dd>
+            <dd className="mono min-w-0 break-words">{value}</dd>
           </div>
         ))}
       </dl>

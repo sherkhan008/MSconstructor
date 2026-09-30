@@ -51,7 +51,7 @@ ARG NEXT_PUBLIC_WHATSAPP_NUMBER
 ARG NEXT_PUBLIC_GOOGLE_ANALYTICS_ID
 ARG NEXT_PUBLIC_YANDEX_METRICA_ID
 ENV NEXT_TELEMETRY_DISABLED=1
-# next/font/google downloads Inter, Oswald and IBM Plex Mono here (build
+# next/font/google downloads Inter and IBM Plex Mono here (build
 # needs outbound HTTPS to fonts.googleapis.com / fonts.gstatic.com). The font
 # files are then self-hosted from /_next/static/media — the running
 # application makes no request to Google. See docs/production-deployment.md.

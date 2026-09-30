@@ -17,7 +17,7 @@ import { LanguageSwitcher } from './LanguageSwitcher';
 const MOBILE_MENU_ID = 'mobile-navigation';
 
 /** Square 44px icon control — the header's touch-target size. */
-const ICON_BUTTON = 'relative grid h-11 w-11 shrink-0 place-items-center border transition-colors';
+const ICON_BUTTON = 'relative grid h-11 w-11 shrink-0 place-items-center rounded-md border transition-colors';
 
 export function Header() {
   const pathname = usePathname();
@@ -50,18 +50,20 @@ export function Header() {
   const closeMenu = () => setMenuOpen(false);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-line bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/85">
+    <header className="sticky top-0 z-40 border-b border-line bg-surface">
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:h-[72px] lg:px-8">
         <Link href={href('/')} className="flex min-w-0 shrink-0 items-center gap-2.5" onClick={closeMenu}>
-          <span className="grid h-10 w-10 shrink-0 place-items-center border-b-[3px] border-accent bg-foreground text-background">
-            <span className="font-display text-lg leading-none">MS</span>
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md border-b-[3px] border-accent bg-foreground text-background">
+            <span className="font-display text-base font-extrabold leading-none tracking-tight">MS</span>
           </span>
-          <span className="hidden font-display text-base leading-none tracking-wide min-[370px]:inline sm:text-lg lg:max-xl:hidden xl:text-xl">
+          {/* From 400px: below that the brand text would push the language
+              switch, cart and menu past the screen edge (the mark stays). */}
+          <span className="hidden font-display text-base font-bold leading-none tracking-tight min-[400px]:inline sm:text-lg lg:max-xl:hidden xl:text-xl">
             {siteCopy(locale).name}
           </span>
         </Link>
 
-        <nav className="hidden h-full items-stretch gap-1 lg:flex" aria-label={t(H['H-001'], locale)}>
+        <nav className="hidden h-full items-stretch gap-0.5 lg:flex" aria-label={t(H['H-001'], locale)}>
           {NAV_LINKS.map((link) => {
             const current = isCurrent(link.href);
             return (
@@ -69,8 +71,8 @@ export function Header() {
                 key={link.href}
                 href={href(link.href)}
                 aria-current={current ? 'page' : undefined}
-                className={`relative flex items-center whitespace-nowrap px-3 text-[0.9375rem] font-medium transition-colors after:absolute after:inset-x-3 after:bottom-0 after:h-[3px] after:content-[''] ${
-                  current ? 'text-foreground after:bg-accent' : 'text-steel after:bg-transparent hover:text-foreground'
+                className={`relative flex items-center whitespace-nowrap px-3 text-sm font-medium transition-colors after:absolute after:inset-x-3 after:bottom-0 after:h-[3px] after:content-[''] ${
+                  current ? 'text-foreground after:bg-accent' : 'text-foreground/75 after:bg-transparent hover:text-foreground'
                 }`}
               >
                 {linkLabel(link, locale)}
@@ -80,18 +82,24 @@ export function Header() {
         </nav>
 
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-          <LanguageSwitcher />
-
+          {/* The seller's public contact channel is WhatsApp (there is no
+              voice number — see site.ts): on wide screens it reads as the
+              header's contact line, icon plus number. */}
           <a
             href={whatsAppContactUrl(locale)}
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => trackEvent('whatsapp_clicked', { location: 'header' })}
-            aria-label={t(H['H-006'], locale)}
-            className={`${ICON_BUTTON} !hidden border-line text-success hover:border-success xl:!grid`}
+            aria-label={`${t(H['H-006'], locale)} ${site.whatsappDisplay}`}
+            className="mr-1 hidden min-h-11 items-center gap-2 whitespace-nowrap rounded-md px-1 text-sm font-semibold text-foreground transition-colors hover:text-success xl:inline-flex"
           >
-            <WhatsAppIcon />
+            <span className="text-success">
+              <WhatsAppIcon />
+            </span>
+            <span className="mono">{site.whatsappDisplay}</span>
           </a>
+
+          <LanguageSwitcher />
 
           <Link
             href={href('/cart')}
@@ -103,7 +111,7 @@ export function Header() {
             <CartBadge />
           </Link>
 
-          <LinkButton href={href('/configurator')} variant="accent" className="!hidden min-h-11 md:!inline-flex">
+          <LinkButton href={href('/configurator')} variant="accent" className="!hidden min-h-11 px-5 md:!inline-flex">
             {t(H['H-008'], locale)}
           </LinkButton>
 

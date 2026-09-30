@@ -8,11 +8,11 @@
 
 @theme {
   /* --- Palette ---------------------------------------------------------- */
-  --color-background: #f6f7f5;
+  --color-background: #f5f6f7;
   --color-foreground: #1c2024;
   --color-steel: #5b6470;
-  --color-line: #d8dce0;
-  --color-accent: #f0a202;
+  --color-line: #e2e5e8;
+  --color-accent: #ffcc00;
   --color-blueprint: #2f5d8a;
   --color-success: #2f6b4f;
   --color-danger: #a63d40;
@@ -25,37 +25,42 @@
 
   /* Derived surfaces — kept as tokens so components never invent shades. */
   --color-surface: #ffffff;
-  --color-surface-muted: #eceee9;
+  --color-surface-muted: #eceef0;
   --color-surface-dark: #1c2024;
   --color-steel-soft: #8b939d;
-  --color-accent-soft: #fdf1d5;
+  --color-accent-soft: #fff6cc;
   --color-blueprint-soft: #e4ecf4;
   --color-success-soft: #e3efe8;
   --color-danger-soft: #f6e5e5;
 
-  /* Public storefront additions (header, footer, homepage). Amber is the
-     configurator's colour: every "open the configurator" CTA uses it, so
-     the primary path reads the same everywhere. */
-  --color-accent-strong: #d68f00;
-  --color-line-strong: #b9bfc6;
+  /* Public storefront additions (header, footer, homepage). Yellow is the
+     primary-action colour: every "open the configurator" / purchase CTA uses
+     it, always with graphite text (≈13:1 contrast), so the primary path reads
+     the same everywhere. It is a fill colour only — never text on white. */
+  --color-accent-strong: #f2bd00;
+  --color-line-strong: #c3c8ce;
   --color-surface-dark-raised: #262b31;
   --color-line-dark: #3a4148;
 
   /* --- Typography --------------------------------------------------------
-     Loaded via next/font/google in src/app/layout.tsx. Oswald stands in for
-     Yanone Kaffeesatz as the display face: Yanone Kaffeesatz does not ship a
-     Cyrillic subset, and every display font here must render Russian/Kazakh
-     text correctly. Inter and IBM Plex Mono both cover Cyrillic natively. */
-  --font-display: var(--font-oswald), 'Oswald', 'Arial Narrow', system-ui, sans-serif;
+     Loaded via next/font/google in src/app/fonts.ts. Headings use Inter in a
+     heavy weight (the storefront's commercial, wide-grotesque look), so the
+     display and body faces are one family and one download. Inter and IBM
+     Plex Mono both cover Cyrillic, including the Kazakh letters. */
+  --font-display: var(--font-inter), 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
   --font-sans: var(--font-inter), 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
   --font-mono: var(--font-plex-mono), 'IBM Plex Mono', 'JetBrains Mono', 'Courier New', ui-monospace, monospace;
 
-  /* --- Shape ------------------------------------------------------------ */
+  /* --- Shape ------------------------------------------------------------
+     Small, consistent rounding: `md` for controls (buttons, inputs,
+     steppers, chips), `lg` for cards and panels, `xl` for large storefront
+     media blocks. */
   --radius-none: 0px;
-  --radius-xs: 1px;
-  --radius-sm: 2px;
-  --radius-md: 3px;
-  --radius-lg: 4px;
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
 
   /* --- Motion ----------------------------------------------------------- */
   --ease-technical: cubic-bezier(0.2, 0, 0, 1);
@@ -99,10 +104,13 @@
   h3,
   h4 {
     font-family: var(--font-display);
-    font-weight: 600;
-    letter-spacing: 0.01em;
-    line-height: 1.05;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.12;
     text-wrap: balance;
+    /* A single long Russian/Kazakh word («конфиденциальности») that cannot
+       fit a 320px line on its own breaks instead of widening the page. */
+    overflow-wrap: break-word;
   }
 
   /* Numeric / technical values always render in the mono face. */
@@ -162,7 +170,8 @@
   }
 
   /* Section kicker above storefront headings — readable size, not a 10px
-     spec caption like .tech-label. */
+     spec caption like .tech-label. Plain text: the accent colour is kept for
+     actions. */
   .eyebrow {
     display: inline-flex;
     align-items: center;
@@ -170,16 +179,9 @@
     font-size: 0.8125rem;
     font-weight: 600;
     line-height: 1.3;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--color-steel);
-  }
-  .eyebrow::before {
-    content: '';
-    width: 0.625rem;
-    height: 0.625rem;
-    flex-shrink: 0;
-    background-color: var(--color-accent);
   }
 
   /* The framed preview's drawing stage. ShelvingPreview publishes two crop
@@ -220,12 +222,13 @@
   }
 
   /* Configurator rack frame. On desktop the workspace fits one screen below
-     the header and the 5rem page title, so the frame is capped to the height
-     left after the preview's toolbar and caption strip (~6rem) and the bottom
-     margin — the whole rack and its controls stay in view. */
+     the header and the ~9rem title block (breadcrumbs, title, lead), so the
+     frame is capped to the height left after the preview's toolbar and
+     caption strip (~6rem) and the bottom margin — the whole rack and its
+     controls stay in view. */
   @media (min-width: 1024px) {
     .configurator-frame {
-      max-width: max(22rem, calc((100dvh - var(--header-height) - 12.5rem) * var(--frame-w-aspect, 4 / 3)));
+      max-width: max(22rem, calc((100dvh - var(--header-height) - 16.5rem) * var(--frame-w-aspect, 4 / 3)));
     }
   }
 
@@ -237,7 +240,8 @@
   .input {
     height: 2.75rem;
     width: 100%;
-    border: 1px solid var(--color-line);
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-md);
     background-color: var(--color-surface);
     padding-inline: 0.75rem;
     font-size: 0.875rem;

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { trackEvent } from '@/lib/analytics';
 import { parseWorkspaceFromSearchParams, workspaceToShareQuery } from '@/lib/configurator/url';
@@ -25,7 +26,8 @@ import { BomTable } from './BomTable';
 import { useLivePrice } from './useLivePrice';
 import type { DimensionAxis } from './resize/dimension-scale';
 import { t } from '@/lib/i18n/format';
-import { CF, CT } from '@/lib/i18n/strings';
+import { localizePath } from '@/lib/i18n/locales';
+import { CF, CT, H } from '@/lib/i18n/strings';
 import { useLocale } from '@/components/i18n/LocaleProvider';
 import { registerSwitchQuery } from '@/components/i18n/switch-query';
 
@@ -201,26 +203,47 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
   // only read).
   const topFrameStyle = frameAspectVars(computeFramedCrops(config.sections, config.depth, capacityMm));
 
-  // Page order (V2.4): title → rack → the current kit and its parameters →
-  // its sections → characteristics → additional parameters → kit contents →
-  // price and actions. Two-zone workspace: the rack (left, sticky on
-  // desktop) is the visual centre; everything after it shares the right
-  // column in that order, with the purchase card pinned to its foot. Below
-  // `lg` the same DOM stacks in the same order, and OrderSummaryBar pins
-  // itself to the bottom of the viewport instead (see its own classes).
+  // Page order: breadcrumbs, title and a one-line lead → the workspace →
+  // characteristics and kit contents. Workspace, by width:
+  //  • below `lg` one column — rack, the kit and its sections, additional
+  //    parameters — and OrderSummaryBar pins itself to the bottom of the
+  //    viewport (see its own classes);
+  //  • `lg` two zones — the rack (sticky) and one right panel whose
+  //    configuration scrolls inside it with the purchase card pinned to its
+  //    foot;
+  //  • `xl` three zones — rack, configuration, and the purchase card as its
+  //    own sticky column (the right panel becomes `display: contents`, so its
+  //    two parts are grid columns of their own — same DOM, no duplicate).
+  // Characteristics and kit contents follow the workspace at full width.
   return (
     <div className="pb-40 lg:pb-16">
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
-        <h1 className="py-4 font-display text-[1.375rem] leading-tight sm:py-6 sm:text-3xl lg:truncate lg:py-5 lg:text-[2rem] lg:leading-10">{t(CF['CF-002'], locale)}</h1>
+        <div className="pb-4 pt-3 sm:pb-6 sm:pt-5">
+          <nav aria-label={t(CF['CF-128'], locale)}>
+            <ol className="flex flex-wrap items-center gap-x-2 text-[13px] leading-6 text-steel">
+              <li>
+                <Link href={localizePath('/', locale)} className="transition-colors hover:text-foreground hover:underline">
+                  {t(CT['CT-003'], locale)}
+                </Link>
+              </li>
+              <li aria-hidden="true">›</li>
+              <li aria-current="page" className="text-foreground">
+                {t(H['H-003'], locale)}
+              </li>
+            </ol>
+          </nav>
+          <h1 className="mt-1.5 font-display text-[1.5rem] font-extrabold leading-tight sm:mt-2 sm:text-3xl lg:text-[2.25rem]">{t(CF['CF-002'], locale)}</h1>
+          <p className="mt-2 hidden max-w-2xl text-[15px] leading-snug text-steel sm:block">{t(CF['CF-127'], locale)}</p>
+        </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(340px,380px)] lg:items-start xl:gap-8">
-          <div className="-mx-4 border-y border-line bg-surface sm:mx-0 sm:border-x lg:sticky lg:top-[calc(var(--header-height)+1rem)]">
+        <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(340px,380px)] lg:items-start xl:grid-cols-[minmax(0,1fr)_minmax(0,22rem)_18.5rem]">
+          <div className="-mx-4 overflow-hidden border-y border-line bg-surface sm:mx-0 sm:rounded-lg sm:border-x lg:sticky lg:top-[calc(var(--header-height)+1rem)]">
             {/* Compact segmented control, not a full-width toolbar: it names
                 the two presentation modes and then gets out of the rack's
                 way. Both modes render into the identical 4:3 frame below, so
                 switching never moves anything else on the page. */}
             <div className="border-b border-line px-3 py-2 sm:px-4">
-              <div className="inline-flex max-w-full border border-line" role="group" aria-label={t(CF['CF-003'], locale)}>
+              <div className="inline-flex max-w-full overflow-hidden rounded-md border border-line" role="group" aria-label={t(CF['CF-003'], locale)}>
                 <ViewToggleButton pressed={previewMode === 'front'} onClick={() => setPreviewMode('front')}>
                   {t(CF['CF-004'], locale)}
                 </ViewToggleButton>
@@ -274,37 +297,43 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
             )}
           </div>
 
-          {/* Desktop: one panel sized to the screen below the header and the
-              fixed-height (5rem) title — the configuration scrolls inside it
-              while the purchase card stays pinned to its foot, so price and
-              next step are in view without scrolling the page and never
-              cover the controls they summarise. */}
-          <div className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-[calc(var(--header-height)+1rem)] lg:max-h-[calc(100dvh-var(--header-height)-6.5rem)] lg:gap-0 lg:border lg:border-line lg:bg-surface">
-            <div className="flex min-w-0 flex-col gap-4 lg:min-h-0 lg:flex-1 lg:gap-0 lg:divide-y lg:divide-line lg:overflow-y-auto lg:overscroll-contain lg:[&>*]:border-0">
-            <ParametersSectionsTable catalog={catalog} onReset={reset} />
+          {/* `lg`: one panel that flows with the page; its purchase card
+              sticks to the bottom of the viewport while the panel is on
+              screen, so price and next step stay in view and never cover the
+              controls they summarise. `xl`: the panel dissolves
+              (`display: contents`) into two grid columns — the configuration
+              flowing with the page, and the purchase card sticky beside it. */}
+          <div className="flex min-w-0 flex-col gap-4 lg:gap-0 lg:rounded-lg lg:border lg:border-line lg:bg-surface xl:contents">
+            <div className="flex min-w-0 flex-col gap-4 lg:gap-0 lg:divide-y lg:divide-line lg:[&>*]:rounded-none lg:[&>*]:border-0 xl:gap-4 xl:divide-y-0 xl:[&>*]:rounded-lg xl:[&>*]:border">
+              <ParametersSectionsTable catalog={catalog} onReset={reset} />
 
-            <ConfiguratorCharacteristics config={config} />
+              <AdvancedSettingsAccordion catalog={catalog} />
 
-            <AdvancedSettingsAccordion catalog={catalog} />
-
-            {priceResult && <BomTable lines={priceResult.bom} totalWeightKg={priceResult.totalWeightKg} />}
-
-            {pricingError && (
-              <div role="alert" className="border border-danger bg-danger-soft px-4 py-3 text-sm text-danger">
-                {pricingError.message}
-              </div>
-            )}
-            {priceResult && priceResult.warnings.length > 0 && (
-              <ul className="space-y-1 border border-line bg-surface-muted px-4 py-3 text-[13px] text-steel">
-                {priceResult.warnings.map((warning) => (
-                  <li key={warning}>⚠ {warning}</li>
-                ))}
-              </ul>
-            )}
+              {pricingError && (
+                <div role="alert" className="rounded-lg border border-danger bg-danger-soft px-4 py-3 text-sm text-danger">
+                  {pricingError.message}
+                </div>
+              )}
+              {priceResult && priceResult.warnings.length > 0 && (
+                <ul className="space-y-1 rounded-lg border border-line bg-surface-muted px-4 py-3 text-[13px] text-steel">
+                  {priceResult.warnings.map((warning) => (
+                    <li key={warning}>⚠ {warning}</li>
+                  ))}
+                </ul>
+              )}
             </div>
 
-            <OrderSummaryBar catalog={catalog} />
+            <div className="lg:sticky lg:bottom-0 lg:z-10 lg:overflow-hidden lg:rounded-b-lg lg:border-t lg:border-line xl:bottom-auto xl:top-[calc(var(--header-height)+1rem)] xl:self-start xl:rounded-lg xl:border-t-0">
+              <OrderSummaryBar catalog={catalog} />
+            </div>
           </div>
+        </div>
+
+        {/* Read-only facts about the active kit, full width under the
+            workspace: its characteristics, then its contents. */}
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:gap-6 lg:mt-10 lg:grid-cols-2 lg:items-start">
+          <ConfiguratorCharacteristics config={config} />
+          {priceResult && <BomTable lines={priceResult.bom} totalWeightKg={priceResult.totalWeightKg} />}
         </div>
       </div>
     </div>

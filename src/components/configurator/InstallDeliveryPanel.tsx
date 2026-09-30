@@ -22,7 +22,7 @@ export function InstallDeliveryPanel({ catalog }: { catalog: PublicCatalog }) {
         <select
           value={config.assemblyId}
           onChange={(e) => setField('assemblyId', e.target.value)}
-          className="h-11 w-full min-w-0 border border-line bg-surface px-2.5 text-sm outline-none transition-colors hover:border-line-strong focus:border-blueprint lg:h-10"
+          className="h-11 w-full min-w-0 rounded-md border border-line-strong bg-surface px-2.5 text-sm outline-none transition-colors hover:border-steel-soft focus:border-blueprint lg:h-10"
         >
           {catalog.assemblyServices.map((service) => (
             <option key={service.id} value={service.id}>
@@ -40,7 +40,7 @@ export function InstallDeliveryPanel({ catalog }: { catalog: PublicCatalog }) {
         <select
           value={config.deliveryId}
           onChange={(e) => setField('deliveryId', e.target.value)}
-          className="h-11 w-full min-w-0 border border-line bg-surface px-2.5 text-sm outline-none transition-colors hover:border-line-strong focus:border-blueprint lg:h-10"
+          className="h-11 w-full min-w-0 rounded-md border border-line-strong bg-surface px-2.5 text-sm outline-none transition-colors hover:border-steel-soft focus:border-blueprint lg:h-10"
         >
           {catalog.deliveryMethods.map((method) => (
             <option key={method.id} value={method.id}>

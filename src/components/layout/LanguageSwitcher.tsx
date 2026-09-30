@@ -40,7 +40,7 @@ export function LanguageSwitcher() {
   }
 
   return (
-    <div className="inline-flex shrink-0 border border-line" data-testid="language-switcher">
+    <div className="inline-flex shrink-0 overflow-hidden rounded-md border border-line" data-testid="language-switcher">
       {OPTIONS.map(({ locale, label }, index) => {
         const active = locale === current;
         return (

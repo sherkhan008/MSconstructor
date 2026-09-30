@@ -5,8 +5,9 @@ import { sectionButton, sectionButtons, storedSections } from './helpers/section
 /**
  * Configurator V2.4 — final page structure and per-section controls, in the
  * real browser, on both projects (desktop 1280 and Pixel 7):
- *  - page order: rack → kit → sections → characteristics → additional
- *    parameters → kit contents → price/actions;
+ *  - page order: rack → kit → sections → additional parameters →
+ *    price/actions, then characteristics → kit contents at full width under
+ *    the workspace (2026-09-30 redesign);
  *  - the active section's own controls edit that section only, with its own
  *    limits, and the preview's height handle / shelf column follow it;
  *  - mixed configurations are priced from every section's own values;
@@ -34,7 +35,7 @@ async function openMixed(page: Page, query: string, count: number) {
   await expect.poll(async () => (await storedSections(page)).length).toBe(count);
 }
 
-test('the page follows the V2.4/V2.5 order: rack, kit switcher, kit, sections, characteristics, options, contents, price', async ({ page }) => {
+test('the page follows the redesigned order: rack, kit switcher, kit, sections, options, price, then characteristics and contents', async ({ page }) => {
   const errors = trackErrors(page);
   await page.goto('/ru/configurator');
   await waitForPrice(page);
@@ -46,10 +47,10 @@ test('the page follows the V2.4/V2.5 order: rack, kit switcher, kit, sections, c
       document.querySelector('[data-testid="preview-stage"]'),
       byText('h2', 'Комплект 1'),
       byText('h3', 'Секции'),
-      byText('h2', 'Характеристики'),
       byText('button', 'Дополнительные параметры'),
-      byText('h2', 'Состав комплекта'),
       byText('button', 'Оформить заказ'),
+      byText('h2', 'Характеристики'),
+      byText('h2', 'Состав комплекта'),
     ];
     if (nodes.some((n) => !n)) return nodes.map((n) => Boolean(n));
     return nodes.every((n, i) => i === 0 || nodes[i - 1]!.compareDocumentPosition(n!) & Node.DOCUMENT_POSITION_FOLLOWING);

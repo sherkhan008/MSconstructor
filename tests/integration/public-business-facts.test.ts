@@ -264,10 +264,10 @@ describe('localization CSV', () => {
   const buf = readFileSync('docs/localization/public-strings.csv');
   const text = buf.toString('utf8');
 
-  it('is UTF-8 with BOM, has 582 data rows and no replacement characters', () => {
+  it('is UTF-8 with BOM, has 584 data rows and no replacement characters', () => {
     expect([buf[0], buf[1], buf[2]]).toEqual([0xef, 0xbb, 0xbf]);
     expect(text).not.toContain('\ufffd');
-    expect(text.split(/\r?\n/).filter((l) => /^[A-Z]{1,3}-\d{3},/.test(l))).toHaveLength(582);
+    expect(text.split(/\r?\n/).filter((l) => /^[A-Z]{1,3}-\d{3},/.test(l))).toHaveLength(584);
   });
 
   it('keeps every Kazakh letter intact', () => {

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { findColor, getCatalog } from '@/lib/data/repository';
 import { calculatePrice } from '@/lib/pricing';
 import { ShelvingPreview } from '@/components/configurator/ShelvingPreview';
@@ -17,7 +18,7 @@ import { PriceTag } from '@/components/ui/PriceTag';
 import { ProductImage } from '@/components/ui/ProductImage';
 import { ProductCard } from '@/components/catalog/ProductCard';
 import { ContactForm } from '@/components/contact/ContactForm';
-import { ArrowIcon, CheckIcon } from '@/components/ui/Icons';
+import { ArrowIcon, CheckIcon, DocumentIcon, LoadIcon, ModulesIcon, TruckIcon } from '@/components/ui/Icons';
 import { pick, t } from '@/lib/i18n/format';
 import { localizePath, type Locale } from '@/lib/i18n/locales';
 import { resolveLocale, type LocaleParams } from '@/lib/i18n/page';
@@ -128,148 +129,136 @@ export default async function HomePage({ params }: { params: LocaleParams }) {
     : null;
   const heroModel = publicModels[0];
 
-  const heroFacts = [
-    t(HM['HM-001'], locale),
-    heroModel ? `${t(HM['HM-028'], locale)}: ${t(HM['HM-029'], locale, { N: heroModel.maxLoadKg })}` : null,
-    t(HM['HM-017'], locale),
-  ].filter((fact): fact is string => fact !== null);
+  // The hero's benefit row: verified facts only — every line is existing,
+  // owner-reviewed copy, and the load figure is the model's own catalog value.
+  const heroBenefits = [
+    heroModel ? { icon: <LoadIcon />, text: `${t(HM['HM-028'], locale)}: ${t(HM['HM-029'], locale, { N: heroModel.maxLoadKg })}` } : null,
+    { icon: <ModulesIcon />, text: t(HM['HM-009'], locale) },
+    { icon: <TruckIcon />, text: t(HM['HM-017'], locale) },
+    { icon: <DocumentIcon />, text: t(HM['HM-021'], locale) },
+  ].filter((benefit) => benefit !== null);
+
+  // The configurator call-to-action draws a real ready rack too — the last of
+  // the popular ones, as its own fresh configuration instance.
+  const ctaCard = cards[cards.length - 1];
+  const cta = ctaCard ? { configuration: catalogProductToConfiguration(ctaCard.product), color: ctaCard.color } : null;
 
   return (
     <>
       <script {...jsonLdScriptProps(organizationJsonLd(locale))} type="application/ld+json" />
 
-      {/* 1. Hero — what is sold, that it is configured here, and its price. */}
-      <section aria-labelledby="home-hero-title" className="border-b border-line bg-surface">
-        <Container className="grid grid-cols-1 items-center gap-10 py-10 sm:py-14 lg:grid-cols-12 lg:gap-12 lg:py-20">
-          <div className="lg:col-span-7">
+      {/* 1. Hero — what is sold, that it is configured here, and its price:
+          copy and actions on the left, the rack itself dominant on the right,
+          the verified benefits underneath the copy. */}
+      <section aria-labelledby="home-hero-title" className="bg-surface">
+        <Container className="grid grid-cols-1 gap-8 pb-10 pt-8 sm:pb-12 sm:pt-12 lg:grid-cols-12 lg:items-stretch lg:gap-10 lg:py-14">
+          <div className="flex flex-col justify-center lg:col-span-6">
             <p className="eyebrow">{copy.tagline}</p>
             <h1
               id="home-hero-title"
-              className="mt-4 font-display text-[2.1875rem] leading-[1.04] min-[390px]:text-[2.375rem] sm:text-6xl lg:text-[4rem] xl:text-[4.75rem]"
+              className="mt-4 font-display text-[2rem] font-extrabold leading-[1.08] min-[390px]:text-[2.25rem] sm:text-5xl lg:text-[3rem] xl:text-[3.25rem]"
             >
               {t(HM['HM-002'], locale)}
             </h1>
-            <p className="mt-5 max-w-xl text-base leading-relaxed text-steel sm:text-lg">{t(HM['HM-003'], locale)}</p>
+            <p className="mt-5 max-w-xl text-base leading-relaxed text-steel sm:text-[1.0625rem]">{t(HM['HM-003'], locale)}</p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap" data-fab-avoid>
-              <LinkButton href={href('/configurator')} variant="accent" size="lg" className="min-h-14 whitespace-normal text-center">
+              <LinkButton href={href('/configurator')} variant="accent" size="lg" className="min-h-13 whitespace-normal text-center">
                 {t(HM['HM-004'], locale)}
                 <ArrowIcon />
               </LinkButton>
-              <LinkButton href={href('/catalog')} variant="outline" size="lg" className="min-h-14 whitespace-normal text-center">
+              <LinkButton href={href('/catalog')} variant="outline" size="lg" className="min-h-13 whitespace-normal text-center">
                 {t(HM['HM-005'], locale)}
               </LinkButton>
             </div>
 
-            <ul className="mt-9 grid grid-cols-1 gap-3 border-t border-line pt-6 sm:grid-cols-3 sm:gap-5">
-              {heroFacts.map((fact) => (
-                <li key={fact} className="flex items-start gap-3 text-sm font-medium leading-snug text-foreground">
-                  <CheckIcon />
-                  <span>{fact}</span>
+            <ul className="mt-10 grid grid-cols-2 gap-x-5 gap-y-6 border-t border-line pt-7 sm:grid-cols-4">
+              {heroBenefits.map((benefit) => (
+                <li key={benefit.text} className="flex flex-col gap-2.5 text-[13px] font-medium leading-snug text-foreground">
+                  {benefit.icon}
+                  <span>{benefit.text}</span>
                 </li>
               ))}
             </ul>
           </div>
 
           {hero && (
-            <div className="lg:col-span-5">
-              <figure className="border border-line bg-surface shadow-[0_24px_48px_-32px_rgba(28,32,36,0.35)]">
-                <figcaption className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-line px-5 py-4 sm:px-6">
-                  <span className="font-display text-xl">{hero.modelName}</span>
-                  <span className="mono text-sm text-steel">
-                    {hero.product.height}×{hero.product.width}×{hero.product.depth} {t(G['G-008'], locale)} ·{' '}
-                    {shelvesLabel(hero.product.shelves, locale)}
-                  </span>
-                </figcaption>
+            <div className="lg:col-span-6">
+              <figure className="flex h-full flex-col overflow-hidden rounded-xl border border-line bg-surface">
                 <ShelvingPreview
                   config={hero.configuration}
                   color={hero.color}
                   presentation
-                  className="aspect-square w-full !border-0 min-[480px]:aspect-[4/3]"
+                  tightFraming
+                  className="aspect-square w-full flex-1 !border-0 min-[480px]:aspect-[4/3]"
                 />
-                {/* Price, then the action, both left-aligned: the bottom-right
-                    corner is where the floating WhatsApp button sits, and an
-                    action there would hide it on the first screen. */}
-                <div className="flex flex-col items-start gap-3 border-t border-line bg-background px-5 py-4 sm:px-6">
-                  {hero.priceTotal !== null && <PriceTag value={hero.priceTotal} size="xl" />}
-                  <div className="w-full sm:w-auto" data-fab-avoid>
+                {/* Name, size and price, then the action — left of the
+                    bottom-right corner, where the floating WhatsApp button
+                    sits on the first screen. */}
+                <figcaption className="flex flex-col gap-3 border-t border-line bg-background px-5 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-6">
+                  <div className="min-w-0">
+                    <p className="text-base font-semibold">{hero.modelName}</p>
+                    <p className="mono mt-0.5 text-sm text-steel">
+                      {hero.product.height}×{hero.product.width}×{hero.product.depth} {t(G['G-008'], locale)} ·{' '}
+                      {shelvesLabel(hero.product.shelves, locale)}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-5 gap-y-3" data-fab-avoid>
+                    {hero.priceTotal !== null && <PriceTag value={hero.priceTotal} size="lg" />}
                     <LinkButton
                       href={href(`/configurator?${configurationToShareQuery(hero.configuration)}`)}
                       variant="primary"
-                      className="min-h-11 w-full whitespace-normal text-center sm:w-auto"
+                      className="min-h-11 whitespace-normal text-center"
                     >
                       {t(PR['PR-006'], locale)}
                     </LinkButton>
                   </div>
-                </div>
+                </figcaption>
               </figure>
             </div>
           )}
         </Container>
       </section>
 
-      {/* 2. The configurator flow — the primary conversion path. */}
-      <Section tone="dark" labelledBy="home-how-title">
+      {/* 2. The catalog: the public model(s), then the ready configurations. */}
+      <Section tone="white" labelledBy="home-models-title" className="border-t border-line" containerClassName="!pb-10">
         <SectionHeading
-          id="home-how-title"
-          dark
-          eyebrow={t(H['H-003'], locale)}
-          title={t(HM['HM-034'], locale)}
+          id="home-models-title"
+          title={t(HM['HM-024'], locale)}
           action={
-            <LinkButton href={href('/configurator')} variant="accent" size="lg" className="!hidden whitespace-normal text-center sm:!inline-flex">
-              {t(HM['HM-004'], locale)}
-              <ArrowIcon />
-            </LinkButton>
+            <Link
+              href={href('/catalog')}
+              className="inline-flex min-h-11 items-center text-sm font-semibold text-foreground underline-offset-4 hover:underline"
+            >
+              {t(HM['HM-046'], locale)}
+            </Link>
           }
         />
-        <ol className="mt-12 grid grid-cols-1 gap-px overflow-hidden border border-line-dark bg-line-dark sm:grid-cols-2 lg:grid-cols-5">
-          {HOW_IT_WORKS.map((item) => (
-            <li key={item.step} className="flex gap-4 bg-surface-dark p-6 sm:last:col-span-2 lg:flex-col lg:gap-6 lg:p-7 lg:last:col-span-1">
-              <span className="mono text-3xl font-semibold leading-none text-accent lg:text-4xl" aria-hidden="true">
-                {String(item.step).padStart(2, '0')}
-              </span>
-              <div>
-                <h3 className="text-xl">{t(item.title, locale)}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-steel-soft">{t(item.description, locale)}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
-        {/* On phones the CTA follows the steps instead of preceding them. */}
-        <div className="mt-8 sm:hidden" data-fab-avoid>
-          <LinkButton href={href('/configurator')} variant="accent" size="lg" className="w-full whitespace-normal text-center">
-            {t(HM['HM-004'], locale)}
-            <ArrowIcon />
-          </LinkButton>
-        </div>
-      </Section>
-
-      {/* 3. The public model(s). */}
-      <Section tone="white" labelledBy="home-models-title">
-        <SectionHeading id="home-models-title" title={t(HM['HM-024'], locale)} />
-        <div className="mt-10 flex flex-col gap-8">
+        <div className="mt-8 flex flex-col gap-6">
           {showcases.map(({ model, configuration, color }) => (
-            <article key={model.slug} className="grid grid-cols-1 border border-line bg-surface lg:grid-cols-2">
-              <div className="flex flex-col gap-8 p-6 sm:p-8 lg:p-12">
+            <article key={model.slug} className="grid grid-cols-1 overflow-hidden rounded-xl border border-line bg-surface lg:grid-cols-2">
+              <div className="flex flex-col gap-7 p-5 sm:p-8 lg:p-10">
                 <div>
-                  <h3 className="font-display text-4xl sm:text-5xl">{pick(model.name, locale)}</h3>
-                  <p className="mt-4 max-w-xl text-base leading-relaxed text-steel">{pick(model.description, locale)}</p>
+                  <h3 className="font-display text-3xl sm:text-4xl">{pick(model.name, locale)}</h3>
+                  <p className="mt-3 max-w-xl text-base leading-relaxed text-steel">{pick(model.description, locale)}</p>
                 </div>
 
-                <dl className="grid grid-cols-1 gap-px border border-line bg-line min-[400px]:grid-cols-2">
-                  {[
-                    { label: t(HM['HM-025'], locale), value: dimensionRange(model.heights, locale) },
-                    { label: t(HM['HM-026'], locale), value: dimensionRange(model.widths, locale) },
-                    { label: t(HM['HM-027'], locale), value: dimensionRange(model.depths, locale) },
-                    { label: t(HM['HM-028'], locale), value: t(HM['HM-029'], locale, { N: model.maxLoadKg }) },
-                  ].map((spec) => (
-                    <div key={spec.label} className="bg-surface p-4 sm:p-5">
-                      <dt className="text-sm text-steel">{spec.label}</dt>
-                      <dd className="mono mt-1.5 text-lg font-semibold leading-snug">{spec.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-                <p className="-mt-4 text-sm text-steel">{t(HM['HM-031'], locale)}</p>
+                <div>
+                  <dl className="overflow-hidden rounded-lg border border-line text-sm">
+                    {[
+                      { label: t(HM['HM-025'], locale), value: dimensionRange(model.heights, locale) },
+                      { label: t(HM['HM-026'], locale), value: dimensionRange(model.widths, locale) },
+                      { label: t(HM['HM-027'], locale), value: dimensionRange(model.depths, locale) },
+                      { label: t(HM['HM-028'], locale), value: t(HM['HM-029'], locale, { N: model.maxLoadKg }) },
+                    ].map((spec) => (
+                      <div key={spec.label} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-3 px-4 py-2.5 odd:bg-background">
+                        <dt className="text-steel">{spec.label}</dt>
+                        <dd className="mono font-medium">{spec.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <p className="mt-3 text-sm text-steel">{t(HM['HM-031'], locale)}</p>
+                </div>
 
                 <div className="mt-auto flex flex-col gap-3 sm:flex-row sm:flex-wrap" data-fab-avoid>
                   <LinkButton href={href(`/configurator?model=${model.slug}`)} variant="accent" size="lg" className="whitespace-normal text-center">
@@ -293,19 +282,14 @@ export default async function HomePage({ params }: { params: LocaleParams }) {
         </div>
       </Section>
 
-      {/* 4. Ready configurations with their live prices. */}
-      <Section tone="muted" labelledBy="home-popular-title">
+      {/* 3. Ready configurations with their live prices. */}
+      <Section tone="white" labelledBy="home-popular-title" containerClassName="!pt-4">
         <SectionHeading
           id="home-popular-title"
           title={t(HM['HM-045'], locale)}
           description={startingPrice !== null ? t(PR['PR-005'], locale, { price: formatPrice(startingPrice) }) : undefined}
-          action={
-            <LinkButton href={href('/catalog')} variant="outline" className="min-h-11 bg-surface">
-              {t(HM['HM-046'], locale)}
-            </LinkButton>
-          }
         />
-        <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 lg:gap-6">
+        <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {cards.map(({ product, configuration, color, modelName, priceTotal }) => (
             <ProductCard
               key={product.id}
@@ -329,24 +313,97 @@ export default async function HomePage({ params }: { params: LocaleParams }) {
         </div>
       </Section>
 
-      {/* 5. Commercial benefits and where the racks are used. */}
+      {/* 4. Configurator call to action: copy and actions left, a real rack
+          right, on a light panel. */}
+      <section aria-labelledby="home-final-title" className="bg-surface pb-12 sm:pb-14 lg:pb-16">
+        <Container>
+          <div className="grid grid-cols-1 overflow-hidden rounded-xl bg-background md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+            <div className="flex flex-col justify-center px-6 py-10 sm:px-10 lg:px-14 lg:py-14">
+              <h2 id="home-final-title" className="font-display text-[1.75rem] sm:text-4xl">
+                {t(HM['HM-001'], locale)}
+              </h2>
+              {startingPrice !== null && (
+                <p className="mt-4 max-w-lg text-base text-steel">{t(HM['HM-006'], locale, { price: formatPrice(startingPrice) })}</p>
+              )}
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap" data-fab-avoid>
+                <LinkButton href={href('/configurator')} variant="accent" size="lg" className="min-h-13 whitespace-normal text-center">
+                  {t(HM['HM-004'], locale)}
+                  <ArrowIcon />
+                </LinkButton>
+                <LinkButton
+                  href={whatsAppContactUrl(locale)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  variant="outline"
+                  size="lg"
+                  className="min-h-13 whitespace-normal text-center"
+                >
+                  {t(H['H-006'], locale)}
+                </LinkButton>
+              </div>
+            </div>
+            {cta && (
+              <div className="relative hidden border-l border-line bg-surface md:block">
+                <ShelvingPreview config={cta.configuration} color={cta.color} presentation tightFraming className="!absolute inset-0 h-full !border-0" />
+              </div>
+            )}
+          </div>
+        </Container>
+      </section>
+
+      {/* 5. The configurator flow — how an order comes together. */}
+      <Section tone="default" labelledBy="home-how-title">
+        <SectionHeading
+          id="home-how-title"
+          eyebrow={t(H['H-003'], locale)}
+          title={t(HM['HM-034'], locale)}
+          action={
+            <LinkButton href={href('/configurator')} variant="accent" size="lg" className="!hidden whitespace-normal text-center sm:!inline-flex">
+              {t(HM['HM-004'], locale)}
+              <ArrowIcon />
+            </LinkButton>
+          }
+        />
+        <ol className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {HOW_IT_WORKS.map((item) => (
+            <li key={item.step} className="flex gap-4 rounded-lg border border-line bg-surface p-5 sm:last:col-span-2 lg:flex-col lg:gap-5 lg:p-6 lg:last:col-span-1">
+              <span className="mono text-2xl font-semibold leading-none text-foreground lg:text-3xl" aria-hidden="true">
+                {String(item.step).padStart(2, '0')}
+              </span>
+              <div>
+                <h3 className="text-base">{t(item.title, locale)}</h3>
+                <p className="mt-1.5 text-sm leading-relaxed text-steel">{t(item.description, locale)}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+        {/* On phones the CTA follows the steps instead of preceding them. */}
+        <div className="mt-8 sm:hidden" data-fab-avoid>
+          <LinkButton href={href('/configurator')} variant="accent" size="lg" className="w-full whitespace-normal text-center">
+            {t(HM['HM-004'], locale)}
+            <ArrowIcon />
+          </LinkButton>
+        </div>
+      </Section>
+
+      {/* 6. Commercial benefits and where the racks are used. */}
       <Section tone="white" labelledBy="home-why-title">
         <SectionHeading id="home-why-title" title={t(HM['HM-023'], locale)} />
-        <ul className="mt-10 grid grid-cols-1 gap-px border border-line bg-line sm:grid-cols-2 lg:grid-cols-4">
+        <ul className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {ADVANTAGES.map((item) => (
-            <li key={item.title.ru} className="bg-surface p-6">
+            <li key={item.title.ru} className="rounded-lg border border-line bg-surface p-5">
               <span className="block h-[3px] w-8 bg-accent" aria-hidden="true" />
-              <h3 className="mt-5 text-xl">{t(item.title, locale)}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-steel">{t(item.description, locale)}</p>
+              <h3 className="mt-4 text-base">{t(item.title, locale)}</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-steel">{t(item.description, locale)}</p>
             </li>
           ))}
         </ul>
 
-        <div className="mt-14">
-          <h3 className="text-2xl sm:text-3xl">{t(HM['HM-047'], locale)}</h3>
+        <div className="mt-12">
+          <h3 className="text-xl sm:text-2xl">{t(HM['HM-047'], locale)}</h3>
           <ul className="mt-5 flex flex-wrap gap-2">
             {catalog.useCases.map((useCase) => (
-              <li key={useCase.id} className="border border-line bg-background px-4 py-2.5 text-sm font-medium">
+              <li key={useCase.id} className="rounded-md border border-line bg-background px-4 py-2.5 text-sm font-medium">
                 {pick(useCase, locale)}
               </li>
             ))}
@@ -354,16 +411,16 @@ export default async function HomePage({ params }: { params: LocaleParams }) {
         </div>
       </Section>
 
-      {/* 6. Delivery and payment. */}
-      <Section tone="muted">
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.35fr_1fr]">
-          <div className="flex flex-col border border-line bg-surface p-6 sm:p-8 lg:p-10">
-            <h2 className="font-display text-3xl sm:text-4xl">{t(HM['HM-048'], locale)}</h2>
-            <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2">
-              <p className="border-l-[3px] border-accent bg-accent-soft p-5 text-base font-medium leading-relaxed">
+      {/* 7. Delivery and payment. */}
+      <Section tone="default">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.35fr_1fr]">
+          <div className="flex flex-col rounded-xl border border-line bg-surface p-6 sm:p-8 lg:p-10">
+            <h2 className="font-display text-2xl sm:text-3xl">{t(HM['HM-048'], locale)}</h2>
+            <div className="mt-7 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <p className="rounded-md border-l-[3px] border-accent bg-accent-soft p-5 text-base font-medium leading-relaxed">
                 {t(HM['HM-050'], locale)}
               </p>
-              <p className="border-l-[3px] border-foreground bg-background p-5 text-base leading-relaxed">{t(HM['HM-051'], locale)}</p>
+              <p className="rounded-md border-l-[3px] border-foreground bg-background p-5 text-base leading-relaxed">{t(HM['HM-051'], locale)}</p>
             </div>
             <ul className="mt-6 space-y-2 text-sm text-steel">
               <li className="flex gap-3">
@@ -380,9 +437,9 @@ export default async function HomePage({ params }: { params: LocaleParams }) {
             </LinkButton>
           </div>
 
-          <div className="flex flex-col border border-line bg-surface p-6 sm:p-8 lg:p-10">
-            <h2 className="font-display text-3xl sm:text-4xl">{t(HM['HM-054'], locale)}</h2>
-            <ul className="mt-8 divide-y divide-line border-y border-line">
+          <div className="flex flex-col rounded-xl border border-line bg-surface p-6 sm:p-8 lg:p-10">
+            <h2 className="font-display text-2xl sm:text-3xl">{t(HM['HM-054'], locale)}</h2>
+            <ul className="mt-7 divide-y divide-line border-y border-line">
               {[HM['HM-055'], HM['HM-056'], HM['HM-057'], HM['HM-058']].map((entry) => (
                 <li key={entry.ru} className="py-3.5 text-base">
                   {t(entry, locale)}
@@ -396,14 +453,14 @@ export default async function HomePage({ params }: { params: LocaleParams }) {
         </div>
       </Section>
 
-      {/* 7. Contacts. */}
+      {/* 8. Contacts. */}
       <Section tone="white" id="contacts" labelledBy="home-contacts-title">
         <div className="grid grid-cols-1 gap-10 lg:grid-cols-2 lg:gap-16">
           <div>
-            <h2 id="home-contacts-title" className="font-display text-3xl sm:text-4xl">
+            <h2 id="home-contacts-title" className="font-display text-[1.625rem] sm:text-3xl lg:text-[2rem]">
               {t(HM['HM-060'], locale)}
             </h2>
-            <dl className="mt-8 grid grid-cols-1 gap-px border border-line bg-line sm:grid-cols-2">
+            <dl className="mt-8 grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-2">
               <div className="bg-surface p-5">
                 <dt className="text-sm text-steel">{t(HM['HM-061'], locale)}</dt>
                 <dd className="mono mt-1 text-lg">
@@ -436,8 +493,8 @@ export default async function HomePage({ params }: { params: LocaleParams }) {
             </dl>
           </div>
 
-          <div className="border border-line bg-background p-6 sm:p-8">
-            <h3 className="font-display text-2xl">{t(HM['HM-066'], locale)}</h3>
+          <div className="rounded-xl border border-line bg-background p-6 sm:p-8">
+            <h3 className="font-display text-xl">{t(HM['HM-066'], locale)}</h3>
             <p className="mt-1 text-sm text-steel">{t(HM['HM-067'], locale)}</p>
             <div className="mt-5">
               <ContactForm />
@@ -445,43 +502,6 @@ export default async function HomePage({ params }: { params: LocaleParams }) {
           </div>
         </div>
       </Section>
-
-      {/* 8. Final configurator CTA. */}
-      <section aria-labelledby="home-final-title" className="bg-surface pb-16 sm:pb-20 lg:pb-24">
-        <Container>
-          <div className="relative overflow-hidden border-t-4 border-accent bg-surface-dark px-6 py-12 text-background sm:px-10 sm:py-14 lg:px-14 lg:py-16 [&_:focus-visible]:outline-accent">
-            <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
-              <div className="max-w-2xl">
-                <p className="eyebrow !text-steel-soft">{t(H['H-003'], locale)}</p>
-                <h2 id="home-final-title" className="mt-4 font-display text-3xl sm:text-5xl">
-                  {t(HM['HM-001'], locale)}
-                </h2>
-                {startingPrice !== null && (
-                  <p className="mt-4 text-base text-steel-soft sm:text-lg">
-                    {t(HM['HM-006'], locale, { price: formatPrice(startingPrice) })}
-                  </p>
-                )}
-              </div>
-              <div className="flex flex-col gap-3 sm:flex-row lg:shrink-0" data-fab-avoid>
-                <LinkButton href={href('/configurator')} variant="accent" size="lg" className="min-h-14 whitespace-normal text-center">
-                  {t(HM['HM-004'], locale)}
-                  <ArrowIcon />
-                </LinkButton>
-                <LinkButton
-                  href={whatsAppContactUrl(locale)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  variant="outline-dark"
-                  size="lg"
-                  className="min-h-14 whitespace-normal text-center"
-                >
-                  {t(H['H-006'], locale)}
-                </LinkButton>
-              </div>
-            </div>
-          </div>
-        </Container>
-      </section>
     </>
   );
 }

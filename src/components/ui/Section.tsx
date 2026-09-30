@@ -34,7 +34,7 @@ export function Section({
 }) {
   return (
     <section id={id} aria-labelledby={labelledBy} className={`${TONE_CLASSES[tone]} ${className}`}>
-      <Container className={`py-16 sm:py-20 lg:py-24 ${containerClassName}`}>{children}</Container>
+      <Container className={`py-12 sm:py-14 lg:py-16 ${containerClassName}`}>{children}</Container>
     </section>
   );
 }
@@ -56,14 +56,14 @@ export function SectionHeading({
   dark?: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between sm:gap-8">
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between sm:gap-8">
       <div className="max-w-3xl">
         {eyebrow && <p className={`eyebrow mb-3 ${dark ? '!text-steel-soft' : ''}`}>{eyebrow}</p>}
-        <h2 id={id} className="font-display text-3xl sm:text-4xl lg:text-[2.75rem]">
+        <h2 id={id} className="font-display text-[1.625rem] sm:text-3xl lg:text-[2rem]">
           {title}
         </h2>
         {description && (
-          <p className={`mt-4 max-w-2xl text-base sm:text-lg ${dark ? 'text-steel-soft' : 'text-steel'}`}>{description}</p>
+          <p className={`mt-3 max-w-2xl text-base ${dark ? 'text-steel-soft' : 'text-steel'}`}>{description}</p>
         )}
       </div>
       {/* `contents` at mobile: when `action`'s own element is conditionally

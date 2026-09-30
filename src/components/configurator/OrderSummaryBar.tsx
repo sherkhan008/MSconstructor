@@ -160,11 +160,11 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
 
   return (
     <div
-      className="no-print fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface lg:static lg:z-auto lg:shrink-0 lg:border-t-2 lg:border-t-foreground"
+      className="no-print fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface lg:static lg:z-auto lg:shrink-0 lg:bg-background xl:rounded-lg xl:border xl:border-line"
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
       <div
-        className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 max-[359px]:gap-2.5 max-[359px]:py-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-5 sm:px-6 lg:flex-col lg:items-stretch lg:gap-3 lg:px-5 lg:pb-5 lg:pt-4"
+        className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 max-[359px]:gap-2.5 max-[359px]:py-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-5 sm:px-6 lg:flex-col lg:items-stretch lg:gap-3 lg:px-5 lg:pb-5 lg:pt-4 xl:pt-5"
         data-fab-avoid
       >
         {/* Wraps: at lg the details toggle drops onto its own full-width
@@ -175,7 +175,7 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
             the first line, and the total gets the full width underneath
             (the price block is `display: contents` there). */}
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 max-[359px]:grid max-[359px]:grid-cols-[minmax(0,1fr)_auto_auto_auto] max-[359px]:gap-x-1.5 max-[359px]:gap-y-1">
-          <div className="min-w-0 flex-1 max-[359px]:contents">
+          <div className="min-w-0 flex-1 max-[359px]:contents xl:basis-full">
             <p
               role="status"
               aria-live="polite"
@@ -203,7 +203,7 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
               <PriceTag
                 value={total}
                 size="lg"
-                className={`block whitespace-nowrap leading-tight lg:!text-[2rem] ${allCurrent ? 'price-flash' : 'opacity-60'}`}
+                className={`block whitespace-nowrap leading-tight lg:!text-[2rem] xl:mt-1 ${allCurrent ? 'price-flash' : 'opacity-60'}`}
               />
             ) : (
               <div className="mt-1 h-7 w-32 animate-pulse bg-surface-muted" />
@@ -216,7 +216,7 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
             onClick={() => setDetailsOpen((o) => !o)}
             disabled={!activePrice.result}
             aria-expanded={detailsOpen}
-            className={`${ICON_ACTION} gap-2 sm:w-auto sm:px-3 lg:order-last lg:-my-1 lg:h-9 lg:basis-full lg:justify-start lg:border-transparent lg:bg-transparent lg:px-0 lg:text-[13px] lg:font-medium lg:text-steel lg:hover:border-transparent lg:hover:text-foreground`}
+            className={`${ICON_ACTION} gap-2 sm:w-auto sm:px-3 lg:order-last lg:-my-1 lg:h-9 lg:basis-full lg:justify-start lg:border-transparent lg:bg-transparent lg:px-0 lg:text-[13px] lg:font-medium lg:text-steel lg:hover:border-transparent lg:hover:text-foreground xl:my-0 xl:h-11 xl:min-w-0 xl:flex-1 xl:basis-0 xl:text-left xl:leading-tight`}
           >
             <span className="sr-only sm:not-sr-only">{t(CF['CF-057'], locale)}</span>
             <Chevron open={detailsOpen} />
@@ -267,7 +267,7 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
           </p>
         )}
 
-        <div className="grid grid-cols-2 gap-2 sm:w-[24rem] sm:shrink-0 lg:w-auto lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:[@media(min-height:840px)]:grid-cols-1">
+        <div className="grid grid-cols-2 gap-2 sm:w-[24rem] sm:shrink-0 lg:w-auto lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:[@media(min-height:840px)]:grid-cols-1 xl:grid-cols-1">
           <Button
             onClick={() => handleAddToCart(true)}
             disabled={cartActionsDisabled}
@@ -293,7 +293,7 @@ export function OrderSummaryBar({ catalog }: { catalog: PublicCatalog }) {
 
 /** Square 44px secondary action — the Header's icon-button language. */
 const ICON_ACTION =
-  'inline-flex h-11 w-11 shrink-0 items-center justify-center border border-line bg-surface text-foreground transition-colors hover:border-foreground disabled:cursor-not-allowed disabled:opacity-40';
+  'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-line-strong bg-surface text-foreground transition-colors hover:border-foreground disabled:cursor-not-allowed disabled:opacity-40';
 
 function PriceDetails({ priceResult }: { priceResult: PublicPriceResult }) {
   const locale = useLocale();

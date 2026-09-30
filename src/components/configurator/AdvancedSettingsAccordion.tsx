@@ -100,7 +100,7 @@ export function AdvancedSettingsAccordion({ catalog }: { catalog: PublicCatalog 
   }
 
   return (
-    <div className="border border-line bg-surface text-sm">
+    <div className="overflow-hidden rounded-lg border border-line bg-surface text-sm">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}

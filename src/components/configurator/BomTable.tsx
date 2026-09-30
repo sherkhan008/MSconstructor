@@ -24,11 +24,11 @@ export function BomTable({ lines }: { lines: PublicKitLine[]; totalWeightKg: num
   const canExpand = lines.length > PREVIEW_ROW_COUNT;
 
   return (
-    <div className="border border-line bg-surface">
-      <h2 className="px-4 pb-2 pt-3.5 font-display text-lg leading-tight">{t(CF['CF-053'], locale)}</h2>
-      <div className="flex flex-col divide-y divide-line border-t border-line">
+    <div className="rounded-lg bg-background p-4 sm:p-6">
+      <h2 className="font-display text-lg leading-tight sm:text-xl">{t(CF['CF-053'], locale)}</h2>
+      <div className="mt-3 flex flex-col sm:mt-4">
         {visibleLines.map((line, i) => (
-          <div key={`${line.componentId}-${i}`} className="flex items-baseline justify-between gap-3 px-4 py-2 text-sm">
+          <div key={`${line.componentId}-${i}`} className="flex items-baseline justify-between gap-3 rounded-md px-3 py-2 text-sm odd:bg-surface">
             <span className="min-w-0 flex-1 break-words">{line.name}</span>
             <span className="mono shrink-0 text-steel">{t(CF['CF-054'], locale, { N: line.quantity })}</span>
           </div>
@@ -39,7 +39,7 @@ export function BomTable({ lines }: { lines: PublicKitLine[]; totalWeightKg: num
           type="button"
           onClick={() => setShowAll((v) => !v)}
           aria-expanded={showAll}
-          className="min-h-11 w-full border-t border-line px-4 text-center text-[13px] font-medium text-steel transition-colors hover:bg-background/60 hover:text-foreground"
+          className="mt-2 min-h-11 w-full rounded-md px-4 text-center text-[13px] font-medium text-steel transition-colors hover:bg-surface hover:text-foreground"
         >
           {showAll ? t(CF['CF-055'], locale) : t(CF['CF-056'], locale, { N: lines.length })}
         </button>

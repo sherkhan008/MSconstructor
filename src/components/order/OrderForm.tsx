@@ -396,7 +396,7 @@ function RequiredText({ text }: { text: string }) {
   if (!text.endsWith(' *')) return <>{text}</>;
   return (
     <>
-      {text.slice(0, -2)} <span className="text-accent-strong">*</span>
+      {text.slice(0, -2)} <span className="text-danger">*</span>
     </>
   );
 }

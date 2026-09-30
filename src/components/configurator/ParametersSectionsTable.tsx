@@ -92,7 +92,7 @@ export function ParametersSectionsTable({ catalog, onReset }: { catalog: PublicC
   }
 
   return (
-    <div className="border border-line bg-surface text-sm">
+    <div className="rounded-lg border border-line bg-surface text-sm">
       <div className="p-4">
         <KitSwitcher />
         {/* The active kit's own header mirrors a section row: its name, then
@@ -216,7 +216,7 @@ export function ParametersSectionsTable({ catalog, onReset }: { catalog: PublicC
             onClick={addSection}
             aria-label={t(CF['CF-027'], locale)}
             title={t(CF['CF-027'], locale)}
-            className="flex min-h-11 w-full items-center justify-center border border-dashed border-line-strong text-[15px] font-medium text-foreground transition-colors hover:border-foreground disabled:cursor-not-allowed disabled:opacity-40 lg:min-h-10"
+            className="flex min-h-11 w-full items-center justify-center rounded-md border border-dashed border-line-strong text-[15px] font-medium text-foreground transition-colors hover:border-foreground disabled:cursor-not-allowed disabled:opacity-40 lg:min-h-10"
           >
             {t(CF['CF-028'], locale)}
           </button>
@@ -258,10 +258,15 @@ function sectionSummary(section: ShelvingSection, locale: Locale): string {
   return section.corner === 'NONE' ? base : `${base} · ${t(CORNER_LABELS[section.corner], locale)}`;
 }
 
-/** Shared field chrome: readable sentence-case label over a 44px control. */
-const FIELD_LABEL = 'text-[13px] leading-tight text-steel';
+/** Shared field chrome: one compact row per field — a readable sentence-case
+ * label on the left, a 44px control aligned in a consistent right column.
+ * Below 400px the label sits above a full-width control instead, so a select
+ * such as the load ("Сөреге 150 кг") is never clipped. */
+const FIELD_ROW =
+  'flex min-w-0 flex-col gap-1.5 min-[400px]:grid min-[400px]:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] min-[400px]:items-center min-[400px]:gap-3';
+const FIELD_LABEL = 'text-[13px] leading-tight text-foreground/80';
 const SELECT_CLASS =
-  'mono h-11 w-full min-w-0 border border-line bg-surface px-2.5 text-sm text-foreground outline-none transition-colors hover:border-line-strong focus:border-blueprint lg:h-10';
+  'mono h-11 w-full min-w-0 rounded-md border border-line-strong bg-surface px-2.5 text-sm text-foreground outline-none transition-colors hover:border-steel-soft focus:border-blueprint lg:h-10';
 
 /**
  * The workspace's kits (V2.5): one button per kit, in order — the active one
@@ -297,7 +302,7 @@ function KitSwitcher() {
               aria-pressed={active}
               data-kit-tab={i + 1}
               onClick={() => selectKit(kit.id)}
-              className={`flex min-h-11 min-w-0 flex-col items-start justify-center border px-2.5 py-1 text-left leading-tight transition-colors ${
+              className={`flex min-h-11 min-w-0 flex-col items-start justify-center rounded-md border px-2.5 py-1 text-left leading-tight transition-colors ${
                 active ? 'border-foreground bg-foreground text-surface' : 'border-line bg-surface text-steel hover:border-line-strong hover:text-foreground'
               }`}
             >
@@ -313,7 +318,7 @@ function KitSwitcher() {
             onClick={addKit}
             aria-label={t(CF['CF-111'], locale)}
             title={t(CF['CF-111'], locale)}
-            className="flex min-h-11 items-center justify-center border border-dashed border-line-strong px-3 text-[13px] font-medium text-foreground transition-colors hover:border-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex min-h-11 items-center justify-center rounded-md border border-dashed border-line-strong px-3 text-[13px] font-medium text-foreground transition-colors hover:border-foreground disabled:cursor-not-allowed disabled:opacity-40"
           >
             {t(CF['CF-110'], locale)}
           </button>
@@ -348,8 +353,8 @@ function KitParamsFields({
   const locale = useLocale();
 
   return (
-    <div role="group" aria-label={t(CF['CF-024'], locale)} className="mt-3 grid grid-cols-2 gap-x-3 gap-y-3">
-      <label className="flex min-w-0 flex-col gap-1.5">
+    <div role="group" aria-label={t(CF['CF-024'], locale)} className="mt-2 flex flex-col gap-2.5">
+      <label className={FIELD_ROW}>
         <span className={FIELD_LABEL}>{t(CF['CF-031'], locale)}</span>
         <select value={config.depth} onChange={(e) => setField('depth', Number(e.target.value))} className={SELECT_CLASS}>
           {catalog.depths
@@ -362,11 +367,8 @@ function KitParamsFields({
         </select>
       </label>
 
-      {/* Load options are words, not a bare number: sans face, and a full
-          row below 400px so "Сөреге 150 кг" never clips inside the select
-          (there it moves below the quantity; from 400px it sits beside the
-          depth, as before). */}
-      <label className="order-last col-span-2 flex min-w-0 flex-col gap-1.5 min-[400px]:order-none min-[400px]:col-span-1">
+      {/* Load options are words, not a bare number: sans face. */}
+      <label className={FIELD_ROW}>
         <span className={FIELD_LABEL}>{t(CF['CF-033'], locale)}</span>
         <select value={config.loadCapacity} onChange={(e) => setField('loadCapacity', Number(e.target.value))} className={`${SELECT_CLASS} !font-sans`}>
           {catalog.loadCapacities.map((load) => {
@@ -383,7 +385,7 @@ function KitParamsFields({
         </select>
       </label>
 
-      <div className="flex min-w-0 flex-col gap-1.5">
+      <div className={FIELD_ROW}>
         <span className={FIELD_LABEL}>{t(CF['CF-114'], locale)}</span>
         <NumberStepper
           value={config.quantity}
@@ -434,8 +436,8 @@ function SectionFields({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-2 gap-x-3 gap-y-3 min-[400px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_7rem]">
-        <label className="flex min-w-0 flex-col gap-1.5">
+      <div className="flex flex-col gap-2.5">
+        <label className={FIELD_ROW}>
           <span className={FIELD_LABEL}>
             {t(CF['CF-035'], locale)}, {mm}
           </span>
@@ -454,7 +456,7 @@ function SectionFields({
           </select>
         </label>
 
-        <label className="flex min-w-0 flex-col gap-1.5">
+        <label className={FIELD_ROW}>
           <span className={FIELD_LABEL}>
             {t(CF['CF-030'], locale)}, {mm}
           </span>
@@ -473,7 +475,7 @@ function SectionFields({
           </select>
         </label>
 
-        <div className="col-span-2 flex min-w-0 flex-col gap-1.5 min-[400px]:col-span-1">
+        <div className={FIELD_ROW}>
           <span className={FIELD_LABEL}>{t(CF['CF-032'], locale)}</span>
           <NumberStepper
             value={section.shelves}
@@ -490,7 +492,7 @@ function SectionFields({
           control at all. The same section, turned 90° backward — no price
           or component changes. */}
       {corners.length > 1 && (
-        <label className="flex min-w-0 flex-col gap-1.5">
+        <label className={FIELD_ROW}>
           <span className={FIELD_LABEL}>{t(CF['CF-120'], locale)}</span>
           <select
             value={section.corner}
@@ -508,7 +510,9 @@ function SectionFields({
         </label>
       )}
 
-      <div className="grid grid-cols-3 gap-2">
+      {/* Wraps instead of squeezing: three chips per line where they fit,
+          never a label broken mid-word. */}
+      <div className="flex flex-wrap gap-2 [&>*]:flex-1 [&>*]:basis-[5.75rem]">
         <WallCheckbox label={t(CF['CF-037'], locale)} checked={section.rearWall} onChange={(checked) => onChange({ rearWall: checked })} />
         <WallCheckbox label={t(CF['CF-038'], locale)} checked={section.leftWall} onChange={(checked) => onChange({ leftWall: checked })} />
         <WallCheckbox label={t(CF['CF-039'], locale)} checked={section.rightWall} onChange={(checked) => onChange({ rightWall: checked })} />
@@ -534,7 +538,7 @@ function SectionFields({
 function WallCheckbox({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
   return (
     <label
-      className={`flex min-h-11 min-w-0 cursor-pointer items-center gap-2 border px-2 text-[13px] leading-tight transition-colors lg:min-h-10 ${
+      className={`flex min-h-11 min-w-0 cursor-pointer items-center gap-2 rounded-md border px-2 text-[13px] leading-tight transition-colors lg:min-h-10 ${
         checked ? 'border-foreground bg-surface text-foreground' : 'border-line bg-surface text-steel hover:border-line-strong'
       }`}
     >

@@ -298,13 +298,13 @@ sources. Details: [production-client-ip-and-rate-limiting.md](production-client-
   needs a rebuild (`deploy.sh`).
 - **Outbound network is required during `docker build`**: `npm ci` (npm
   registry, Prisma engine download) and `next/font/google`, which downloads
-  Inter, Oswald and IBM Plex Mono from `fonts.googleapis.com` /
+  Inter and IBM Plex Mono from `fonts.googleapis.com` /
   `fonts.gstatic.com`. The downloaded files are self-hosted in the image
   (`/_next/static/media`); **the running site makes no request to Google**.
   The repository contains only Noto Sans (used for PDFs), which would change
   the storefront's typography, so the fonts were not switched to
   `next/font/local`. To make builds fully offline later, add the OFL-licensed
-  Inter, Oswald and IBM Plex Mono files (from their official releases) to the
+  Inter and IBM Plex Mono files (from their official releases) to the
   repository and switch `src/app/layout.tsx` to `next/font/local`.
 - Base images float within a major line (`node:22-alpine`, `postgres:16-alpine`,
   `redis:7-alpine`, `nginx:1.27-alpine`) to receive security patches; pin

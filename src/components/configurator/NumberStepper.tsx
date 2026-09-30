@@ -27,7 +27,7 @@ export function NumberStepper({
 }) {
   const locale = useLocale();
   return (
-    <div className="grid h-11 w-full grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-stretch border border-line bg-surface lg:h-10">
+    <div className="grid h-11 w-full grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-stretch overflow-hidden rounded-md border border-line-strong bg-surface lg:h-10">
       <button
         type="button"
         aria-label={decreaseLabel ?? t(CF['CF-040'], locale)}
