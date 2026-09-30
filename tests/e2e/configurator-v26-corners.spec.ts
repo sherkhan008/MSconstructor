@@ -127,7 +127,9 @@ test('the orientation control offers only valid choices; choosing a corner keeps
 
   await waitForPrice(page);
   expect(await barTotal(page)).toBe(straightTotal);
-  await expect(page.getByTestId('configurator-characteristics')).toContainText('Угол слева');
+  // The section list names the orientation in section 1's own summary.
+  await selectSection(page, 2);
+  await expect(page.locator('[data-section-row="1"] [data-testid="section-summary"]')).toContainText('Угол слева');
   await expect(page.getByTestId('preview-stage')).toContainText('↗ 1000');
   await rackInsideFrame(page);
   await noHorizontalScroll(page);

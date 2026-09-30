@@ -221,11 +221,11 @@
     }
   }
 
-  /* Configurator rack frame. On desktop the workspace fits one screen below
-     the header and the ~9rem title block (breadcrumbs, title, lead), so the
-     frame is capped to the height left after the preview's toolbar and
-     caption strip (~6rem) and the bottom margin — the whole rack and its
-     controls stay in view. */
+  /* Configurator rack frame. On desktop the rack spans the content width,
+     with the purchase bar and the controls below it in document flow. Its
+     height is capped so the whole preview is in view on first load: the
+     header, the ~9rem title block (breadcrumbs, title, lead), the preview's
+     toolbar and caption strip (~6rem) and a small margin. */
   @media (min-width: 1024px) {
     .configurator-frame {
       max-width: max(22rem, calc((100dvh - var(--header-height) - 16.5rem) * var(--frame-w-aspect, 4 / 3)));
