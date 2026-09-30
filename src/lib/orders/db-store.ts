@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { parseOrderBuyerSnapshot, parseOrderItemDocumentSnapshot } from '@/lib/documents/snapshots';
 import type { OrderStatus, PaymentPreference } from '@/lib/types/domain';
+import { pendingDeliveryData, type PendingDeliveryRow } from '@/lib/notifications/store';
 import { orderBuyer } from './buyer';
 import type { OrderItemRecord, OrderRecord } from './types';
 
@@ -23,9 +24,14 @@ import type { OrderItemRecord, OrderRecord } from './types';
  * reads first (src/lib/orders/buyer.ts). Two first orders from one phone at
  * the same moment can both try to create the row; the loser fails with a
  * P2002 on (phone, type) and saveOrder runs it again.
+ *
+ * The order's PENDING notification outbox rows (`outbox`) are part of the same
+ * transaction: a committed order always has its manager notification event,
+ * and a failed write leaves neither. No provider is called here — delivery
+ * happens after commit (src/lib/notifications/service.ts).
  */
-export async function saveOrderToDb(order: OrderRecord): Promise<OrderRecord> {
-  await prisma.order.create({
+export async function saveOrderToDb(order: OrderRecord, outbox: readonly PendingDeliveryRow[] = []): Promise<OrderRecord> {
+  const createOrder = prisma.order.create({
     data: {
       orderNumber: order.orderNumber,
       customer: {
@@ -68,6 +74,11 @@ export async function saveOrderToDb(order: OrderRecord): Promise<OrderRecord> {
       },
     },
   });
+  if (outbox.length === 0) {
+    await createOrder;
+  } else {
+    await prisma.$transaction([createOrder, prisma.notificationDelivery.createMany({ data: pendingDeliveryData(outbox) })]);
+  }
 
   return order;
 }

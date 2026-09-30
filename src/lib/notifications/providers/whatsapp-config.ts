@@ -1,5 +1,14 @@
 /**
- * WhatsApp Cloud API configuration for the internal new-order notification.
+ * WhatsApp Cloud API configuration for the internal manager notifications
+ * (new order, new contact-form lead).
+ *
+ * Two different phone numbers are involved, deliberately kept apart:
+ *  - SENDER: the technical Cloud API number registered in Meta, identified
+ *    only by its numeric WHATSAPP_PHONE_NUMBER_ID. It is never shown to
+ *    customers and never used in a wa.me link.
+ *  - RECIPIENT: WHATSAPP_ADMIN_RECIPIENT — the manager's working WhatsApp,
+ *    i.e. the same public number customers see (NEXT_PUBLIC_WHATSAPP_NUMBER,
+ *    src/lib/config/site.ts). It receives the alerts; it does not send them.
  *
  * Pure functions of their input (no `env` import) so the same rules run in
  * the production startup check (src/lib/startup/production-config.ts) and in
@@ -19,6 +28,7 @@ export interface WhatsAppEnvInput {
   WHATSAPP_PHONE_NUMBER_ID?: string;
   WHATSAPP_ADMIN_RECIPIENT?: string;
   WHATSAPP_TEMPLATE_NAME?: string;
+  WHATSAPP_CONTACT_TEMPLATE_NAME?: string;
   WHATSAPP_TEMPLATE_LANGUAGE?: string;
   WHATSAPP_GRAPH_API_VERSION?: string;
 }
@@ -28,7 +38,10 @@ export interface WhatsAppConfig {
   phoneNumberId: string;
   /** Normalised: digits only, with country code (Meta's `to` format). */
   recipient: string;
+  /** Approved template for order.created (WHATSAPP_TEMPLATE_NAME). */
   templateName: string;
+  /** Approved template for contact.created (WHATSAPP_CONTACT_TEMPLATE_NAME). */
+  contactTemplateName: string;
   templateLanguage: string;
   graphApiVersion: string;
 }
@@ -61,6 +74,7 @@ export function resolveWhatsAppConfig(input: WhatsAppEnvInput): WhatsAppConfigRe
   const accessToken = input.WHATSAPP_ACCESS_TOKEN?.trim() ?? '';
   const phoneNumberId = input.WHATSAPP_PHONE_NUMBER_ID?.trim() ?? '';
   const templateName = input.WHATSAPP_TEMPLATE_NAME?.trim() ?? '';
+  const contactTemplateName = input.WHATSAPP_CONTACT_TEMPLATE_NAME?.trim() ?? '';
   const templateLanguage = input.WHATSAPP_TEMPLATE_LANGUAGE?.trim() ?? '';
   const graphApiVersion = input.WHATSAPP_GRAPH_API_VERSION?.trim() || WHATSAPP_DEFAULT_GRAPH_API_VERSION;
   const recipient = normalizeWhatsAppRecipient(input.WHATSAPP_ADMIN_RECIPIENT);
@@ -72,6 +86,10 @@ export function resolveWhatsAppConfig(input: WhatsAppEnvInput): WhatsAppConfigRe
   else if (!recipient) problems.push('WHATSAPP_ADMIN_RECIPIENT must be an international phone number with country code');
   if (!templateName) problems.push('WHATSAPP_TEMPLATE_NAME is required');
   else if (!/^[a-z0-9_]{1,512}$/.test(templateName)) problems.push('WHATSAPP_TEMPLATE_NAME must use lowercase letters, digits and underscores');
+  if (!contactTemplateName) problems.push('WHATSAPP_CONTACT_TEMPLATE_NAME is required');
+  else if (!/^[a-z0-9_]{1,512}$/.test(contactTemplateName)) {
+    problems.push('WHATSAPP_CONTACT_TEMPLATE_NAME must use lowercase letters, digits and underscores');
+  }
   if (!templateLanguage) problems.push('WHATSAPP_TEMPLATE_LANGUAGE is required');
   else if (!/^[a-z]{2,3}(_[A-Z]{2})?$/.test(templateLanguage)) problems.push('WHATSAPP_TEMPLATE_LANGUAGE must be a template language code such as "ru"');
   if (!/^v\d+\.\d+$/.test(graphApiVersion)) problems.push('WHATSAPP_GRAPH_API_VERSION must look like "v24.0"');
@@ -79,6 +97,6 @@ export function resolveWhatsAppConfig(input: WhatsAppEnvInput): WhatsAppConfigRe
   if (problems.length > 0 || !recipient) return { state: 'invalid', problems };
   return {
     state: 'ready',
-    config: { accessToken, phoneNumberId, recipient, templateName, templateLanguage, graphApiVersion },
+    config: { accessToken, phoneNumberId, recipient, templateName, contactTemplateName, templateLanguage, graphApiVersion },
   };
 }

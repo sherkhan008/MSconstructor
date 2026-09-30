@@ -121,10 +121,16 @@ describe('order notifications', () => {
     });
     const failing = fakeChannel(async () => ({ ok: false, error: 'HTTP_500' }), 'fake2');
     await expect(emitOrderEvent(created, { channels: () => [throwing, failing] })).resolves.toBeUndefined();
-    expect(getMemoryDeliveries()).toEqual([
-      expect.objectContaining({ channel: 'fake2', status: 'FAILED', lastError: 'HTTP_500' }),
-    ]);
-    expect(logs.join('\n')).not.toContain(SECRET);
+    // The throwing adapter is recorded too — as a retryable ADAPTER_ERROR, the
+    // thrown message (with its token) never stored.
+    expect(getMemoryDeliveries()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ channel: 'fake', status: 'FAILED', lastError: 'ADAPTER_ERROR' }),
+        expect.objectContaining({ channel: 'fake2', status: 'FAILED', lastError: 'HTTP_500' }),
+      ]),
+    );
+    expect(getMemoryDeliveries()).toHaveLength(2);
+    expect(logs.join('\n') + JSON.stringify(getMemoryDeliveries())).not.toContain(SECRET);
   });
 
   it('retries stored failures once the channel works', async () => {

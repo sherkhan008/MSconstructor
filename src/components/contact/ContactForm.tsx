@@ -2,7 +2,7 @@
 
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { contactRequestSchemaFor, type ContactRequestInput } from '@/lib/contact-schema';
 import { Button } from '@/components/ui/Button';
 import { t } from '@/lib/i18n/format';
@@ -13,6 +13,10 @@ import { useLocale } from '@/components/i18n/LocaleProvider';
 export function ContactForm() {
   const locale = useLocale();
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  // Synchronous in-flight guard: a fast double click can fire a second submit
+  // before the disabled button re-renders. The server also treats an identical
+  // resend as the same lead (src/lib/contact-leads/store.ts).
+  const inFlight = useRef(false);
   const {
     register,
     handleSubmit,
@@ -21,6 +25,8 @@ export function ContactForm() {
   } = useForm<ContactRequestInput>({ resolver: zodResolver(contactRequestSchemaFor(locale)) });
 
   async function onSubmit(data: ContactRequestInput) {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setStatus('idle');
     try {
       const response = await fetch('/api/contact', {
@@ -37,6 +43,8 @@ export function ContactForm() {
       }
     } catch {
       setStatus('error');
+    } finally {
+      inFlight.current = false;
     }
   }
 
@@ -86,8 +94,16 @@ export function ContactForm() {
         {isSubmitting ? t(CN['CN-009'], locale) : t(CN['CN-010'], locale)}
       </Button>
 
-      {status === 'success' && <p className="text-sm text-success">{t(CN['CN-011'], locale)}</p>}
-      {status === 'error' && <p className="text-sm text-danger">{t(CN['CN-012'], locale)}</p>}
+      {status === 'success' && (
+        <p role="status" className="text-sm text-success">
+          {t(CN['CN-011'], locale)}
+        </p>
+      )}
+      {status === 'error' && (
+        <p role="alert" className="text-sm text-danger">
+          {t(CN['CN-012'], locale)}
+        </p>
+      )}
     </form>
   );
 }

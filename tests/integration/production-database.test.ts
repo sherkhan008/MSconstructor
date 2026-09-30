@@ -157,7 +157,8 @@ describe('production runtime requires a real PostgreSQL DATABASE_URL', () => {
     await saveOrder(fakeOrder);
     await getOrderByNumber('MS-TEST-DB-1');
 
-    expect(saveOrderToDb).toHaveBeenCalledWith(fakeOrder);
+    // Second argument: the order's outbox rows (none without a notification outbox).
+    expect(saveOrderToDb).toHaveBeenCalledWith(fakeOrder, []);
     expect(getOrderByNumberFromDb).toHaveBeenCalledWith('MS-TEST-DB-1');
   });
 });

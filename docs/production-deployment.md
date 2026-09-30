@@ -63,9 +63,9 @@ as required secret / required / optional.
 | `POSTGRES_USER`, `POSTGRES_DB` | optional | default `ms_shelving` |
 | `PUBLIC_HTTP_BIND` | optional | default `80`; `127.0.0.1:8080` behind a host-level TLS terminator |
 | `SELLER_*` | optional (required before invoices) | confidential banking details |
-| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | optional (token is a secret) | order events `order.created`, `order.status_changed`, `order.paid` with redacted payloads (no customer data). Unset = skipped + warn log; orders/payments are never affected. Sent/failed attempts are stored in `NotificationDelivery`; transient failures are retried automatically by `notifications-worker` (§10a) |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | optional (token is a secret) | secondary manager channel, sent in parallel with WhatsApp (not conditional on it): order events `order.created`, `order.status_changed`, `order.paid` with redacted text (no customer data), and `contact.created` (new contact-form lead: name, phone, message). Unset = skipped + warn log; orders, payments and leads are never affected. Attempts are stored in `NotificationDelivery`; transient failures are retried automatically by `notifications-worker` (§10a) |
 | `SMTP_*`, `MANAGER_EMAIL`, `EMAIL_FROM` | optional (password is a secret) | email channel has no transport yet: reported as unavailable, never as sent |
-| `WHATSAPP_NOTIFICATIONS_ENABLED`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ADMIN_RECIPIENT`, `WHATSAPP_TEMPLATE_NAME`, `WHATSAPP_TEMPLATE_LANGUAGE`, `WHATSAPP_GRAPH_API_VERSION` | optional, off by default (token is a secret) | internal `order.created` alert to the admin's WhatsApp via the official Cloud API, as an approved template with 6 body parameters (order number, customer name, phone, city, total, delivery method). Enabled with any required value missing = startup error. Failures are logged as codes and stored in `NotificationDelivery`, and transient ones are retried automatically by `notifications-worker` (§10a); orders are never affected. Never sent to customers |
+| `WHATSAPP_NOTIFICATIONS_ENABLED`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ADMIN_RECIPIENT`, `WHATSAPP_TEMPLATE_NAME`, `WHATSAPP_CONTACT_TEMPLATE_NAME`, `WHATSAPP_TEMPLATE_LANGUAGE`, `WHATSAPP_GRAPH_API_VERSION` | optional, off by default (token is a secret) | internal manager alerts via the official Cloud API, sent FROM the technical Cloud API number (`WHATSAPP_PHONE_NUMBER_ID`, never shown to customers) TO the manager's working/public number (`WHATSAPP_ADMIN_RECIPIENT` — the same number as `NEXT_PUBLIC_WHATSAPP_NUMBER`). Two approved templates: `WHATSAPP_TEMPLATE_NAME` for `order.created` (6 body parameters: order number, customer name, phone, city, total, delivery method) and `WHATSAPP_CONTACT_TEMPLATE_NAME` for `contact.created` (3: customer name, phone, message). Enabled with any required value missing = startup error. Failures are logged as codes and stored in `NotificationDelivery`, and transient ones are retried automatically by `notifications-worker` (§10a); orders and leads are never affected. Never sent to customers |
 | `AMOCRM_*`, `BITRIX24_*` | optional (URLs embed credentials) | |
 | `PAYMENTS_ENABLED`, `PAYMENTS_PROVIDER` | optional; **leave off** | online payment is not live — §13 |
 | `NEXT_PUBLIC_GOOGLE_ANALYTICS_ID`, `NEXT_PUBLIC_YANDEX_METRICA_ID` | optional (build time) | |
@@ -325,9 +325,16 @@ sources. Details: [production-client-ip-and-rate-limiting.md](production-client-
 
 ## 10a. Notification retries (`notifications-worker`)
 
-A failed order notification (Telegram, WhatsApp) never affects the order: the
-web app sends once, fire-and-forget, and records the attempt in the
-`NotificationDelivery` table. Failed rows are retried by one dedicated
+A failed notification (Telegram, WhatsApp) never affects the order or the
+contact-form lead (`ContactLead`, listed in `/admin/leads`). A new order or
+lead and its `PENDING` rows in `NotificationDelivery` (one per available
+channel, with a 5-minute lease in `nextAttemptAt`) are written in ONE database
+transaction: either both exist or neither does. After commit the web app makes
+one attempt in the background and turns each row into `SENT` or `FAILED`; if
+the app dies before or during that attempt, the `PENDING` row becomes due when
+the lease runs out and the worker sends it. (Admin status-change events have no
+business transaction to join; their rows are written right after the update.)
+Due rows are retried by one dedicated
 container, `notifications-worker`. There is no queue broker: the table is
 the queue, and the worker is a 60-second loop
 (`tsx scripts/notification-retry-worker.ts`) in the migrate image. The app
@@ -335,21 +342,27 @@ itself never retries.
 
 - **Which errors retry:** `TIMEOUT`, `NETWORK_ERROR`, HTTP 408, 429 and 5xx,
   Meta's temporary/rate-limit error codes (1, 2, 4, 80007, 130429, 131000,
-  131016, 131048, 131056, 133004), `ORDER_LOOKUP_FAILED`, `ADAPTER_ERROR`.
-  Every other code (e.g. `HTTP_400_META_132001`, template not found; `HTTP_401`,
-  bad token; `ORDER_NOT_FOUND`) is permanent and never retried.
+  131016, 131048, 131056, 133004), `ORDER_LOOKUP_FAILED`, `LEAD_LOOKUP_FAILED`,
+  `ADAPTER_ERROR`. Every other code (e.g. `HTTP_400_META_132001`, template not
+  found; `HTTP_401`, bad token; `ORDER_NOT_FOUND`, `LEAD_NOT_FOUND`) is
+  permanent and never retried.
 - **Schedule:** at most 6 attempts in total. The first retry comes 1 min after
   the original send, then 5 min, 15 min, 1 h and 3 h (last retry ≈ 4 h 20 min
   after the order). Rows older than 24 h are never retried.
-- **Duplicate protection:** only `FAILED` rows with a due `nextAttemptAt` are
-  read, so a `SENT` row is never resent. The worker claims each row (a
-  conditional update that pushes `nextAttemptAt` 5 min ahead) before sending.
-  That stops a crashed pass or a second worker from resending in a tight loop.
-  WhatsApp additionally never sends `order.created` twice for one order.
+- **Duplicate protection:** only `FAILED` rows and lease-expired `PENDING`
+  rows with a due `nextAttemptAt` are read, so a `SENT` row is never resent.
+  The worker claims each row (a conditional update that pushes `nextAttemptAt`
+  5 min ahead) before sending. That stops a crashed pass or a second worker
+  from resending in a tight loop. WhatsApp additionally never sends
+  `order.created` twice for one order, nor `contact.created` twice for one
+  lead. (A `PENDING` row recovered after a crash is at-least-once: if the app
+  died after Meta accepted the message but before recording it, the manager
+  may get that one alert twice.)
 - **Channel disabled/unconfigured at retry time:** the row is postponed 1 h
   without spending an attempt, until the 24 h limit ends it.
 - **Final state:** a row that will not be retried stays `FAILED` with
-  `nextAttemptAt` NULL and its last error code.
+  `nextAttemptAt` NULL and its last error code (`EXPIRED` for a `PENDING` row
+  older than 24 h).
 
 The worker gets the same notification variables as `app` (docker-compose.yml)
 and refuses to start without PostgreSQL or with an incomplete WhatsApp
@@ -360,10 +373,10 @@ configuration.
 | Worker logs | `docker compose --env-file .env.production logs -f --tail 200 notifications-worker` |
 | Restart worker | `docker compose --env-file .env.production up -d --no-deps --no-build notifications-worker` |
 | One pass by hand | `docker compose --env-file .env.production run --rm --no-deps notifications-worker ./node_modules/.bin/tsx scripts/notification-retry-worker.ts --once` |
-| Pending retries | `docker compose --env-file .env.production exec postgres psql -U ms_shelving -d ms_shelving -c 'SELECT channel, "orderNumber", attempts, "lastError", "nextAttemptAt" FROM "NotificationDelivery" WHERE status = '"'"'FAILED'"'"' ORDER BY "createdAt" DESC LIMIT 20;'` |
+| Pending retries | `docker compose --env-file .env.production exec postgres psql -U ms_shelving -d ms_shelving -c 'SELECT channel, event, "orderNumber", "contactLeadId", status, attempts, "lastError", "nextAttemptAt" FROM "NotificationDelivery" WHERE status IN ('"'"'FAILED'"'"', '"'"'PENDING'"'"') ORDER BY "createdAt" DESC LIMIT 20;'` |
 
 Log lines are codes only: `[notifications] retry failed|retry gave up|retry
-postponed|retry abandoned event=… channel=… order=… error=… attempt=…` and
+postponed|retry abandoned event=… channel=… order=…|lead=<id> error=… attempt=…` and
 `[notifications-worker] started|stopped|retried deliveries sent=N|pass failed error=<ErrorClass>`.
 
 ## 11. Routine operations

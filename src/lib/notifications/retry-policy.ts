@@ -24,8 +24,9 @@ export const RETRY_CLAIM_LEASE_MS = 5 * 60_000;
  * much later without spending an attempt. */
 export const RETRY_UNAVAILABLE_POSTPONE_MS = 60 * 60_000;
 
-/** A delivery older than this is never retried again: a "new order" alert
- * that arrives days late is noise, not information. */
+/** A delivery older than this is never retried again: a "new order" / "new
+ * lead" alert that arrives days late is noise, not information (every lead
+ * stays visible in /admin/leads regardless). */
 export const RETRY_MAX_AGE_MS = 24 * 60 * 60_000;
 
 /**
@@ -38,7 +39,13 @@ const META_TRANSIENT_CODES = new Set([1, 2, 4, 80007, 130429, 131000, 131016, 13
 
 /** Codes produced by the channel adapters (./channels.ts, ./providers/whatsapp.ts). */
 export function isTransientDeliveryError(code: string): boolean {
-  if (code === 'TIMEOUT' || code === 'NETWORK_ERROR' || code === 'ORDER_LOOKUP_FAILED' || code === 'ADAPTER_ERROR') {
+  if (
+    code === 'TIMEOUT' ||
+    code === 'NETWORK_ERROR' ||
+    code === 'ORDER_LOOKUP_FAILED' ||
+    code === 'LEAD_LOOKUP_FAILED' ||
+    code === 'ADAPTER_ERROR'
+  ) {
     return true;
   }
   const http = /^HTTP_(\d{3})(?:_META_(\d+))?$/.exec(code);

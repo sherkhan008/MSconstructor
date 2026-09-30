@@ -11,7 +11,9 @@ const MESSAGE_MAX = 2000;
 function buildContactRequestSchema(locale: Locale) {
   return z.object({
     name: z.string().trim().min(2, t(VL['VL-002'], locale)).max(NAME_MAX, t(VL['VL-016'], locale, { N: NAME_MAX })),
-    phone: schemasFor(locale).phoneSchema,
+    // The shared phone rules (spaces/brackets/hyphens stripped, 8 → +7), then
+    // one canonical stored form: "+7XXXXXXXXXX" even when typed without "+".
+    phone: schemasFor(locale).phoneSchema.transform((phone) => (phone.startsWith('+') ? phone : `+${phone}`)),
     message: z.string().trim().min(1, t(VL['VL-015'], locale)).max(MESSAGE_MAX, t(VL['VL-017'], locale, { N: MESSAGE_MAX })),
   });
 }

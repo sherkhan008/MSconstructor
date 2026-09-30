@@ -15,6 +15,7 @@ const ENABLED: WhatsAppEnvInput = {
   WHATSAPP_PHONE_NUMBER_ID: '123456789012345',
   WHATSAPP_ADMIN_RECIPIENT: '+7 (707) 123-45-67',
   WHATSAPP_TEMPLATE_NAME: 'new_order_admin',
+  WHATSAPP_CONTACT_TEMPLATE_NAME: 'new_contact_lead',
   WHATSAPP_TEMPLATE_LANGUAGE: 'ru',
 };
 
@@ -61,6 +62,7 @@ describe('resolveWhatsAppConfig', () => {
         phoneNumberId: '123456789012345',
         recipient: '77071234567',
         templateName: 'new_order_admin',
+        contactTemplateName: 'new_contact_lead',
         templateLanguage: 'ru',
         graphApiVersion: WHATSAPP_DEFAULT_GRAPH_API_VERSION,
       },
@@ -74,6 +76,7 @@ describe('resolveWhatsAppConfig', () => {
     'WHATSAPP_PHONE_NUMBER_ID',
     'WHATSAPP_ADMIN_RECIPIENT',
     'WHATSAPP_TEMPLATE_NAME',
+    'WHATSAPP_CONTACT_TEMPLATE_NAME',
     'WHATSAPP_TEMPLATE_LANGUAGE',
   ] as const)('enabled without %s is invalid', (name) => {
     const result = resolveWhatsAppConfig({ ...ENABLED, [name]: undefined });
@@ -85,6 +88,7 @@ describe('resolveWhatsAppConfig', () => {
     [{ WHATSAPP_PHONE_NUMBER_ID: 'abc' }, 'WHATSAPP_PHONE_NUMBER_ID'],
     [{ WHATSAPP_ADMIN_RECIPIENT: '8 707' }, 'WHATSAPP_ADMIN_RECIPIENT'],
     [{ WHATSAPP_TEMPLATE_NAME: 'New Order' }, 'WHATSAPP_TEMPLATE_NAME'],
+    [{ WHATSAPP_CONTACT_TEMPLATE_NAME: 'new-contact' }, 'WHATSAPP_CONTACT_TEMPLATE_NAME'],
     [{ WHATSAPP_TEMPLATE_LANGUAGE: 'russian' }, 'WHATSAPP_TEMPLATE_LANGUAGE'],
     [{ WHATSAPP_GRAPH_API_VERSION: '24' }, 'WHATSAPP_GRAPH_API_VERSION'],
   ])('rejects a malformed value %j', (override, name) => {

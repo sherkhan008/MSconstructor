@@ -34,9 +34,11 @@ const serverSchema = z.object({
   TELEGRAM_BOT_TOKEN: optionalString,
   TELEGRAM_CHAT_ID: optionalString,
 
-  // Internal new-order WhatsApp alert to the admin (official Cloud API,
-  // template message). OFF unless WHATSAPP_NOTIFICATIONS_ENABLED is exactly
-  // "true"; the rest is validated then — see
+  // Internal manager WhatsApp alerts — new order and new contact-form lead
+  // (official Cloud API, template messages), sent FROM the technical Cloud API
+  // number (WHATSAPP_PHONE_NUMBER_ID) TO the manager's working/public number
+  // (WHATSAPP_ADMIN_RECIPIENT). OFF unless WHATSAPP_NOTIFICATIONS_ENABLED is
+  // exactly "true"; the rest is validated then — see
   // src/lib/notifications/providers/whatsapp-config.ts. Server-only: never
   // mirror any of these into NEXT_PUBLIC_*.
   WHATSAPP_NOTIFICATIONS_ENABLED: optionalString,
@@ -44,6 +46,7 @@ const serverSchema = z.object({
   WHATSAPP_PHONE_NUMBER_ID: optionalString,
   WHATSAPP_ADMIN_RECIPIENT: optionalString,
   WHATSAPP_TEMPLATE_NAME: optionalString,
+  WHATSAPP_CONTACT_TEMPLATE_NAME: optionalString,
   WHATSAPP_TEMPLATE_LANGUAGE: optionalString,
   WHATSAPP_GRAPH_API_VERSION: optionalString,
 

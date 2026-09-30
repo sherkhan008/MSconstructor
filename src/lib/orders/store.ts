@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { assertDatabaseConfigured, hasDatabase } from '@/lib/env';
+import { recordPendingDeliveriesInMemory, type PendingDeliveryRow } from '@/lib/notifications/store';
 import type { OrderRecord } from './types';
 
 /**
@@ -91,20 +92,28 @@ const MAX_ORDER_NUMBER_ATTEMPTS = 5;
 
 const memoryOrders: OrderRecord[] = [];
 
+export interface SaveOrderOptions {
+  /** The order's notification outbox rows (src/lib/notifications/service.ts
+   * createOutbox), written in the SAME transaction as the order. Called with
+   * the order exactly as it is about to be written — again after a number
+   * collision, so the rows always carry the stored order number. */
+  outbox?: (order: OrderRecord) => PendingDeliveryRow[];
+}
+
 /**
  * Persists the order, regenerating its number if that number is already
  * taken. Returns the record as actually stored — callers must read the order
  * number back off the return value (the API route does), never off the object
  * they passed in.
  */
-export async function saveOrder(order: OrderRecord): Promise<OrderRecord> {
+export async function saveOrder(order: OrderRecord, options: SaveOrderOptions = {}): Promise<OrderRecord> {
   assertDatabaseConfigured('order');
   if (hasDatabase) {
     const { saveOrderToDb } = await import('./db-store');
     let candidate = order;
     for (let attempt = 1; ; attempt += 1) {
       try {
-        return await saveOrderToDb(candidate);
+        return await saveOrderToDb(candidate, options.outbox?.(candidate) ?? []);
       } catch (error) {
         if (attempt >= MAX_ORDER_NUMBER_ATTEMPTS) throw error;
         if (isCustomerConflict(error)) continue;
@@ -120,6 +129,7 @@ export async function saveOrder(order: OrderRecord): Promise<OrderRecord> {
     stored = { ...stored, orderNumber: generateOrderNumber() };
   }
   memoryOrders.unshift(stored);
+  recordPendingDeliveriesInMemory(options.outbox?.(stored) ?? []);
   return stored;
 }
 

@@ -680,21 +680,25 @@ model SeoMetadata {
   ogImage     String?
 }
 
-/// One attempt to deliver one internal order event over one channel.
+/// One attempt to deliver one internal event (an order event, or a new
+/// contact-form lead) over one channel.
 ///
-/// Purely an outbox/troubleshooting record: it has NO foreign key to Order on
-/// purpose, so it can never block, cascade into or roll back an order or
-/// payment. `payload` is the already-redacted event (order number, statuses,
-/// total — no customer name, phone, email or address) so a retry can re-send it
-/// without re-reading the order. `lastError` is a short code, never a provider
-/// message, URL or token.
+/// Purely an outbox/troubleshooting record: it has NO foreign key to Order or
+/// ContactLead on purpose, so it can never block, cascade into or roll back an
+/// order, payment or lead. `payload` is the already-redacted event (order
+/// number, statuses, total; or just the lead id — no customer name, phone,
+/// email, address or message) so a retry can re-send it. `lastError` is a
+/// short code, never a provider message, URL or token.
+///
+/// Exactly one of `orderNumber` / `contactLeadId` is set: the event's subject.
 model NotificationDelivery {
   id          String   @id @default(cuid())
   event       String
   channel     String
-  /// SENT | FAILED
+  /// PENDING (written before the send; a lease in `nextAttemptAt`) | SENT | FAILED
   status      String
-  orderNumber String
+  orderNumber String?
+  contactLeadId String?
   payload     Json
   attempts    Int      @default(1)
   lastError   String?
@@ -706,5 +710,24 @@ model NotificationDelivery {
 
   @@index([status, channel])
   @@index([orderNumber])
+  @@index([contactLeadId])
   @@index([status, nextAttemptAt])
+}
+
+/// A message sent from the public contact form. Stored BEFORE any
+/// notification is attempted: a saved row is what "заявка отправлена" means,
+/// whatever WhatsApp/Telegram do afterwards. Only what the form asks for —
+/// no IP address, user agent or tracking data. Never deleted automatically.
+model ContactLead {
+  id        String   @id @default(cuid())
+  name      String
+  /// Normalised like order phones: "+7XXXXXXXXXX".
+  phone     String
+  message   String
+  /// Page locale the form was sent from ("ru" | "kk").
+  locale    String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([phone, createdAt])
 }

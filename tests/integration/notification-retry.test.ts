@@ -219,6 +219,7 @@ describe('retryFailedDeliveries', () => {
         WHATSAPP_PHONE_NUMBER_ID: '123',
         WHATSAPP_ADMIN_RECIPIENT: '77010000001',
         WHATSAPP_TEMPLATE_NAME: 'new_order_admin',
+        WHATSAPP_CONTACT_TEMPLATE_NAME: 'new_contact_lead',
         WHATSAPP_TEMPLATE_LANGUAGE: 'ru',
       }),
       loadOrder: async () =>
@@ -276,6 +277,7 @@ describe('10. order creation is unaffected by WhatsApp failures and never waits 
     WHATSAPP_PHONE_NUMBER_ID: '123456789012345',
     WHATSAPP_ADMIN_RECIPIENT: '77010000001',
     WHATSAPP_TEMPLATE_NAME: 'new_order_admin',
+    WHATSAPP_CONTACT_TEMPLATE_NAME: 'new_contact_lead',
     WHATSAPP_TEMPLATE_LANGUAGE: 'ru',
   };
 

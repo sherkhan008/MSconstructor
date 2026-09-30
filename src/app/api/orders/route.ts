@@ -10,7 +10,7 @@ import { generateOrderNumber, saveOrder } from '@/lib/orders/store';
 import type { OrderItemRecord, OrderRecord } from '@/lib/orders/types';
 import { notifyNewOrder } from '@/lib/notifications';
 import { buildOrderEvent } from '@/lib/notifications/events';
-import { emitOrderEventInBackground } from '@/lib/notifications/service';
+import { createOutbox } from '@/lib/notifications/service';
 import { createOrderBuyerSnapshot, createOrderItemDocumentSnapshot } from '@/lib/documents/snapshots';
 import {
   cityDeliveryUnavailableMessage,
@@ -170,18 +170,18 @@ export async function POST(request: NextRequest) {
       createdAt: new Date().toISOString(),
     };
 
-    const saved = await saveOrder(order);
+    // The order and its order.created outbox rows are ONE transaction: a
+    // saved order always has its manager notification event. Delivery is
+    // attempted after commit, in the background (the worker sends anything
+    // left over) — a notification failure never rolls back a saved order.
+    const outbox = createOutbox('order.created');
+    const saved = await saveOrder(order, {
+      outbox: (o) =>
+        outbox.rowsFor(buildOrderEvent({ event: 'order.created', orderNumber: o.orderNumber, status: o.status, grandTotal: o.grandTotal })),
+    });
 
-    // Best-effort — a notification failure must never roll back a saved order.
     void notifyNewOrder(saved);
-    emitOrderEventInBackground(
-      buildOrderEvent({
-        event: 'order.created',
-        orderNumber: saved.orderNumber,
-        status: saved.status,
-        grandTotal: saved.grandTotal,
-      }),
-    );
+    outbox.dispatchInBackground();
 
     return apiOk({ orderNumber: saved.orderNumber, grandTotal: saved.grandTotal }, 201);
   } catch (error) {

@@ -30,6 +30,7 @@ const WHATSAPP_ENV = {
   WHATSAPP_PHONE_NUMBER_ID: '123456789012345',
   WHATSAPP_ADMIN_RECIPIENT: '+7 (701) 000-00-01',
   WHATSAPP_TEMPLATE_NAME: 'new_order_admin',
+  WHATSAPP_CONTACT_TEMPLATE_NAME: 'new_contact_lead',
   WHATSAPP_TEMPLATE_LANGUAGE: 'ru',
   WHATSAPP_GRAPH_API_VERSION: 'v24.0',
 };
@@ -310,7 +311,7 @@ describe('WhatsApp new-order admin notification', () => {
     await emitOrderEvent(created, { channels: () => [telegram] });
     expect(sent).toHaveLength(2);
     expect(telegram.events).toBeUndefined();
-    expect(telegram.oncePerOrder).toBeUndefined();
+    expect(telegram.oncePerSubject).toBeUndefined();
   });
 });
 

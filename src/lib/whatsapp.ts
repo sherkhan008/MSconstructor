@@ -10,8 +10,10 @@ import { sectionHeightsSummary, sectionShelvesSummary } from '@/lib/configurator
 
 /**
  * WhatsApp deep links for the MVP. `https://wa.me/<phone>?text=<message>` needs
- * no API credentials and works everywhere. (The WhatsApp Cloud API is used
- * only for the internal new-order admin alert — see
+ * no API credentials and works everywhere. Every customer-facing link here
+ * uses `site.whatsapp` — the manager's public number. (The WhatsApp Cloud API
+ * and its separate technical sender number are used only for the internal
+ * manager alerts — new order, new contact lead — see
  * src/lib/notifications/providers/whatsapp.ts.)
  *
  * Every message built here only ever includes customer-facing data (the

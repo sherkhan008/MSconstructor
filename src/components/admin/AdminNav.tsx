@@ -15,6 +15,9 @@ import type { AdminRole } from '@/lib/types/domain';
  */
 const SECTIONS: { href: string; label: string; visible: (role: AdminRole) => boolean }[] = [
   { href: '/admin/orders', label: 'Заказы', visible: () => true },
+  // Like orders: viewing needs only a valid admin session (see
+  // src/lib/auth/authorize.ts); the list is read-only.
+  { href: '/admin/leads', label: 'Заявки', visible: () => true },
   { href: '/admin/prices', label: 'Цены', visible: canManagePrices },
 ];
 

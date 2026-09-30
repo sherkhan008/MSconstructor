@@ -111,4 +111,52 @@ describe('saveOrderToDb', () => {
     expect(data.buyerSnapshot).toMatchObject({ fullName: 'Болат Второй', email: 'second@example.com' });
     expect(forbidden).not.toHaveBeenCalled();
   });
+
+  it('with outbox rows: the same nested create and the outbox createMany run as ONE transaction', async () => {
+    vi.resetModules();
+    const createOp = { op: 'order.create' };
+    const createManyOp = { op: 'notificationDelivery.createMany' };
+    const create = vi.fn(() => createOp);
+    const createMany = vi.fn(() => createManyOp);
+    const transaction = vi.fn(async (ops: unknown[]) => ops);
+    const forbidden = vi.fn(() => {
+      throw new Error('the shared customer row must not be written separately');
+    });
+    vi.doMock('@/lib/db/client', () => ({
+      prisma: {
+        order: { create },
+        notificationDelivery: { createMany },
+        customer: { upsert: forbidden, update: forbidden, updateMany: forbidden, create: forbidden },
+        $transaction: transaction,
+      },
+    }));
+    const { saveOrderToDb } = await import('@/lib/orders/db-store');
+    const customer: OrderRecord['customer'] = { fullName: 'Тест', phone: '+77001112244', city: 'Алматы', type: 'INDIVIDUAL' };
+    const payload = { event: 'order.created' as const, orderNumber: 'MS-20260930-BBBBB', status: 'NEW' as const, grandTotal: 116, occurredAt: '2026-09-30T00:00:00.000Z' };
+    const now = new Date('2026-09-30T00:00:00.000Z');
+    await saveOrderToDb(
+      {
+        id: 'o2',
+        orderNumber: 'MS-20260930-BBBBB',
+        status: 'NEW',
+        customer,
+        buyerSnapshot: createOrderBuyerSnapshot(customer),
+        paymentPreference: 'BANK_TRANSFER',
+        items: [],
+        netTotal: 100,
+        vatTotal: 16,
+        discountTotal: 0,
+        grandTotal: 116,
+        createdAt: now.toISOString(),
+      },
+      [{ id: 'row-1', event: 'order.created', channel: 'whatsapp', subject: { orderNumber: payload.orderNumber }, payload, leaseUntil: now, createdAt: now }],
+    );
+
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(transaction.mock.calls[0][0]).toEqual([createOp, createManyOp]);
+    expect(createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ id: 'row-1', status: 'PENDING', attempts: 0, orderNumber: 'MS-20260930-BBBBB', channel: 'whatsapp' })],
+    });
+    expect(forbidden).not.toHaveBeenCalled();
+  });
 });
