@@ -19,6 +19,7 @@ import { getAllowedKitDepths, getAllowedSectionWidths, getSectionLimits } from '
 import { computeFramedCrops, frameAspectVars, ShelvingPreview } from './ShelvingPreview';
 import { TopShelvingPreview } from './TopShelvingPreview';
 import { ParametersSectionsTable } from './ParametersSectionsTable';
+import { ConfiguratorCharacteristics } from './ConfiguratorCharacteristics';
 import { AdvancedSettingsAccordion, CUSTOMER_ACCESSORY_IDS, isStaleCrossBrace } from './AdvancedSettingsAccordion';
 import { OrderSummaryBar } from './OrderSummaryBar';
 import { BomTable } from './BomTable';
@@ -202,16 +203,20 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
   // only read).
   const topFrameStyle = frameAspectVars(computeFramedCrops(config.sections, config.depth, capacityMm));
 
-  // Page order, one full-width column at every breakpoint: breadcrumbs, title
-  // and a one-line lead → the rack (the page's centrepiece, at the content
-  // width) → the purchase bar → the kit switcher and the active kit's
-  // parameters → its sections → additional parameters → kit contents. Below
-  // `lg` OrderSummaryBar pins itself to the bottom of the viewport; from `lg`
-  // it is a horizontal bar in document flow right under the rack, which
-  // sticks under the header only once the page has scrolled past it, so it
-  // never covers the rack (see its own classes) — one DOM node either way.
+  // Page order: breadcrumbs, title and a one-line lead → the workspace →
+  // characteristics and kit contents. Workspace, by width:
+  //  • below `lg` one column — rack, the kit and its sections, additional
+  //    parameters — and OrderSummaryBar pins itself to the bottom of the
+  //    viewport (see its own classes);
+  //  • `lg` two zones — the rack (sticky) and one right panel whose
+  //    configuration scrolls inside it with the purchase card pinned to its
+  //    foot;
+  //  • `xl` three zones — rack, configuration, and the purchase card as its
+  //    own sticky column (the right panel becomes `display: contents`, so its
+  //    two parts are grid columns of their own — same DOM, no duplicate).
+  // Characteristics and kit contents follow the workspace at full width.
   return (
-    <div className="pb-40 lg:pb-12">
+    <div className="pb-40 lg:pb-16">
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="pb-4 pt-3 sm:pb-6 sm:pt-5">
           <nav aria-label={t(CF['CF-128'], locale)}>
@@ -231,10 +236,8 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
           <p className="mt-2 hidden max-w-2xl text-[15px] leading-snug text-steel sm:block">{t(CF['CF-127'], locale)}</p>
         </div>
 
-        <div className="flex flex-col gap-4 sm:gap-6">
-          {/* data-fab-avoid: the interactive rack is never covered by the
-              floating WhatsApp button (see WhatsAppFloatingButton). */}
-          <div className="-mx-4 overflow-hidden border-y border-line bg-surface sm:mx-0 sm:rounded-lg sm:border-x" data-fab-avoid>
+        <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(340px,380px)] lg:items-start xl:grid-cols-[minmax(0,1fr)_minmax(0,22rem)_18.5rem]">
+          <div className="-mx-4 overflow-hidden border-y border-line bg-surface sm:mx-0 sm:rounded-lg sm:border-x lg:sticky lg:top-[calc(var(--header-height)+1rem)]">
             {/* Compact segmented control, not a full-width toolbar: it names
                 the two presentation modes and then gets out of the rack's
                 way. Both modes render into the identical 4:3 frame below, so
@@ -294,31 +297,42 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
             )}
           </div>
 
-          {/* Directly under the rack in document flow from `lg` (it takes
-              its own space, never covers the rack); fixed to the bottom of
-              the viewport below `lg`. */}
-          <OrderSummaryBar catalog={catalog} />
+          {/* `lg`: one panel that flows with the page; its purchase card
+              sticks to the bottom of the viewport while the panel is on
+              screen, so price and next step stay in view and never cover the
+              controls they summarise. `xl`: the panel dissolves
+              (`display: contents`) into two grid columns — the configuration
+              flowing with the page, and the purchase card sticky beside it. */}
+          <div className="flex min-w-0 flex-col gap-4 lg:gap-0 lg:rounded-lg lg:border lg:border-line lg:bg-surface xl:contents">
+            <div className="flex min-w-0 flex-col gap-4 lg:gap-0 lg:divide-y lg:divide-line lg:[&>*]:rounded-none lg:[&>*]:border-0 xl:gap-4 xl:divide-y-0 xl:[&>*]:rounded-lg xl:[&>*]:border">
+              <ParametersSectionsTable catalog={catalog} onReset={reset} />
 
-          {/* The kit switcher and kit parameters, then the sections — two
-              full-width panels under the rack. */}
-          <ParametersSectionsTable catalog={catalog} onReset={reset} />
+              <AdvancedSettingsAccordion catalog={catalog} />
 
-          <AdvancedSettingsAccordion catalog={catalog} />
-
-          {pricingError && (
-            <div role="alert" className="rounded-lg border border-danger bg-danger-soft px-4 py-3 text-sm text-danger">
-              {pricingError.message}
+              {pricingError && (
+                <div role="alert" className="rounded-lg border border-danger bg-danger-soft px-4 py-3 text-sm text-danger">
+                  {pricingError.message}
+                </div>
+              )}
+              {priceResult && priceResult.warnings.length > 0 && (
+                <ul className="space-y-1 rounded-lg border border-line bg-surface-muted px-4 py-3 text-[13px] text-steel">
+                  {priceResult.warnings.map((warning) => (
+                    <li key={warning}>⚠ {warning}</li>
+                  ))}
+                </ul>
+              )}
             </div>
-          )}
-          {priceResult && priceResult.warnings.length > 0 && (
-            <ul className="space-y-1 rounded-lg border border-line bg-surface-muted px-4 py-3 text-[13px] text-steel">
-              {priceResult.warnings.map((warning) => (
-                <li key={warning}>⚠ {warning}</li>
-              ))}
-            </ul>
-          )}
 
-          {/* The active kit's contents, read-only, at full width. */}
+            <div className="lg:sticky lg:bottom-0 lg:z-10 lg:overflow-hidden lg:rounded-b-lg lg:border-t lg:border-line xl:bottom-auto xl:top-[calc(var(--header-height)+1rem)] xl:self-start xl:rounded-lg xl:border-t-0">
+              <OrderSummaryBar catalog={catalog} />
+            </div>
+          </div>
+        </div>
+
+        {/* Read-only facts about the active kit, full width under the
+            workspace: its characteristics, then its contents. */}
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:gap-6 lg:mt-10 lg:grid-cols-2 lg:items-start">
+          <ConfiguratorCharacteristics config={config} />
           {priceResult && <BomTable lines={priceResult.bom} totalWeightKg={priceResult.totalWeightKg} />}
         </div>
       </div>

@@ -5,9 +5,9 @@ import { sectionButton, sectionButtons, storedSections } from './helpers/section
 /**
  * Configurator V2.4 — final page structure and per-section controls, in the
  * real browser, on both projects (desktop 1280 and Pixel 7):
- *  - page order, one full-width column: rack → price/actions → kit
- *    switcher → kit → sections → additional parameters → kit contents (no
- *    characteristics block);
+ *  - page order: rack → kit → sections → additional parameters →
+ *    price/actions, then characteristics → kit contents at full width under
+ *    the workspace (2026-09-30 redesign);
  *  - the active section's own controls edit that section only, with its own
  *    limits, and the preview's height handle / shelf column follow it;
  *  - mixed configurations are priced from every section's own values;
@@ -35,7 +35,7 @@ async function openMixed(page: Page, query: string, count: number) {
   await expect.poll(async () => (await storedSections(page)).length).toBe(count);
 }
 
-test('the page follows the vertical order: rack, price, kit switcher, kit, sections, options, contents', async ({ page }) => {
+test('the page follows the redesigned order: rack, kit switcher, kit, sections, options, price, then characteristics and contents', async ({ page }) => {
   const errors = trackErrors(page);
   await page.goto('/ru/configurator');
   await waitForPrice(page);
@@ -45,20 +45,17 @@ test('the page follows the vertical order: rack, price, kit switcher, kit, secti
       Array.from(document.querySelectorAll(selector)).find((el) => el.textContent?.trim().startsWith(text)) ?? null;
     const nodes = [
       document.querySelector('[data-testid="preview-stage"]'),
-      byText('button', 'Оформить заказ'),
-      document.querySelector('[role="group"][aria-label="Комплекты"]'),
       byText('h2', 'Комплект 1'),
       byText('h3', 'Секции'),
       byText('button', 'Дополнительные параметры'),
+      byText('button', 'Оформить заказ'),
+      byText('h2', 'Характеристики'),
       byText('h2', 'Состав комплекта'),
     ];
     if (nodes.some((n) => !n)) return nodes.map((n) => Boolean(n));
     return nodes.every((n, i) => i === 0 || nodes[i - 1]!.compareDocumentPosition(n!) & Node.DOCUMENT_POSITION_FOLLOWING);
   });
   expect(order).toBe(true);
-  // The characteristics block is gone from the configurator entirely.
-  await expect(page.getByRole('heading', { name: 'Характеристики' })).toHaveCount(0);
-  await expect(page.getByTestId('configurator-characteristics')).toHaveCount(0);
   // V2.5: the kit switcher sits between the rack and the kit's parameters,
   // holding the one kit plus "+ Комплект".
   const switcher = page.getByRole('group', { name: 'Комплекты' });
@@ -228,16 +225,14 @@ test('five mixed sections: readable labels, no horizontal scroll, sticky price b
   expect(layout.labels).toBeGreaterThanOrEqual(7);
 
   const checkout = page.getByRole('button', { name: 'Оформить заказ' });
-  // Phones: the bar is fixed at the bottom from the start. Desktop: it sits
-  // in document flow right under the rack.
-  if (!isMobile) await checkout.scrollIntoViewIfNeeded();
   await expect(page.locator('.price-flash').first()).toBeInViewport();
   await expect(checkout).toBeInViewport();
-  // The bar stays in view while the customer scrolls the controls (fixed on
-  // phones, stuck under the header on desktop).
-  await page.getByRole('heading', { name: 'Состав комплекта' }).scrollIntoViewIfNeeded();
-  await expect(checkout).toBeInViewport();
-  await expect(page.locator('.price-flash').first()).toBeInViewport();
+  if (isMobile) {
+    // The compact bar stays pinned while the customer scrolls the controls.
+    await page.getByRole('heading', { name: 'Характеристики' }).scrollIntoViewIfNeeded();
+    await expect(checkout).toBeInViewport();
+    await expect(page.locator('.price-flash').first()).toBeInViewport();
+  }
   expect(errors).toEqual([]);
 });
 

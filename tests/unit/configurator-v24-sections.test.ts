@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_CONFIGURATION, MAX_SECTIONS } from '@/store/configurator-store';
 import { ParametersSectionsTable } from '@/components/configurator/ParametersSectionsTable';
+import { ConfiguratorCharacteristics } from '@/components/configurator/ConfiguratorCharacteristics';
 import { ShelvingPreview } from '@/components/configurator/ShelvingPreview';
 import { LocaleProvider } from '@/components/i18n/LocaleProvider';
 import { getCatalog } from '@/lib/data/repository';
@@ -274,5 +275,24 @@ describe('V2.4 preview — dimension labels stay readable on a small stage', () 
     const svg = renderAtStageWidth(900, [section('a', 1000, 2000, 5)]);
     for (const text of Array.from(svg.querySelectorAll('text'))) expect(Number(text.getAttribute('font-size'))).toBe(10);
     expect(svg.querySelector('[data-testid="depth-dimension-tag"]')).not.toBeNull();
+  });
+});
+
+describe('V2.4 characteristics — real per-section summaries', () => {
+  it('lists each section’s own value where they differ, never one invented kit value', () => {
+    render(
+      createElement(
+        Provider,
+        { locale: 'ru' },
+        createElement(ConfiguratorCharacteristics, {
+          config: { depth: 400, loadCapacity: 150, sections: [section('a', 1000, 1500, 4), section('b', 1200, 2500, 8)] },
+        }),
+      ),
+    );
+    const text = screen.getByTestId('configurator-characteristics').textContent!;
+    expect(text).toContain('2200 × 2500 × 400 мм');
+    expect(text).toContain('1000 / 1200 мм');
+    expect(text).toContain('1500 / 2500 мм');
+    expect(text).toContain('4 / 8');
   });
 });

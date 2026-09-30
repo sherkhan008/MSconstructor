@@ -105,14 +105,14 @@ export function AdvancedSettingsAccordion({ catalog }: { catalog: PublicCatalog 
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="flex min-h-12 w-full items-center justify-between gap-3 px-4 text-left text-[15px] font-semibold transition-colors hover:bg-background/60 lg:px-5"
+        className="flex min-h-12 w-full items-center justify-between gap-3 px-4 text-left text-[15px] font-semibold transition-colors hover:bg-background/60"
       >
         <span>{t(CF['CF-042'], locale)}</span>
         <Chevron open={open} />
       </button>
 
       {open && model && (
-        <div className="flex flex-col gap-4 border-t border-line p-4 md:grid md:grid-cols-2 md:items-start md:gap-x-8 lg:px-5">
+        <div className="flex flex-col gap-4 border-t border-line p-4">
           <div className="flex flex-col gap-1">
             <OptionCheckbox
               label={t(CF['CF-043'], locale)}
