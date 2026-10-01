@@ -19,7 +19,6 @@ import { getAllowedKitDepths, getAllowedSectionWidths, getSectionLimits } from '
 import { computeFramedCrops, frameAspectVars, ShelvingPreview } from './ShelvingPreview';
 import { TopShelvingPreview } from './TopShelvingPreview';
 import { ParametersSectionsTable } from './ParametersSectionsTable';
-import { ConfiguratorCharacteristics } from './ConfiguratorCharacteristics';
 import { AdvancedSettingsAccordion, CUSTOMER_ACCESSORY_IDS, isStaleCrossBrace } from './AdvancedSettingsAccordion';
 import { OrderSummaryBar } from './OrderSummaryBar';
 import { BomTable } from './BomTable';
@@ -203,18 +202,15 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
   // only read).
   const topFrameStyle = frameAspectVars(computeFramedCrops(config.sections, config.depth, capacityMm));
 
-  // Page order: breadcrumbs, title and a one-line lead → the workspace →
-  // characteristics and kit contents. Workspace, by width:
-  //  • below `lg` one column — rack, the kit and its sections, additional
-  //    parameters — and OrderSummaryBar pins itself to the bottom of the
-  //    viewport (see its own classes);
-  //  • `lg` two zones — the rack (sticky) and one right panel whose
-  //    configuration scrolls inside it with the purchase card pinned to its
-  //    foot;
-  //  • `xl` three zones — rack, configuration, and the purchase card as its
-  //    own sticky column (the right panel becomes `display: contents`, so its
-  //    two parts are grid columns of their own — same DOM, no duplicate).
-  // Characteristics and kit contents follow the workspace at full width.
+  // Page order, one full-width column at every width: breadcrumbs, title and
+  // a one-line lead → the rack (the page's centrepiece, at the content width)
+  // and the reset action under it → the kit switcher and the active kit's
+  // parameters → its sections → additional parameters → kit contents → the
+  // purchase bar. Nothing ever sits beside the rack. Below `lg`
+  // OrderSummaryBar pins itself to the bottom of the viewport; from `lg` it
+  // is the last block of the controls and sticks to the bottom of the
+  // viewport while they are on screen (see its own classes). Its sticky
+  // range is the controls column only, so it can never ride over the rack.
   return (
     <div className="pb-40 lg:pb-16">
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -236,8 +232,8 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
           <p className="mt-2 hidden max-w-2xl text-[15px] leading-snug text-steel sm:block">{t(CF['CF-127'], locale)}</p>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(340px,380px)] lg:items-start xl:grid-cols-[minmax(0,1fr)_minmax(0,22rem)_18.5rem]">
-          <div className="-mx-4 overflow-hidden border-y border-line bg-surface sm:mx-0 sm:rounded-lg sm:border-x lg:sticky lg:top-[calc(var(--header-height)+1rem)]">
+        <div>
+          <div className="-mx-4 overflow-hidden border-y border-line bg-surface sm:mx-0 sm:rounded-lg sm:border-x">
             {/* Compact segmented control, not a full-width toolbar: it names
                 the two presentation modes and then gets out of the rack's
                 way. Both modes render into the identical 4:3 frame below, so
@@ -297,46 +293,57 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
             )}
           </div>
 
-          {/* `lg`: one panel that flows with the page; its purchase card
-              sticks to the bottom of the viewport while the panel is on
-              screen, so price and next step stay in view and never cover the
-              controls they summarise. `xl`: the panel dissolves
-              (`display: contents`) into two grid columns — the configuration
-              flowing with the page, and the purchase card sticky beside it. */}
-          <div className="flex min-w-0 flex-col gap-4 lg:gap-0 lg:rounded-lg lg:border lg:border-line lg:bg-surface xl:contents">
-            <div className="flex min-w-0 flex-col gap-4 lg:gap-0 lg:divide-y lg:divide-line lg:[&>*]:rounded-none lg:[&>*]:border-0 xl:gap-4 xl:divide-y-0 xl:[&>*]:rounded-lg xl:[&>*]:border">
-              <ParametersSectionsTable catalog={catalog} onReset={reset} />
-
-              <AdvancedSettingsAccordion catalog={catalog} />
-
-              {pricingError && (
-                <div role="alert" className="rounded-lg border border-danger bg-danger-soft px-4 py-3 text-sm text-danger">
-                  {pricingError.message}
-                </div>
-              )}
-              {priceResult && priceResult.warnings.length > 0 && (
-                <ul className="space-y-1 rounded-lg border border-line bg-surface-muted px-4 py-3 text-[13px] text-steel">
-                  {priceResult.warnings.map((warning) => (
-                    <li key={warning}>⚠ {warning}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            <div className="lg:sticky lg:bottom-0 lg:z-10 lg:overflow-hidden lg:rounded-b-lg lg:border-t lg:border-line xl:bottom-auto xl:top-[calc(var(--header-height)+1rem)] xl:self-start xl:rounded-lg xl:border-t-0">
-              <OrderSummaryBar catalog={catalog} />
-            </div>
+          {/* Reset sits directly under the workspace it resets: a quiet
+              outlined button — clearly a control, never competing with the
+              amber checkout. Reuses the store's reset() unchanged. */}
+          <div className="mt-3 flex justify-center">
+            <button
+              type="button"
+              onClick={reset}
+              className="inline-flex min-h-11 max-w-full items-center justify-center gap-2 rounded-md border border-line bg-surface px-4 py-2 text-center text-[15px] font-semibold leading-tight text-foreground transition-colors hover:border-line-strong hover:bg-surface-muted"
+            >
+              <ResetIcon />
+              {t(CF['CF-022'], locale)}
+            </button>
           </div>
         </div>
 
-        {/* Read-only facts about the active kit, full width under the
-            workspace: its characteristics, then its contents. */}
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:gap-6 lg:mt-10 lg:grid-cols-2 lg:items-start">
-          <ConfiguratorCharacteristics config={config} />
+        {/* The controls, full width under the rack. From `lg` this column is
+            the purchase bar's sticky range (see the page-order note above). */}
+        <div className="mt-6 flex min-w-0 flex-col gap-4 sm:gap-6 lg:mt-8">
+          <ParametersSectionsTable catalog={catalog} />
+
+          <AdvancedSettingsAccordion catalog={catalog} />
+
+          {pricingError && (
+            <div role="alert" className="rounded-lg border border-danger bg-danger-soft px-4 py-3 text-sm text-danger">
+              {pricingError.message}
+            </div>
+          )}
+          {priceResult && priceResult.warnings.length > 0 && (
+            <ul className="space-y-1 rounded-lg border border-line bg-surface-muted px-4 py-3 text-[13px] text-steel">
+              {priceResult.warnings.map((warning) => (
+                <li key={warning}>⚠ {warning}</li>
+              ))}
+            </ul>
+          )}
+
+          {/* The active kit's contents, read-only, at full width. */}
           {priceResult && <BomTable lines={priceResult.bom} totalWeightKg={priceResult.totalWeightKg} />}
+
+          <OrderSummaryBar catalog={catalog} />
         </div>
       </div>
     </div>
+  );
+}
+
+function ResetIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" className="shrink-0">
+      <path d="M3 8a5 5 0 1 0 1.5-3.55" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square" />
+      <path d="M3 2.5V5h2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square" />
+    </svg>
   );
 }
 

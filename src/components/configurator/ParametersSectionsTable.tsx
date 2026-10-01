@@ -53,7 +53,7 @@ type ProductModel = PublicCatalog['models'][number];
  * active section's fields are rendered), so plain CSS-attribute locators
  * (e.g. `select[aria-label="Ширина секции 1"]`) never see duplicates.
  */
-export function ParametersSectionsTable({ catalog, onReset }: { catalog: PublicCatalog; onReset?: () => void }) {
+export function ParametersSectionsTable({ catalog }: { catalog: PublicCatalog }) {
   const config = useConfiguratorStore(selectConfig);
   const activeSectionId = useConfiguratorStore(selectActiveSectionId);
   const kits = useConfiguratorStore((s) => s.kits);
@@ -93,7 +93,7 @@ export function ParametersSectionsTable({ catalog, onReset }: { catalog: PublicC
 
   return (
     <div className="rounded-lg border border-line bg-surface text-sm">
-      <div className="p-4">
+      <div className="p-4 lg:px-6">
         <KitSwitcher />
         {/* The active kit's own header mirrors a section row: its name, then
             duplicate and remove for THIS kit. */}
@@ -133,7 +133,7 @@ export function ParametersSectionsTable({ catalog, onReset }: { catalog: PublicC
       </div>
 
       <section aria-labelledby="configurator-sections-heading" className="border-t border-line">
-        <h3 id="configurator-sections-heading" className="px-4 pb-2 pt-3.5 font-display text-base leading-tight">
+        <h3 id="configurator-sections-heading" className="px-4 pb-2 pt-3.5 font-display text-base leading-tight lg:px-6">
           {t(CF['CF-105'], locale)}
         </h3>
         <ul className="border-t border-line">
@@ -145,7 +145,7 @@ export function ParametersSectionsTable({ catalog, onReset }: { catalog: PublicC
                 // Graphite rail + white surface for the active section, matching
                 // the graphite outline the preview draws around that same
                 // section — the two views of one selection must agree.
-                className="border-b border-l-[3px] border-b-line border-l-foreground bg-surface px-4 pb-4 pt-1"
+                className="border-b border-l-[3px] border-b-line border-l-foreground bg-surface px-4 pb-4 pt-1 lg:px-6"
               >
                 <div className="flex items-center justify-between gap-2">
                   <button
@@ -197,7 +197,7 @@ export function ParametersSectionsTable({ catalog, onReset }: { catalog: PublicC
                   aria-label={t(CF['CF-025'], locale, { N: i + 1 })}
                   aria-describedby={`section-summary-${section.id}`}
                   onClick={() => setActiveSectionId(section.id)}
-                  className="flex min-h-12 w-full items-center justify-between gap-3 px-4 text-left transition-colors hover:bg-surface"
+                  className="flex min-h-12 w-full items-center justify-between gap-3 px-4 text-left transition-colors hover:bg-surface lg:px-6"
                 >
                   <span className="shrink-0 text-[15px] font-semibold text-steel">{t(CF['CF-025'], locale, { N: i + 1 })}</span>
                   <span id={`section-summary-${section.id}`} data-testid="section-summary" className="mono min-w-0 truncate text-right text-[13px] text-steel">
@@ -209,7 +209,7 @@ export function ParametersSectionsTable({ catalog, onReset }: { catalog: PublicC
           )}
         </ul>
 
-        <div className="p-4">
+        <div className="p-4 lg:px-6">
           <button
             type="button"
             disabled={!canAdd}
@@ -229,19 +229,6 @@ export function ParametersSectionsTable({ catalog, onReset }: { catalog: PublicC
           ) : (
             !canAdd && <p className="mt-2 text-[13px] text-steel">{t(CF['CF-029'], locale)}</p>
           )}
-          {/* Reset sits with the settings it resets: easy to find at the end
-              of the panel, visually secondary to adding a section. Reuses the
-              store's reset(), passed in by the page. */}
-          {onReset && (
-            <button
-              type="button"
-              onClick={onReset}
-              className="mx-auto mt-2 flex min-h-11 items-center justify-center gap-2 px-2 text-center text-[13px] leading-tight text-steel transition-colors hover:text-foreground lg:min-h-10"
-            >
-              <ResetIcon />
-              {t(CF['CF-022'], locale)}
-            </button>
-          )}
         </div>
       </section>
     </div>
@@ -258,12 +245,16 @@ function sectionSummary(section: ShelvingSection, locale: Locale): string {
   return section.corner === 'NONE' ? base : `${base} · ${t(CORNER_LABELS[section.corner], locale)}`;
 }
 
-/** Shared field chrome: one compact row per field — a readable sentence-case
- * label on the left, a 44px control aligned in a consistent right column.
- * Below 400px the label sits above a full-width control instead, so a select
- * such as the load ("Сөреге 150 кг") is never clipped. */
-const FIELD_ROW =
-  'flex min-w-0 flex-col gap-1.5 min-[400px]:grid min-[400px]:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] min-[400px]:items-center min-[400px]:gap-3';
+/** Shared field chrome. On phones one compact row per field — a readable
+ * sentence-case label on the left, a 44px control aligned in a consistent
+ * right column; below 400px the label sits above a full-width control
+ * instead, so a select such as the load ("Сөреге 150 кг") is never clipped.
+ * From `md` each field is a cell of its group's horizontal grid (kit
+ * parameters, a section's dimensions) — the controls have the page's full
+ * width there — with the label above its control, so three or four fields
+ * share one row without squeezing either. */
+const GRID_FIELD =
+  'flex min-w-0 flex-col gap-1.5 min-[400px]:max-md:grid min-[400px]:max-md:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] min-[400px]:max-md:items-center min-[400px]:max-md:gap-3';
 const FIELD_LABEL = 'text-[13px] leading-tight text-foreground/80';
 const SELECT_CLASS =
   'mono h-11 w-full min-w-0 rounded-md border border-line-strong bg-surface px-2.5 text-sm text-foreground outline-none transition-colors hover:border-steel-soft focus:border-blueprint lg:h-10';
@@ -353,8 +344,8 @@ function KitParamsFields({
   const locale = useLocale();
 
   return (
-    <div role="group" aria-label={t(CF['CF-024'], locale)} className="mt-2 flex flex-col gap-2.5">
-      <label className={FIELD_ROW}>
+    <div role="group" aria-label={t(CF['CF-024'], locale)} className="mt-2 flex flex-col gap-2.5 md:grid md:grid-cols-3 md:gap-x-6 md:gap-y-3">
+      <label className={GRID_FIELD}>
         <span className={FIELD_LABEL}>{t(CF['CF-031'], locale)}</span>
         <select value={config.depth} onChange={(e) => setField('depth', Number(e.target.value))} className={SELECT_CLASS}>
           {catalog.depths
@@ -368,7 +359,7 @@ function KitParamsFields({
       </label>
 
       {/* Load options are words, not a bare number: sans face. */}
-      <label className={FIELD_ROW}>
+      <label className={GRID_FIELD}>
         <span className={FIELD_LABEL}>{t(CF['CF-033'], locale)}</span>
         <select value={config.loadCapacity} onChange={(e) => setField('loadCapacity', Number(e.target.value))} className={`${SELECT_CLASS} !font-sans`}>
           {catalog.loadCapacities.map((load) => {
@@ -385,7 +376,7 @@ function KitParamsFields({
         </select>
       </label>
 
-      <div className={FIELD_ROW}>
+      <div className={GRID_FIELD}>
         <span className={FIELD_LABEL}>{t(CF['CF-114'], locale)}</span>
         <NumberStepper
           value={config.quantity}
@@ -434,10 +425,14 @@ function SectionFields({
   const mm = t(G['G-008'], locale);
   const heights = catalog.heights.filter((h) => limits.heights.includes(h.value)).map((h) => h.value);
 
+  // From `md` one row: width, height, shelves — and the orientation, on an
+  // edge section that offers one.
+  const fieldGrid = corners.length > 1 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3';
+
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-2.5">
-        <label className={FIELD_ROW}>
+      <div className={`flex flex-col gap-2.5 md:grid md:gap-x-6 md:gap-y-3 ${fieldGrid}`}>
+        <label className={GRID_FIELD}>
           <span className={FIELD_LABEL}>
             {t(CF['CF-035'], locale)}, {mm}
           </span>
@@ -456,7 +451,7 @@ function SectionFields({
           </select>
         </label>
 
-        <label className={FIELD_ROW}>
+        <label className={GRID_FIELD}>
           <span className={FIELD_LABEL}>
             {t(CF['CF-030'], locale)}, {mm}
           </span>
@@ -475,7 +470,7 @@ function SectionFields({
           </select>
         </label>
 
-        <div className={FIELD_ROW}>
+        <div className={GRID_FIELD}>
           <span className={FIELD_LABEL}>{t(CF['CF-032'], locale)}</span>
           <NumberStepper
             value={section.shelves}
@@ -485,49 +480,53 @@ function SectionFields({
             testId="shelf-count"
           />
         </div>
+
+        {/* Orientation (V2.6) — only on an edge section, and only the corner
+            of its own edge: a middle section is always straight, so it gets
+            no control at all. The same section, turned 90° backward — no
+            price or component changes. */}
+        {corners.length > 1 && (
+          <label className={GRID_FIELD}>
+            <span className={FIELD_LABEL}>{t(CF['CF-120'], locale)}</span>
+            <select
+              value={section.corner}
+              data-section-index={index}
+              aria-label={t(CF['CF-124'], locale, { N: index + 1 })}
+              onChange={(e) => onChange({ corner: e.target.value as SectionCorner })}
+              className={`${SELECT_CLASS} !font-sans`}
+            >
+              {corners.map((corner) => (
+                <option key={corner} value={corner}>
+                  {t(CORNER_LABELS[corner], locale)}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
-      {/* Orientation (V2.6) — only on an edge section, and only the corner of
-          its own edge: a middle section is always straight, so it gets no
-          control at all. The same section, turned 90° backward — no price
-          or component changes. */}
-      {corners.length > 1 && (
-        <label className={FIELD_ROW}>
-          <span className={FIELD_LABEL}>{t(CF['CF-120'], locale)}</span>
-          <select
-            value={section.corner}
-            data-section-index={index}
-            aria-label={t(CF['CF-124'], locale, { N: index + 1 })}
-            onChange={(e) => onChange({ corner: e.target.value as SectionCorner })}
-            className={`${SELECT_CLASS} !font-sans`}
-          >
-            {corners.map((corner) => (
-              <option key={corner} value={corner}>
-                {t(CORNER_LABELS[corner], locale)}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
+      {/* Walls and the section's own option: stacked on phones, side by side
+          from `md`. */}
+      <div className="flex flex-col gap-3 md:grid md:grid-cols-2 md:items-center md:gap-x-6">
+        {/* Wraps instead of squeezing: three chips per line where they fit,
+            never a label broken mid-word. */}
+        <div className="flex flex-wrap gap-2 [&>*]:flex-1 [&>*]:basis-[5.75rem]">
+          <WallCheckbox label={t(CF['CF-037'], locale)} checked={section.rearWall} onChange={(checked) => onChange({ rearWall: checked })} />
+          <WallCheckbox label={t(CF['CF-038'], locale)} checked={section.leftWall} onChange={(checked) => onChange({ leftWall: checked })} />
+          <WallCheckbox label={t(CF['CF-039'], locale)} checked={section.rightWall} onChange={(checked) => onChange({ rightWall: checked })} />
+        </div>
 
-      {/* Wraps instead of squeezing: three chips per line where they fit,
-          never a label broken mid-word. */}
-      <div className="flex flex-wrap gap-2 [&>*]:flex-1 [&>*]:basis-[5.75rem]">
-        <WallCheckbox label={t(CF['CF-037'], locale)} checked={section.rearWall} onChange={(checked) => onChange({ rearWall: checked })} />
-        <WallCheckbox label={t(CF['CF-038'], locale)} checked={section.leftWall} onChange={(checked) => onChange({ leftWall: checked })} />
-        <WallCheckbox label={t(CF['CF-039'], locale)} checked={section.rightWall} onChange={(checked) => onChange({ rightWall: checked })} />
+        {/* A section option, not a kit-wide one: the cross brace belongs to
+            this section and exists only for a 1000 mm section (the same
+            accessory selection with this section's id as before). */}
+        <OptionCheckbox
+          label={t(CF['CF-048'], locale)}
+          note={t(CF['CF-049'], locale)}
+          checked={crossBraceSelected}
+          disabled={section.width !== CROSS_BRACE_WIDTH_MM}
+          onChange={onToggleCrossBrace}
+        />
       </div>
-
-      {/* A section option, not a kit-wide one: the cross brace belongs to
-          this section and exists only for a 1000 mm section (the same
-          accessory selection with this section's id as before). */}
-      <OptionCheckbox
-        label={t(CF['CF-048'], locale)}
-        note={t(CF['CF-049'], locale)}
-        checked={crossBraceSelected}
-        disabled={section.width !== CROSS_BRACE_WIDTH_MM}
-        onChange={onToggleCrossBrace}
-      />
     </div>
   );
 }
@@ -550,14 +549,5 @@ function WallCheckbox({ label, checked, onChange }: { label: string; checked: bo
       />
       <span className="min-w-0 break-words">{label}</span>
     </label>
-  );
-}
-
-function ResetIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true" className="shrink-0">
-      <path d="M3 8a5 5 0 1 0 1.5-3.55" stroke="currentColor" strokeWidth="1.4" strokeLinecap="square" />
-      <path d="M3 2.5V5h2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="square" />
-    </svg>
   );
 }

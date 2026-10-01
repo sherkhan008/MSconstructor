@@ -62,11 +62,6 @@ function summarize(values: readonly number[]): string {
   return uniform !== undefined ? String(uniform) : values.join(' / ');
 }
 
-/** "1000" when every section is 1000 mm wide, else "1000 / 1200". */
-export function sectionWidthsSummary(sections: readonly Pick<ShelvingSection, 'width'>[]): string {
-  return summarize(sections.map((s) => s.width));
-}
-
 /** "2000" when every section is 2000 mm tall, else "1500 / 2500 / 1000". */
 export function sectionHeightsSummary(sections: readonly SectionHeight[]): string {
   return summarize(sections.map((s) => s.height));
