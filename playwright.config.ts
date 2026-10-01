@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { SELLER_BANKING_SENTINELS } from './tests/fixtures/seller-banking-sentinels';
 
 /**
  * Next.js loads `.env` itself, so the app under test already sees
@@ -49,6 +50,9 @@ export default defineConfig({
         // so the app serves from the in-memory sample catalog exactly like
         // local dev, without weakening that guard for an actual deployment
         // (which sets NODE_ENV=production itself and never touches this file).
-        env: { NODE_ENV: 'development' },
+        // The seller's banking variables are synthetic sentinels, so
+        // tests/e2e/public-legal-identity.spec.ts always has known banking
+        // values to prove absent from every public page and bundle.
+        env: { NODE_ENV: 'development', ...SELLER_BANKING_SENTINELS },
       },
 });

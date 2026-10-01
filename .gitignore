@@ -24,12 +24,36 @@ test-results/
 
 # misc
 .DS_Store
-*.pem
 .vscode/
 .idea/
 *.tsbuildinfo
 
+# private keys, certificates and keystores — never committed
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.ppk
+id_rsa
+id_rsa.*
+id_ecdsa
+id_ecdsa.*
+id_ed25519
+id_ed25519.*
+
+# database dumps and backups. Prisma migrations are the only SQL in the repo.
+*.sql
+!prisma/migrations/**/*.sql
+*.sql.gz
+*.backup
+*.bak
+
 # logs
+*.log
+logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -53,6 +77,8 @@ backups/
 # private supplier pricing — real purchase prices, supplied out-of-band.
 # Never committed, never baked into an image (see .dockerignore).
 private-data/
+# ad-hoc local data exports (orders, leads, price lists)
+exports/
 
 .claude/*.local.md
 .claude/settings.local.json

@@ -9,7 +9,7 @@ import { checkProductionConfig, type ProductionConfigInput } from '@/lib/startup
 
 const VALID: ProductionConfigInput = {
   DATABASE_URL: 'postgresql://ms_shelving:0123456789abcdef@postgres:5432/ms_shelving?schema=public',
-  AUTH_SECRET: 'q3Xv1mZ8pL2sT9wK4yB7nC6dF0gH5jR2uE8iO1aS3zQ=',
+  AUTH_SECRET: 'test-only-auth-secret-not-a-real-credential-0001',
   APP_URL: 'https://ms-stellazh.kz',
   TRUSTED_PROXY_CLIENT_IP_HEADER: 'x-real-ip',
   REDIS_URL: 'redis://:0123456789abcdef@redis:6379/0',
@@ -38,10 +38,43 @@ describe('checkProductionConfig', () => {
     ['TRUSTED_PROXY_CLIENT_IP_HEADER', { TRUSTED_PROXY_CLIENT_IP_HEADER: undefined }, /TRUSTED_PROXY_CLIENT_IP_HEADER is required/],
     ['invalid header name', { TRUSTED_PROXY_CLIENT_IP_HEADER: 'x real ip!' }, /not a valid HTTP header name/],
     ['invalid REDIS_URL', { REDIS_URL: 'http://redis:6379' }, /REDIS_URL/],
+    ['.env.production.example APP_URL', { APP_URL: 'https://CHANGE_ME.kz' }, /placeholder/],
   ])('refuses to start without a safe %s', (_label, overrides, message) => {
     const { errors } = check(overrides);
     expect(errors.length).toBeGreaterThan(0);
     expect(errors.join('\n')).toMatch(message);
+  });
+
+  describe('known development and placeholder passwords', () => {
+    it.each([
+      ['docker-compose.dev.yml / .env.example DB password', { DATABASE_URL: 'postgresql://ms_shelving:ms_shelving@postgres:5432/ms_shelving?schema=public' }, /DATABASE_URL uses a known/],
+      ['DB password in another case', { DATABASE_URL: 'postgresql://app:MS_SHELVING@postgres:5432/ms_shelving' }, /DATABASE_URL uses a known/],
+      ['.env.production.example POSTGRES_PASSWORD', { DATABASE_URL: 'postgresql://ms_shelving:CHANGE_ME@postgres:5432/ms_shelving' }, /DATABASE_URL uses a known/],
+      ['percent-encoded placeholder DB password', { DATABASE_URL: 'postgresql://ms_shelving:change%2Dme@postgres:5432/ms_shelving' }, /DATABASE_URL uses a known/],
+      ['dev Redis password', { REDIS_URL: 'redis://:ms_shelving@redis:6379/0' }, /REDIS_URL uses a known/],
+      ['.env.production.example REDIS_PASSWORD', { REDIS_URL: 'redis://:CHANGE_ME@redis:6379/0' }, /REDIS_URL uses a known/],
+    ])('refuses to start with the %s', (_label, overrides, message) => {
+      const { errors } = check(overrides);
+      expect(errors.join('\n')).toMatch(message);
+    });
+
+    it('matches whole passwords only — the dev database/user name and a longer password are fine', () => {
+      expect(
+        check({
+          DATABASE_URL: 'postgresql://ms_shelving:ms_shelving-7f3c9a1e0b52d846@postgres:5432/ms_shelving?schema=public',
+          REDIS_URL: 'redis://:ms_shelving-7f3c9a1e0b52d846@redis:6379/0',
+        }),
+      ).toEqual({ errors: [], warnings: [] });
+    });
+
+    it('never echoes the rejected password', () => {
+      const { errors } = check({
+        DATABASE_URL: 'postgresql://ms_shelving:ms_shelving@postgres:5432/db',
+        REDIS_URL: 'redis://:CHANGE_ME@redis:6379/0',
+      });
+      expect(errors).toHaveLength(2);
+      expect(errors.join('\n')).not.toMatch(/ms_shelving|CHANGE_ME/i);
+    });
   });
 
   it('treats any schema-invalid variable (e.g. an empty assignment) as fatal, naming only the variable', () => {

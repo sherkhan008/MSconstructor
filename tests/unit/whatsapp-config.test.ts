@@ -21,7 +21,7 @@ const ENABLED: WhatsAppEnvInput = {
 
 const PRODUCTION_BASE: ProductionConfigInput = {
   DATABASE_URL: 'postgresql://ms_shelving:0123456789abcdef@postgres:5432/ms_shelving?schema=public',
-  AUTH_SECRET: 'q3Xv1mZ8pL2sT9wK4yB7nC6dF0gH5jR2uE8iO1aS3zQ=',
+  AUTH_SECRET: 'test-only-auth-secret-not-a-real-credential-0001',
   APP_URL: 'https://ms-stellazh.kz',
   TRUSTED_PROXY_CLIENT_IP_HEADER: 'x-real-ip',
   REDIS_URL: 'redis://:0123456789abcdef@redis:6379/0',

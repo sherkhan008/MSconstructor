@@ -39,11 +39,29 @@ export interface ProductionConfigReport {
 export const AUTH_SECRET_MIN_LENGTH = 32;
 
 /** Fragments of the placeholder values shipped in .env*.example / old compose defaults. */
-const PLACEHOLDER_FRAGMENTS = ['change-me', 'changeme', 'replace-with', 'generate-with', 'your-domain', 'placeholder'];
+const PLACEHOLDER_FRAGMENTS = ['change-me', 'changeme', 'change_me', 'replace-with', 'generate-with', 'your-domain', 'placeholder'];
+
+/** Database/Redis passwords published in this repository for local
+ * development (docker-compose.dev.yml, .env.example). Public, so never
+ * acceptable on a deployed server. */
+const KNOWN_DEVELOPMENT_PASSWORDS = ['ms_shelving'];
 
 function looksLikePlaceholder(value: string): boolean {
   const lower = value.toLowerCase();
   return PLACEHOLDER_FRAGMENTS.some((fragment) => lower.includes(fragment));
+}
+
+/** True when a connection URL carries a known development or placeholder password. */
+function hasKnownDefaultPassword(connectionUrl: string): boolean {
+  let password: string;
+  try {
+    password = decodeURIComponent(new URL(connectionUrl).password);
+  } catch {
+    return false;
+  }
+  return (
+    password !== '' && (KNOWN_DEVELOPMENT_PASSWORDS.includes(password.toLowerCase()) || looksLikePlaceholder(password))
+  );
 }
 
 function parseHttpUrl(value: string): URL | null {
@@ -74,6 +92,8 @@ export function checkProductionConfig(input: ProductionConfigInput): ProductionC
     errors.push('DATABASE_URL must be a postgresql:// connection string.');
   } else if (/\/\/user:password@host[:/]/.test(databaseUrl)) {
     errors.push('DATABASE_URL still contains the .env.production.example placeholder.');
+  } else if (hasKnownDefaultPassword(databaseUrl)) {
+    errors.push('DATABASE_URL uses a known development/placeholder password; set a strong, unique POSTGRES_PASSWORD.');
   }
 
   // --- Admin session signing key ------------------------------------------
@@ -119,6 +139,9 @@ export function checkProductionConfig(input: ProductionConfigInput): ProductionC
   } else {
     try {
       parseRedisUrl(redisUrl);
+      if (hasKnownDefaultPassword(redisUrl)) {
+        errors.push('REDIS_URL uses a known development/placeholder password; set a strong, unique REDIS_PASSWORD.');
+      }
     } catch {
       errors.push('REDIS_URL is not a valid redis:// or rediss:// URL.');
     }

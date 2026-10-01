@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { localeProps, renderInLocale } from './helpers/public-page';
+import { SELLER_BANKING_SENTINELS } from '../fixtures/seller-banking-sentinels';
 import type { site as Site } from '@/lib/config/site';
 
 /**
@@ -17,32 +18,33 @@ import type { site as Site } from '@/lib/config/site';
 
 /**
  * Every placeholder that stood here before the seller was configured. The
- * old WhatsApp fallback digits are included: with
- * NEXT_PUBLIC_WHATSAPP_NUMBER configured (as production requires and this
- * file stubs) they must not appear either.
+ * pre-launch phone/WhatsApp fallback is covered structurally instead: `site`
+ * has no phone field, no page renders a tel: link, and WhatsApp is exactly
+ * the configured NEXT_PUBLIC_WHATSAPP_NUMBER (all asserted below).
  */
 const PLACEHOLDERS = [
   'ТОО «MS Стеллаж Казахстан»',
   'MS Стеллаж Казахстан',
   'ул. Алаш',
   'sales@ms-stellazh.kz',
-  'REDACTED_OLD_PHONE',
-  'REDACTED_OLD_PHONE',
 ];
 
 /** The placeholder BIN, only where a BIN is actually printed — bare twelve
  * zeros also occur inside SVG float coordinates. */
 const PLACEHOLDER_BIN = /БИН:?\s*0{12}/;
 
-/** Server-only SELLER_* values. A public page that printed any of these
- * would be leaking the seller's bank account to every visitor. */
-const CONFIDENTIAL = ['REDACTED_SELLER_IBAN', 'REDACTED_SELLER_BIC', 'REDACTED_SELLER_BANK_NAME', 'SELLER_IBAN'];
+/** Server-only SELLER_* banking values, stubbed below with synthetic
+ * sentinels. A public page that printed any of these would be leaking the
+ * seller's bank account to every visitor. */
+const CONFIDENTIAL = [...Object.values(SELLER_BANKING_SENTINELS), 'SELLER_IBAN'];
 
 /**
  * NEXT_PUBLIC_WHATSAPP_NUMBER is inlined at build time, and `site` reads it
  * once at module load — so it is stubbed before the modules are imported,
- * exactly as a production build supplies it. Nothing here depends on the
- * developer's own .env.
+ * exactly as a production build supplies it. The SELLER_* banking variables
+ * are stubbed the same way, so the environment every page renders in really
+ * holds banking details for the assertions below to look for. Nothing here
+ * depends on the developer's own .env.
  */
 const PAGE_MODULES = {
   homepage: '@/app/[locale]/page',
@@ -60,6 +62,7 @@ let organizationJsonLd: (locale: 'kk' | 'ru') => Record<string, unknown>;
 beforeAll(async () => {
   vi.resetModules();
   vi.stubEnv('NEXT_PUBLIC_WHATSAPP_NUMBER', '+7 707 107 8235');
+  for (const [name, value] of Object.entries(SELLER_BANKING_SENTINELS)) vi.stubEnv(name, value);
   site = (await import('@/lib/config/site')).site;
   organizationJsonLd = (await import('@/lib/seo')).organizationJsonLd as unknown as typeof organizationJsonLd;
 });
@@ -145,6 +148,17 @@ describe('WhatsApp replaces the phone that was never supplied', () => {
 });
 
 describe('banking details never reach a public page', () => {
+  it('the stubbed sentinels are live, valid seller banking details', async () => {
+    // Guards the assertions below against passing vacuously: the server-side
+    // seller config (what invoices print) really holds these values.
+    const { readSellerConfig } = await import('@/lib/documents/seller');
+    expect(readSellerConfig().details).toMatchObject({
+      bankName: SELLER_BANKING_SENTINELS.SELLER_BANK_NAME,
+      iban: SELLER_BANKING_SENTINELS.SELLER_IBAN,
+      bic: SELLER_BANKING_SENTINELS.SELLER_BIC,
+    });
+  });
+
   it.each(PAGES)('%s', async (page) => {
     const html = await markup(page);
     for (const secret of CONFIDENTIAL) expect(html).not.toContain(secret);

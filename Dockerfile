@@ -43,8 +43,10 @@ RUN npx prisma generate
 # NEXT_PUBLIC_* values are inlined into the JavaScript bundles by `next build`
 # — setting them only at runtime has no effect on the browser. They are
 # public by definition (never pass a secret as a build argument: build args
-# are visible in the image history). An unset NEXT_PUBLIC_WHATSAPP_NUMBER
-# builds with the placeholder number and the server logs a startup warning.
+# are visible in the image history). NEXT_PUBLIC_WHATSAPP_NUMBER is required
+# for a working deployment: WhatsApp is the seller's only public contact, so a
+# production server built without it refuses to start (fail closed — see
+# src/lib/startup/production-config.ts).
 # NEXT_PUBLIC_APP_URL is intentionally not a build argument: the server
 # falls back to the runtime APP_URL, so one image works for any domain.
 ARG NEXT_PUBLIC_WHATSAPP_NUMBER

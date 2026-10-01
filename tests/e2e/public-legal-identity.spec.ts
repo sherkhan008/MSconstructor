@@ -1,4 +1,5 @@
 import { test, expect } from './helpers/test';
+import { SELLER_BANKING_SENTINELS } from '../fixtures/seller-banking-sentinels';
 
 /**
  * The seller's public legal identity, as a visitor's browser actually
@@ -15,17 +16,28 @@ import { test, expect } from './helpers/test';
 // Both public languages carry the same legal identity.
 const ROUTES = ['/', '/contacts', '/privacy', '/terms', '/catalog', '/delivery'].flatMap((r) => [r, r === '/' ? '/ru' : `/ru${r}`]);
 
+// The pre-launch phone fallback is covered by the tel: and WhatsApp checks below.
 const PLACEHOLDERS = [
   'ТОО «MS Стеллаж Казахстан»',
   'MS Стеллаж Казахстан',
   'ул. Алаш',
   'sales@ms-stellazh.kz',
-  'REDACTED_OLD_PHONE',
-  'REDACTED_OLD_PHONE',
 ];
 
-/** Server-only SELLER_* values — see src/lib/documents/seller.ts. */
-const CONFIDENTIAL = ['REDACTED_SELLER_IBAN', 'REDACTED_SELLER_BIC', 'REDACTED_SELLER_BANK_NAME'];
+/**
+ * Server-only SELLER_* banking values — see src/lib/documents/seller.ts.
+ * playwright.config.ts starts the server with the synthetic sentinels; when
+ * the runner's environment (the developer's .env, a CI secret) holds real
+ * values, those are checked too — read at runtime, never written here.
+ */
+const CONFIDENTIAL = [
+  ...new Set([
+    ...Object.values(SELLER_BANKING_SENTINELS),
+    ...[process.env.SELLER_IBAN, process.env.SELLER_BIC, process.env.SELLER_BANK_NAME]
+      .map((value) => value?.trim())
+      .filter((value): value is string => !!value),
+  ]),
+];
 
 for (const route of ROUTES) {
   test(`${route} carries no placeholder identity, no tel: link and no bank details`, async ({ page }) => {

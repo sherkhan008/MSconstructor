@@ -29,3 +29,29 @@ backups
 
 # Private supplier pricing supplied out-of-band; never inside an image.
 private-data
+exports
+
+# Private keys, certificates and keystores, at any depth.
+**/*.pem
+**/*.key
+**/*.p8
+**/*.p12
+**/*.pfx
+**/*.jks
+**/*.keystore
+**/*.ppk
+**/id_rsa*
+**/id_ecdsa*
+**/id_ed25519*
+
+# Database dumps, backups and logs at any depth. Prisma migrations are the
+# only SQL the build needs (COPY prisma) and are re-included last.
+**/*.dump
+**/*.dump.partial
+**/*.sql.gz
+**/*.backup
+**/*.bak
+**/*.log
+logs
+**/*.sql
+!prisma/migrations/**/*.sql
