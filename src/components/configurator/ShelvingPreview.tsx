@@ -385,6 +385,25 @@ export interface FrameProfile {
   touchReserve: number | null;
 }
 
+/**
+ * How much larger the configurator draws the rack than the pre-2026-10-01
+ * workspace did (owner requirement: the full-width preview shows the rack
+ * ~30% larger). Display only — it multiplies CSS pixels per viewBox unit and
+ * nothing else: `pxPerMm`, every drawing coordinate, the envelope, the drag
+ * math, the configuration and the price never read it.
+ *
+ * Applied where each layout's frame size is decided:
+ *  - from 1024px the frame is height-capped (`.configurator-frame` in
+ *    globals.css): that cap is multiplied by `--preview-display-scale`, which
+ *    must equal this value, so the same crop renders this much larger;
+ *  - on phones the frame is the screen width and cannot grow, so
+ *    `COMPACT_FRAME.minAspect` is divided by it: where the old frame had
+ *    horizontal slack (one or two sections) the crop tightens by this factor
+ *    and the frame grows taller instead. A row that already fills the phone's
+ *    width keeps its fit-to-width crop — never clipped, never scrolled.
+ */
+export const PREVIEW_DISPLAY_SCALE = 1.3;
+
 export const WIDE_FRAME: FrameProfile = {
   minAspect: 1,
   maxAspect: 1.8,
@@ -396,7 +415,8 @@ export const WIDE_FRAME: FrameProfile = {
 };
 
 export const COMPACT_FRAME: FrameProfile = {
-  minAspect: 0.9,
+  // The pre-2026-10-01 bound was 0.9; see PREVIEW_DISPLAY_SCALE.
+  minAspect: 0.9 / PREVIEW_DISPLAY_SCALE,
   maxAspect: 1.8,
   left: RACK_LEFT_MARGIN - 36,
   top: 54,
@@ -509,6 +529,8 @@ export function computeFramedCrops(
   sections: readonly ShelvingSection[],
   depth: number,
   capacityMm?: DimensionCapacityMm,
+  /** The two framing profiles — the real ones unless a test compares another. */
+  profiles: { wide: FrameProfile; compact: FrameProfile } = { wide: WIDE_FRAME, compact: COMPACT_FRAME },
 ): { wide: FramedCrop; compact: FramedCrop } {
   // V2.6: the envelope is the world plan bounds (a corner adds the depth to
   // the front line and reaches back by its width), so corner geometry is
@@ -534,7 +556,7 @@ export function computeFramedCrops(
       RACK_LEFT_MARGIN + rowCeiling / 2,
       cornerReach,
     );
-  return { wide: cropFor(WIDE_FRAME), compact: cropFor(COMPACT_FRAME) };
+  return { wide: cropFor(profiles.wide), compact: cropFor(profiles.compact) };
 }
 
 /** The frame-ratio custom properties both preview modes' frames read (see

@@ -222,13 +222,23 @@
   }
 
   /* Configurator rack frame. On desktop the rack spans the content width,
-     with every control below it. Its height is capped so the whole preview
-     fits one screen below the header and the ~9rem title block (breadcrumbs,
-     title, lead) after the preview's toolbar and caption strip (~6rem) and
-     the bottom margin — the whole rack is in view on first load. */
+     with every control below it. Its height starts from the room one screen
+     leaves below the header and the ~9rem title block (breadcrumbs, title,
+     lead) after the preview's toolbar and caption strip (~6rem) and the
+     bottom margin, enlarged by the display scale (2026-10-01 owner
+     requirement: the rack ~30% larger — the rack itself stays in view on
+     load, the bottom dimension line may sit just below the fold). The frame
+     never grows wider than its panel. Display only: the crop, and with it
+     every drawing coordinate and the drag math, is unchanged.
+     --preview-display-scale must equal PREVIEW_DISPLAY_SCALE in
+     ShelvingPreview.tsx. */
   @media (min-width: 1024px) {
     .configurator-frame {
-      max-width: max(22rem, calc((100dvh - var(--header-height) - 16.5rem) * var(--frame-w-aspect, 4 / 3)));
+      --preview-display-scale: 1.3;
+      max-width: max(
+        calc(22rem * var(--preview-display-scale)),
+        calc((100dvh - var(--header-height) - 16.5rem) * var(--preview-display-scale) * var(--frame-w-aspect, 4 / 3))
+      );
     }
   }
 

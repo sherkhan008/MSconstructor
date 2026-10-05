@@ -251,9 +251,9 @@ describe('kit switcher and purchase card (UI)', () => {
     expect(kitTab(1).getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByRole('heading', { name: 'Комплект 1' })).toBeTruthy();
     // The controls now show kit 1's own values.
-    expect((screen.getByRole('combobox', { name: 'Глубина' }) as HTMLSelectElement).value).toBe(String(DEFAULT_CONFIGURATION.depth));
+    expect((screen.getByRole('combobox', { name: 'Глубина комплекта' }) as HTMLSelectElement).value).toBe(String(DEFAULT_CONFIGURATION.depth));
     fireEvent.click(kitTab(2));
-    expect((screen.getByRole('combobox', { name: 'Глубина' }) as HTMLSelectElement).value).toBe('600');
+    expect((screen.getByRole('combobox', { name: 'Глубина комплекта' }) as HTMLSelectElement).value).toBe('600');
   });
 
   it('"+ Комплект" adds and selects a kit; it disappears at 5 kits with a message', () => {

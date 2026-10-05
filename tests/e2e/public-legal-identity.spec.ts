@@ -30,6 +30,10 @@ const PLACEHOLDERS = [
  * the runner's environment (the developer's .env, a CI secret) holds real
  * values, those are checked too — read at runtime, never written here.
  */
+/** Any email address: the company publishes none (WhatsApp only), and these
+ * pages carry no customer data that could hold one. */
+const ANY_EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/;
+
 const CONFIDENTIAL = [
   ...new Set([
     ...Object.values(SELLER_BANKING_SENTINELS),
@@ -40,7 +44,7 @@ const CONFIDENTIAL = [
 ];
 
 for (const route of ROUTES) {
-  test(`${route} carries no placeholder identity, no tel: link and no bank details`, async ({ page }) => {
+  test(`${route} carries no placeholder identity, no tel:/mailto: link, no email and no bank details`, async ({ page }) => {
     await page.goto(route);
     await expect(page.locator('main')).toBeVisible();
     const html = await page.content();
@@ -49,6 +53,12 @@ for (const route of ROUTES) {
     expect(html).not.toMatch(/БИН:?\s*0{12}/);
     // No fabricated voice number anywhere, in any form.
     expect(await page.locator('a[href^="tel:"]').count()).toBe(0);
+    // No company email: WhatsApp is the only public contact channel.
+    expect(await page.locator('a[href^="mailto:"]').count()).toBe(0);
+    expect(await page.locator('body').innerText()).not.toMatch(ANY_EMAIL);
+    for (const raw of await page.locator('script[type="application/ld+json"]').allTextContents()) {
+      expect(raw, `${route}: JSON-LD`).not.toMatch(ANY_EMAIL);
+    }
   });
 }
 
@@ -58,7 +68,7 @@ test('the public offer identifies the real legal seller', async ({ page }) => {
   expect(text).toContain('ИП "ГИДРОПРОЕКТ"');
   expect(text).toContain('970115300155');
   expect(text).toContain('г. Астана, ул. А. Иманова, 19');
-  expect(text).toContain('serdalybakrambek2@gmail.com');
+  expect(text).not.toMatch(ANY_EMAIL);
 });
 
 test('the footer separates the brand from the legal seller', async ({ page }) => {
@@ -67,6 +77,10 @@ test('the footer separates the brand from the legal seller', async ({ page }) =>
   await expect(footer).toContainText('MS Стеллажи');
   await expect(footer).toContainText('ИП "ГИДРОПРОЕКТ"');
   await expect(footer).toContainText('970115300155');
+  // WhatsApp is the footer's contact; there is no company email.
+  await expect(footer.locator('a[href^="https://wa.me/"]').first()).toBeVisible();
+  expect(await footer.locator('a[href^="mailto:"]').count()).toBe(0);
+  expect(await footer.innerText()).not.toMatch(ANY_EMAIL);
 });
 
 test('WhatsApp remains the public contact channel, on the real number', async ({ page }) => {
@@ -92,10 +106,9 @@ test('Organization structured data names the legal seller and asserts nothing in
     name: 'ИП "ГИДРОПРОЕКТ"',
     alternateName: 'MS Стеллажи',
     taxID: '970115300155',
-    email: 'serdalybakrambek2@gmail.com',
     address: { streetAddress: 'г. Астана, ул. А. Иманова, 19', addressLocality: 'Астана', addressCountry: 'KZ' },
   });
-  for (const key of ['telephone', 'postalCode', 'geo', 'sameAs']) expect(ld).not.toHaveProperty(key);
+  for (const key of ['telephone', 'postalCode', 'geo', 'sameAs', 'email']) expect(ld).not.toHaveProperty(key);
 });
 
 test('the client bundle carries no seller bank details', async ({ page, request }) => {

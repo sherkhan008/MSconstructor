@@ -15,9 +15,9 @@ import { activeConfig, activeSectionIdOf, loadSingleKit } from '../helpers/works
 
 /**
  * Configurator V2.4 — per-section controls. Every section owns its width,
- * height, shelf count and walls; the panel expands the ACTIVE section's own
- * controls, each control edits only its own section, and every range comes
- * from that section alone. The preview's height handle and shelf column act
+ * height, shelf count and walls; the panel shows every section as its own
+ * column of its own controls (2026-10-01), each control edits only its own
+ * section, and every range comes from that section alone. The preview's height handle and shelf column act
  * on the active section too. No shared height or shelf value exists.
  */
 
@@ -48,82 +48,104 @@ function renderPanel() {
 
 const select = (label: string) => screen.getByRole('combobox', { name: label }) as HTMLSelectElement;
 const optionValues = (el: HTMLSelectElement) => Array.from(el.options).map((o) => Number(o.value));
-const shelfCount = () => screen.getByTestId('shelf-count').textContent;
-const increase = () => screen.getByRole('button', { name: 'Увеличить' }) as HTMLButtonElement;
+/** Section `n`'s own column (2026-10-01: one column per section). */
+const column = (n: number) => {
+  const el = document.querySelector<HTMLElement>(`[data-section-column="${n}"]`);
+  if (!el) throw new Error(`section column ${n} not found`);
+  return within(el);
+};
+const shelfCount = (n = 1) => column(n).getByTestId('shelf-count').textContent;
+const increase = (n = 1) => column(n).getByRole('button', { name: 'Увеличить' }) as HTMLButtonElement;
+const decrease = (n = 1) => column(n).getByRole('button', { name: 'Уменьшить' }) as HTMLButtonElement;
 
-describe('V2.4 sections panel — the active section shows its OWN controls', () => {
-  it('shows the active section’s own width, height and shelves, and only its controls', () => {
+describe('V2.4 sections panel — every section is its own column of its OWN controls', () => {
+  it('gives every section its own column holding its own width, height and shelves', () => {
     renderPanel();
-    expect(select('Ширина секции 1').value).toBe('1000');
-    expect(select('Высота секции 1').value).toBe('1500');
-    expect(shelfCount()).toBe('4');
-    // Section 2 is collapsed to a summary of its own values.
-    expect(screen.queryByRole('combobox', { name: 'Ширина секции 2' })).toBeNull();
-    const row2 = screen.getByRole('button', { name: 'Секция 2' });
-    expect(row2.getAttribute('aria-pressed')).toBe('false');
-    expect(row2.textContent).toContain('1200 × 2500 мм · 8 полок');
+    expect(document.querySelectorAll('[data-section-column]')).toHaveLength(2);
+    // Each column is one labelled unit: "Секция N" names its group.
+    expect(screen.getByRole('group', { name: 'Секция 1' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Секция 2' })).toBeTruthy();
+    expect((column(1).getByRole('combobox', { name: 'Ширина секции 1' }) as HTMLSelectElement).value).toBe('1000');
+    expect((column(1).getByRole('combobox', { name: 'Высота секции 1' }) as HTMLSelectElement).value).toBe('1500');
+    expect(shelfCount(1)).toBe('4');
+    expect((column(2).getByRole('combobox', { name: 'Ширина секции 2' }) as HTMLSelectElement).value).toBe('1200');
+    expect((column(2).getByRole('combobox', { name: 'Высота секции 2' }) as HTMLSelectElement).value).toBe('2500');
+    expect(shelfCount(2)).toBe('8');
+    // A column never holds another section's controls.
+    expect(column(1).queryByRole('combobox', { name: 'Ширина секции 2' })).toBeNull();
+    expect(column(2).queryByRole('combobox', { name: 'Высота секции 1' })).toBeNull();
 
-    fireEvent.click(row2);
+    // The header selects its section; the selected one is marked.
+    const header2 = screen.getByRole('button', { name: 'Секция 2' });
+    expect(header2.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(header2);
     expect(activeSectionIdOf()).toBe('b');
-    expect(select('Ширина секции 2').value).toBe('1200');
-    expect(select('Высота секции 2').value).toBe('2500');
-    expect(shelfCount()).toBe('8');
-    expect(screen.queryByRole('combobox', { name: 'Ширина секции 1' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Секция 1' }).textContent).toContain('1000 × 1500 мм · 4 полки');
+    expect(header2.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Секция 1' }).getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('changing section 1’s height leaves section 2 untouched', () => {
+  it('changing section 1 height leaves section 2 untouched', () => {
     renderPanel();
     fireEvent.change(select('Высота секции 1'), { target: { value: '2000' } });
     expect(heights()).toEqual([2000, 2500]);
     expect(shelves()).toEqual([4, 8]);
   });
 
-  it('changing section 1’s shelves leaves section 2 untouched', () => {
+  it('editing section 2 (width, height, shelves) never modifies section 1, without selecting it first', () => {
     renderPanel();
-    fireEvent.click(increase());
+    fireEvent.change(select('Ширина секции 2'), { target: { value: '1000' } });
+    fireEvent.change(select('Высота секции 2'), { target: { value: '3000' } });
+    fireEvent.click(decrease(2));
+    expect(activeConfig().sections.map((s) => [s.width, s.height, s.shelves])).toEqual([
+      [1000, 1500, 4],
+      [1000, 3000, 7],
+    ]);
+  });
+
+  it('changing section 1 shelves leaves section 2 untouched', () => {
+    renderPanel();
+    fireEvent.click(increase(1));
     expect(shelves()).toEqual([5, 8]);
-    fireEvent.click(screen.getByRole('button', { name: 'Уменьшить' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Уменьшить' }));
+    fireEvent.click(decrease(1));
+    fireEvent.click(decrease(1));
     expect(shelves()).toEqual([3, 8]);
     expect(heights()).toEqual([1500, 2500]);
   });
 
-  it('each section’s shelf maximum follows its OWN height', () => {
+  it('each section shelf maximum follows its OWN height', () => {
     load([section('a', 1000, 1500, 6), section('b', 1200, 2500, 6)]);
     renderPanel();
     // 1500 mm stops at 6 …
-    expect(increase().disabled).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: 'Секция 2' }));
+    expect(increase(1).disabled).toBe(true);
     // … while 2500 mm, in the same kit, still goes to 8.
-    expect(increase().disabled).toBe(false);
-    fireEvent.click(increase());
-    fireEvent.click(increase());
+    expect(increase(2).disabled).toBe(false);
+    fireEvent.click(increase(2));
+    fireEvent.click(increase(2));
     expect(shelves()).toEqual([6, 8]);
-    expect(increase().disabled).toBe(true);
+    expect(increase(2).disabled).toBe(true);
   });
 
-  it('each section’s height options follow its OWN shelf count', () => {
+  it('each section height options follow its OWN shelf count', () => {
     renderPanel();
     // 4 shelves: every height, 1000 included.
     expect(optionValues(select('Высота секции 1'))).toEqual([1000, 1500, 1800, 2000, 2200, 2500, 3000]);
-    fireEvent.click(screen.getByRole('button', { name: 'Секция 2' }));
     // 8 shelves: only heights whose ceiling is 8.
     expect(optionValues(select('Высота секции 2'))).toEqual([2000, 2200, 2500, 3000]);
   });
 
-  it('walls and the cross brace belong to the active section only', () => {
+  it('walls and the cross brace belong to their own section', () => {
     renderPanel();
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Задняя' }));
+    fireEvent.click(column(1).getByRole('checkbox', { name: 'Задняя' }));
     expect(activeConfig().sections.map((s) => s.rearWall)).toEqual([true, false]);
-    fireEvent.click(screen.getByRole('checkbox', { name: /^Крестовина жесткости\./ }));
+    fireEvent.click(column(2).getByRole('checkbox', { name: 'Правая' }));
+    expect(activeConfig().sections.map((s) => s.rightWall)).toEqual([false, true]);
+    fireEvent.click(column(1).getByRole('checkbox', { name: /^Крестовина жесткости\./ }));
     expect(activeConfig().accessories).toEqual([{ accessoryId: 'acc-cross-brace', quantity: 1, sectionId: 'a' }]);
     // A 1200 mm section cannot take one.
-    fireEvent.click(screen.getByRole('button', { name: 'Секция 2' }));
-    expect((screen.getByRole('checkbox', { name: /^Крестовина жесткости\./ }) as HTMLInputElement).disabled).toBe(true);
+    expect((column(2).getByRole('checkbox', { name: /^Крестовина жесткости\./ }) as HTMLInputElement).disabled).toBe(true);
   });
 
-  it('add copies the active section’s width, height and shelves; duplicate copies walls too, with a new id', () => {
+  it('add copies the active section width, height and shelves; duplicate copies walls too, with a new id', () => {
     load([section('a', 1000, 1500, 4, { rearWall: true }), section('b', 1200, 2500, 8)], 'b');
     renderPanel();
     fireEvent.click(screen.getByRole('button', { name: 'Добавить секцию' }));
@@ -132,6 +154,9 @@ describe('V2.4 sections panel — the active section shows its OWN controls', ()
     expect(activeSectionIdOf()).toBe(added.id);
 
     fireEvent.click(screen.getByRole('button', { name: 'Секция 1' }));
+    // Duplicate/remove are the selected section's own: one of each, on its column.
+    expect(screen.getAllByRole('button', { name: 'Дублировать' })).toHaveLength(1);
+    expect(column(1).getByRole('button', { name: 'Дублировать' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Дублировать' }));
     const [original, copy] = activeConfig().sections;
     const { id: originalId, ...originalRest } = original;
@@ -144,21 +169,42 @@ describe('V2.4 sections panel — the active section shows its OWN controls', ()
   it('never allows a sixth section: add and duplicate are disabled at the maximum', () => {
     load(Array.from({ length: MAX_SECTIONS }, (_, i) => section(`s${i}`, 1000, 2000, 5)));
     renderPanel();
+    expect(document.querySelectorAll('[data-section-column]')).toHaveLength(MAX_SECTIONS);
     expect((screen.getByRole('button', { name: 'Добавить секцию' }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole('button', { name: 'Дублировать' }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Дублировать' }));
     expect(activeConfig().sections).toHaveLength(MAX_SECTIONS);
   });
 
-  it('keeps kit-wide depth and load separate from the section controls, and never reintroduces a shared height or shelf count', () => {
+  it('shows the kit depth ONCE, as the kit value, right above the section columns', () => {
+    load([section('a', 1000, 1500, 4), section('b', 1200, 2500, 8), section('c', 700, 2000, 5)]);
+    renderPanel();
+    const depths = screen.getAllByRole('combobox', { name: /Глубина/ });
+    expect(depths).toHaveLength(1);
+    expect(screen.getByText('Глубина комплекта')).toBeTruthy();
+    expect(screen.getByText('Одна для всех секций')).toBeTruthy();
+    // Not inside any section's column …
+    expect(depths[0].closest('[data-section-column]')).toBeNull();
+    // … but in the same dimensions group as the columns, directly before them.
+    const sectionsGroup = screen.getByRole('region', { name: 'Секции' });
+    expect(sectionsGroup.contains(depths[0])).toBe(true);
+    const firstColumn = document.querySelector('[data-section-column="1"]')!;
+    expect(screen.getByTestId('kit-depth').nextElementSibling).toBe(firstColumn.parentElement);
+
+    // One depth for every section: changing it changes the kit, no section.
+    fireEvent.change(depths[0], { target: { value: '300' } });
+    expect(activeConfig().depth).toBe(300);
+    expect(activeConfig().sections.every((s) => !('depth' in s))).toBe(true);
+  });
+
+  it('keeps kit-wide load separate from the section controls, and never reintroduces a shared height or shelf count', () => {
     renderPanel();
     const kit = screen.getByRole('group', { name: 'Параметры комплекта' });
-    expect(within(kit).getByText('Глубина')).toBeTruthy();
     expect(within(kit).getByText('Нагрузка')).toBeTruthy();
     expect(within(kit).queryByText(/Высота/)).toBeNull();
     expect(screen.getByRole('heading', { name: 'Комплект 1' })).toBeTruthy();
     fireEvent.change(select('Высота секции 1'), { target: { value: '1800' } });
-    fireEvent.click(increase());
+    fireEvent.click(increase(1));
     const config = activeConfig() as ShelvingConfiguration & Record<string, unknown>;
     expect(config).not.toHaveProperty('height');
     expect(config).not.toHaveProperty('shelves');

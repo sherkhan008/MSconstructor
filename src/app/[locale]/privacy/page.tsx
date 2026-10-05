@@ -56,12 +56,12 @@ export default async function PrivacyPage({ params }: { params: LocaleParams }) 
 
         <section>
           <h2 className="font-display text-2xl">{t(PV['PV-016'], locale)}</h2>
-          <p className="mt-2">{t(PV['PV-017'], locale, { email: site.email })}</p>
+          <p className="mt-2">{t(PV['PV-017'], locale, { whatsapp: site.whatsappDisplay })}</p>
         </section>
 
         <section>
           <h2 className="font-display text-2xl">{t(PV['PV-018'], locale)}</h2>
-          <p className="mt-2">{t(PV['PV-019'], locale, { email: site.email, address: siteCopy(locale).address })}</p>
+          <p className="mt-2">{t(PV['PV-019'], locale, { whatsapp: site.whatsappDisplay, address: siteCopy(locale).address })}</p>
         </section>
       </div>
     </Container>

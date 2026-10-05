@@ -83,7 +83,6 @@ const serverSchema = z.object({
   SELLER_BIN: optionalString,
   SELLER_ADDRESS: optionalString,
   SELLER_PHONE: optionalString,
-  SELLER_EMAIL: optionalString,
   SELLER_BANK_NAME: optionalString,
   SELLER_IBAN: optionalString,
   SELLER_BIC: optionalString,

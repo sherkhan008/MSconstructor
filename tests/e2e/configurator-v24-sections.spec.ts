@@ -86,10 +86,12 @@ test('a mixed rack: each section edits only itself, with its own limits', async 
   const errors = trackErrors(page);
   await openMixed(page, MIXED2, 2);
 
-  // Section 1 is active: its own values.
+  // Every section is its own column (2026-10-01); section 1 is active.
+  const column1 = page.locator('[data-section-column="1"]');
+  const column2 = page.locator('[data-section-column="2"]');
   await expect(page.locator('select[aria-label="Ширина секции 1"]')).toHaveValue('1000');
   await expect(page.locator('select[aria-label="Высота секции 1"]')).toHaveValue('1500');
-  await expect(page.getByTestId('shelf-count')).toHaveText('4');
+  await expect(column1.getByTestId('shelf-count')).toHaveText('4');
   await expect(page.locator('button[data-axis="height"]')).toHaveAttribute('aria-valuenow', '1500');
 
   // Height of section 1 → section 2 untouched.
@@ -100,10 +102,10 @@ test('a mixed rack: each section edits only itself, with its own limits', async 
   ]);
 
   // Shelves of section 1 → up to ITS ceiling (1800 mm → 6), section 2 untouched.
-  const increase = page.getByRole('button', { name: 'Увеличить', exact: true });
+  const increase = column1.getByRole('button', { name: 'Увеличить', exact: true });
   await increase.click();
   await increase.click();
-  await expect(page.getByTestId('shelf-count')).toHaveText('6');
+  await expect(column1.getByTestId('shelf-count')).toHaveText('6');
   await expect(increase).toBeDisabled();
   expect((await storedSections(page)).map((s) => s.shelves)).toEqual([6, 8]);
 
@@ -111,8 +113,8 @@ test('a mixed rack: each section edits only itself, with its own limits', async 
   await sectionButton(page, 2).click();
   await expect(sectionButton(page, 2)).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('select[aria-label="Высота секции 2"]')).toHaveValue('2500');
-  await expect(page.getByTestId('shelf-count')).toHaveText('8');
-  await expect(increase).toBeDisabled();
+  await expect(column2.getByTestId('shelf-count')).toHaveText('8');
+  await expect(column2.getByRole('button', { name: 'Увеличить', exact: true })).toBeDisabled();
   const heightOptions = await page
     .locator('select[aria-label="Высота секции 2"] option')
     .evaluateAll((options) => options.map((o) => (o as HTMLOptionElement).value));

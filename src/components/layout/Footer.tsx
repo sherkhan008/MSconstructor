@@ -56,14 +56,6 @@ export function Footer({ locale }: { locale: Locale }) {
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-steel-soft">{t(HM['HM-062'], locale)}</dt>
-              <dd>
-                <a href={`mailto:${site.email}`} className="inline-flex min-h-9 items-center break-all text-background hover:text-accent">
-                  {site.email}
-                </a>
-              </dd>
-            </div>
-            <div>
               <dt className="text-xs text-steel-soft">{t(HM['HM-063'], locale)}</dt>
               <dd className="mt-1 text-background">{copy.address}</dd>
             </div>

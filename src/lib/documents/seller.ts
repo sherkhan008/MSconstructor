@@ -19,7 +19,6 @@ export interface SellerDetails {
   bin?: string;
   address?: string;
   phone?: string;
-  email?: string;
   bankName?: string;
   /** ИИК — the Kazakhstan IBAN, KZ + 18 characters. */
   iban?: string;
@@ -57,12 +56,6 @@ const SELLER_FIELDS: readonly SellerFieldSpec[] = [
   },
   { key: 'address', envName: 'SELLER_ADDRESS', label: 'Юридический адрес продавца', normalize: text(500) },
   { key: 'phone', envName: 'SELLER_PHONE', label: 'Телефон продавца', normalize: text(60) },
-  {
-    key: 'email',
-    envName: 'SELLER_EMAIL',
-    label: 'Email продавца',
-    normalize: (raw) => (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw.trim()) && raw.trim().length <= 200 ? raw.trim() : null),
-  },
   { key: 'bankName', envName: 'SELLER_BANK_NAME', label: 'Банк продавца', normalize: text(300) },
   {
     key: 'iban',

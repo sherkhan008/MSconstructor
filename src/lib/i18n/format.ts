@@ -22,7 +22,7 @@ export const PLACEHOLDER_KEYS: Readonly<Record<string, string>> = {
   min: 'min',
   max: 'max',
   url: 'url',
-  email: 'email',
+  whatsapp: 'whatsapp',
   номер: 'number',
   компания: 'company',
   цена: 'price',

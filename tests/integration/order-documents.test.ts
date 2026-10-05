@@ -10,7 +10,7 @@ import {
 import { ORDER_DOCUMENT_KINDS, type OrderDocumentKind } from '@/lib/documents/kinds';
 import type { OrderDocumentSource } from '@/lib/documents/order-source';
 import { renderOrderDocumentPdf } from '@/lib/documents/pdf';
-import { readSellerConfig, sellerConfigIssues, type SellerDetails } from '@/lib/documents/seller';
+import { parseSellerSnapshot, readSellerConfig, sellerConfigIssues, type SellerDetails } from '@/lib/documents/seller';
 import { configuration, decimal, issuance, item, orderSource } from './helpers/order-document-fixtures';
 import { pdfSyntax, readPdfText } from './helpers/pdf-text';
 
@@ -23,12 +23,17 @@ import { pdfSyntax, readPdfText } from './helpers/pdf-text';
  * checked on the model, where they can be checked exhaustively.
  */
 
+/** Synthetic sentinel — never the real company email. */
+const LEFTOVER_SELLER_EMAIL = 'company-contact@example.invalid';
+
 const SELLER: SellerDetails = readSellerConfig({
   SELLER_LEGAL_NAME: 'ТОО «Тестовый Продавец»',
   SELLER_BIN: '987654321098',
   SELLER_ADDRESS: 'г. Астана, ул. Тестовая, 1',
   SELLER_PHONE: '+7 700 000 00 00',
-  SELLER_EMAIL: 'sales@example.invalid',
+  // A leftover company email in the environment: no longer a seller field,
+  // so it must never reach a document (asserted below).
+  SELLER_EMAIL: LEFTOVER_SELLER_EMAIL,
   SELLER_BANK_NAME: 'АО «Тестовый Банк»',
   SELLER_IBAN: 'KZ000000000000000000',
   SELLER_BIC: 'TESTKZKA',
@@ -175,6 +180,32 @@ describe('legal entity, BIN/IIN', () => {
   });
 });
 
+describe('company contact is WhatsApp/phone only — no seller email on documents', () => {
+  const legal = orderSource({ buyer: { type: 'LEGAL_ENTITY', companyName: 'ТОО «Ромашка»', email: 'zakup@romashka.kz' } });
+
+  it('SELLER_EMAIL is not a seller field any more', () => {
+    expect(SELLER).not.toHaveProperty('email');
+    expect(readSellerConfig({ SELLER_EMAIL: 'not-an-email' }).invalid).toEqual([]);
+  });
+
+  it.each([...ORDER_DOCUMENT_KINDS])('%s prints no company email, keeps the seller phone and the buyer email', async (kind) => {
+    const { text } = await render(kind, legal);
+    const t = text.flat;
+    expect(t).not.toContain(LEFTOVER_SELLER_EMAIL);
+    expect(t).toContain('+7 700 000 00 00');
+    // The customer's own email is order data and stays on the document.
+    expect(t).toContain('zakup@romashka.kz');
+  });
+
+  it.each([...ORDER_DOCUMENT_KINDS])('%s issued before the change drops a stored seller email', async (kind) => {
+    const parsed = parseSellerSnapshot({ version: 1, brandName: 'MS Стеллажи', details: { ...SELLER, email: LEFTOVER_SELLER_EMAIL } }, kind);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.details).not.toHaveProperty('email');
+    const { text } = await render(kind, legal, { seller: parsed!.details });
+    expect(text.flat).not.toContain(LEFTOVER_SELLER_EMAIL);
+  });
+});
+
 describe('invoice lines — every row reconciles, services and discounts are explicit', () => {
   it('VAT-exclusive: goods, assembly and delivery rows, a discount row and VAT on top', async () => {
     // 3 × 100 000 goods + 15 000 assembly + 5 000 delivery − 9 000 discount = 311 000 net.
@@ -280,7 +311,6 @@ describe('optional seller fields that are not configured', () => {
     SELLER_LEGAL_NAME: 'ИП "Тестовый Продавец"',
     SELLER_BIN: '987654321098',
     SELLER_ADDRESS: 'г. Астана, ул. Тестовая, 1',
-    SELLER_EMAIL: 'sales@example.invalid',
     SELLER_BANK_NAME: 'АО "Тестовый Банк"',
     SELLER_IBAN: 'KZ00TEST000000000000',
     SELLER_BIC: 'TESTKZKA',

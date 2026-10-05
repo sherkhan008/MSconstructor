@@ -12,11 +12,11 @@ import { F, G, H } from '@/lib/i18n/strings';
  *                 legal block identifies who sells: the offer, the privacy
  *                 policy, the footer's реквизиты and Organization JSON-LD.
  *
- * There is deliberately no `phone`: the seller publishes no voice number, and
- * a placeholder one on a public offer is worse than none. WhatsApp is the
- * public contact channel (`whatsapp`/`whatsappDisplay`, from
- * NEXT_PUBLIC_WHATSAPP_NUMBER) — it is a messaging handle, never rendered as
- * a `tel:` link.
+ * There is deliberately no `phone` and no `email`: the seller publishes no
+ * voice number and no contact email, and a placeholder one on a public offer
+ * is worse than none. WhatsApp is the only public contact channel
+ * (`whatsapp`/`whatsappDisplay`, from NEXT_PUBLIC_WHATSAPP_NUMBER) — it is a
+ * messaging handle, never rendered as a `tel:` link.
  *
  * Banking details (IBAN, BIC, bank name) are NOT here and never public: they
  * live in server-only SELLER_* variables and reach invoices alone
@@ -68,7 +68,6 @@ export const site = {
 
   whatsapp: whatsappNumber,
   whatsappDisplay: formatKzNumber(whatsappNumber),
-  email: 'serdalybakrambek2@gmail.com',
   address: G['G-005'].ru,
   city: G['G-006'].ru,
   workingHours: G['G-007'].ru,

@@ -54,6 +54,13 @@ async function open(page: Page, config: ShelvingConfiguration, width: number) {
   await page.setViewportSize({ width, height: 800 });
   await page.goto(`/ru/configurator?${configurationToShareQuery(config)}`);
   await expect(page.getByRole('button', { name: /^Добавить (все )?в корзину$/ })).toBeEnabled({ timeout: 20_000 });
+  // A kit with a corner opens in the top view (2026-10-01); the on-rack
+  // controls checked here live in the front view, which the customer can
+  // always choose.
+  if (config.sections.some((s) => s.corner !== 'NONE')) {
+    await expect(page.getByRole('button', { name: 'Вид сверху', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', { name: 'Вид спереди', exact: true }).click();
+  }
   await page.getByTestId('preview-stage').scrollIntoViewIfNeeded();
 }
 

@@ -571,12 +571,81 @@ describe('corner width drag — the pointer is projected onto the rotated axis',
 
 /* -------------------------------------------------------------------------- */
 describe('top view with corners', () => {
-  it('shows a limitation notice instead of a false straight plan; a straight rack still draws its plan', () => {
-    const withCorner = render(createElement(TopShelvingPreview, { config: config([corner(section('L', 1000), 'LEFT'), section('m', 1000)]) }));
-    expect(withCorner.container.querySelector('[data-testid="top-view-corner-notice"]')).not.toBeNull();
-    expect(withCorner.container.querySelector('svg')).toBeNull();
+  /** Each drawn footprint in viewBox units, by section number. */
+  function footprints(container: HTMLElement) {
+    return Array.from(container.querySelectorAll('[data-plan-section]')).map((g) => {
+      const r = g.querySelector('rect')!;
+      return {
+        n: Number(g.getAttribute('data-plan-section')),
+        corner: g.getAttribute('data-corner'),
+        x: Number(r.getAttribute('x')),
+        y: Number(r.getAttribute('y')),
+        w: Number(r.getAttribute('width')),
+        h: Number(r.getAttribute('height')),
+      };
+    });
+  }
+
+  it('draws the real world plan of a corner kit, never a straight row or a notice; a straight rack keeps its own plan', () => {
+    const cfg = config([corner(section('L', 1500), 'LEFT'), section('m', 1000), corner(section('R', 1200), 'RIGHT')]);
+    const withCorners = render(createElement(TopShelvingPreview, { config: cfg }));
+    expect(withCorners.container.querySelector('[data-testid="top-view-corner-plan"] svg')).not.toBeNull();
+    expect(withCorners.container.querySelector('[data-testid="top-view-corner-notice"]')).toBeNull();
+    const [left, middle, right] = footprints(withCorners.container);
+    expect([left.corner, middle.corner, right.corner]).toEqual(['LEFT', 'NONE', 'RIGHT']);
+
+    // One uniform scale on both axes: every footprint is exactly its world
+    // footprint (rack-world.ts) times the same factor.
+    const { placements } = layoutRackWorld(cfg.sections, cfg.depth);
+    const scale = middle.w / 1000;
+    placements.forEach((p, i) => {
+      const drawn = [left, middle, right][i];
+      expect(drawn.w).toBeCloseTo((p.footprint.x1 - p.footprint.x0) * scale, 6);
+      expect(drawn.h).toBeCloseTo((p.footprint.z1 - p.footprint.z0) * scale, 6);
+    });
+    // A corner's width runs backward: it spans the kit depth along the front
+    // line and its own width back; the straight section the reverse.
+    expect(left.w).toBeCloseTo(cfg.depth * scale, 6);
+    expect(left.h).toBeCloseTo(1500 * scale, 6);
+    expect(right.h).toBeCloseTo(1200 * scale, 6);
+    expect(middle.h).toBeCloseTo(cfg.depth * scale, 6);
+    // Side by side along the front line, all standing on it (a U, not a row).
+    expect(middle.x).toBeCloseTo(left.x + left.w, 6);
+    expect(right.x).toBeCloseTo(middle.x + middle.w, 6);
+    for (const f of [left, middle, right]) expect(f.y + f.h).toBeCloseTo(left.y + left.h, 6);
+
+    // Dimensions: each corner's own width beside it, the front line's real
+    // length, and no kit depth (neither end is straight).
+    expect(withCorners.getByTestId('plan-corner-width-1').textContent).toBe('1500');
+    expect(withCorners.getByTestId('plan-corner-width-3').textContent).toBe('1200');
+    expect(withCorners.queryByTestId('plan-depth')).toBeNull();
+    expect(withCorners.container.textContent).toContain(`${getRackFootprintMm(cfg.sections, cfg.depth).width} мм`);
+    // Every section draws its own two end frames.
+    expect(withCorners.container.querySelectorAll('[data-plan-frame]')).toHaveLength(6);
     cleanup();
+
+    const leftOnly = render(createElement(TopShelvingPreview, { config: config([corner(section('L', 1000), 'LEFT'), section('m', 1000)]) }));
+    expect(leftOnly.getByTestId('plan-depth').textContent).toBe('400');
+    cleanup();
+
     const straight = render(createElement(TopShelvingPreview, { config: config([section('a', 1000)]) }));
     expect(straight.container.querySelector('svg')).not.toBeNull();
+    expect(straight.container.querySelector('[data-testid="top-view-corner-plan"]')).toBeNull();
+  });
+
+  it('selects a section from its footprint, by pointer or keyboard', () => {
+    const onSelectSection = vi.fn();
+    const cfg = config([corner(section('L', 1000), 'LEFT'), section('m', 1000)]);
+    const view = render(createElement(TopShelvingPreview, { config: cfg, interactive: true, activeSectionId: 'm', onSelectSection }));
+    const leftButton = view.container.querySelector('[data-plan-section="1"]')!;
+    expect(leftButton.getAttribute('role')).toBe('button');
+    expect(leftButton.getAttribute('tabindex')).toBe('0');
+    expect(leftButton.getAttribute('aria-label')).toContain('1000');
+    expect(leftButton.getAttribute('aria-pressed')).toBe('false');
+    expect(view.container.querySelector('[data-plan-section="2"]')!.getAttribute('aria-pressed')).toBe('true');
+    leftButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(onSelectSection).toHaveBeenLastCalledWith('L');
+    leftButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(onSelectSection).toHaveBeenCalledTimes(2);
   });
 });

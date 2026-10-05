@@ -61,8 +61,6 @@ export default async function TermsPage({ params }: { params: LocaleParams }) {
             {t(CN['CN-003'], locale)} {site.bin}
             <br />
             {siteCopy(locale).address}
-            <br />
-            {site.email}
           </p>
         </section>
       </div>

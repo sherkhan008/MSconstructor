@@ -58,6 +58,46 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
   // price recalculation, so switching preview mode (or the active kit) is
   // guaranteed to trigger zero pricing requests.
   const [previewMode, setPreviewMode] = useState<PreviewMode>('front');
+  const activeKitId = useConfiguratorStore((s) => s.activeKitId);
+  // Corners (2026-10-01): a corner's geometry reads best from above, so a
+  // corner that APPEARS selects the top view — converting a section to a
+  // corner, opening a kit that has one (switching, duplicating, a share link,
+  // a restored draft). It never fights the customer: an explicit choice of
+  // view sticks until a new corner appears, and nothing else (a width drag on
+  // a corner, adding a straight section) moves it. Only a top view the
+  // corners themselves selected is handed back to the default front view
+  // once the kit on screen no longer has any. View state only, as above.
+  const cornerKeys = config.sections.filter((s) => s.corner !== 'NONE').map((s) => `${s.id}:${s.corner}`);
+  const cornerSignature = cornerKeys.join('|');
+  const seenCorners = useRef<{ kitId: string; keys: string[] } | null>(null);
+  const topViewByCorners = useRef(false);
+  useEffect(() => {
+    const previous = seenCorners.current;
+    seenCorners.current = { kitId: activeKitId, keys: cornerKeys };
+    const appeared =
+      previous && previous.kitId === activeKitId ? cornerKeys.some((key) => !previous.keys.includes(key)) : cornerKeys.length > 0;
+    if (appeared) {
+      topViewByCorners.current = true;
+      setPreviewMode('top');
+    } else if (cornerKeys.length === 0 && topViewByCorners.current) {
+      topViewByCorners.current = false;
+      setPreviewMode('front');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeKitId, cornerSignature]);
+
+  function choosePreviewMode(mode: PreviewMode) {
+    topViewByCorners.current = false;
+    setPreviewMode(mode);
+  }
+
+  // Reset returns the whole workspace view to its defaults too: the kit's
+  // default configuration (the store's own reset, unchanged) is a straight
+  // rack, shown in the default front view.
+  function handleReset() {
+    reset();
+    choosePreviewMode('front');
+  }
 
   useLivePrice();
 
@@ -240,10 +280,10 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
                 switching never moves anything else on the page. */}
             <div className="border-b border-line px-3 py-2 sm:px-4">
               <div className="inline-flex max-w-full overflow-hidden rounded-md border border-line" role="group" aria-label={t(CF['CF-003'], locale)}>
-                <ViewToggleButton pressed={previewMode === 'front'} onClick={() => setPreviewMode('front')}>
+                <ViewToggleButton pressed={previewMode === 'front'} onClick={() => choosePreviewMode('front')}>
                   {t(CF['CF-004'], locale)}
                 </ViewToggleButton>
-                <ViewToggleButton pressed={previewMode === 'top'} onClick={() => setPreviewMode('top')} className="border-l border-line">
+                <ViewToggleButton pressed={previewMode === 'top'} onClick={() => choosePreviewMode('top')} className="border-l border-line">
                   {t(CF['CF-005'], locale)}
                 </ViewToggleButton>
               </div>
@@ -299,7 +339,7 @@ export function ConfiguratorClient({ catalog }: { catalog: PublicCatalog }) {
           <div className="mt-3 flex justify-center">
             <button
               type="button"
-              onClick={reset}
+              onClick={handleReset}
               className="inline-flex min-h-11 max-w-full items-center justify-center gap-2 rounded-md border border-line bg-surface px-4 py-2 text-center text-[15px] font-semibold leading-tight text-foreground transition-colors hover:border-line-strong hover:bg-surface-muted"
             >
               <ResetIcon />

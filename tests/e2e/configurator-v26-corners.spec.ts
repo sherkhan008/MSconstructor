@@ -13,7 +13,8 @@ import type { SectionCorner, ShelvingConfiguration, ShelvingSection } from '../.
  * section-level orientation control (valid choices only), a corner priced
  * exactly like the straight rack, the corner drawing inside the frame, the
  * corner width drag along the rotated axis, v4 links and the KZ/RU switch,
- * the top-view limitation, add to cart and checkout with a server re-price.
+ * the top view a corner selects on its own (2026-10-01) and its real corner
+ * plan, add to cart and checkout with a server re-price.
  */
 
 const hasDatabase = Boolean(process.env.DATABASE_URL);
@@ -89,6 +90,15 @@ const FIVE_WITH_BOTH = kit([
 ]);
 const straightened = (cfg: ShelvingConfiguration) => ({ ...cfg, sections: cfg.sections.map((s) => ({ ...s, corner: 'NONE' as const })) });
 
+/** A corner opens in the top view (2026-10-01); the customer can always
+ * choose the front view, which is where the uprights and drag handles are. */
+async function showFrontView(page: Page) {
+  const top = page.getByRole('button', { name: 'Вид сверху', exact: true });
+  await expect(top).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Вид спереди', exact: true }).click();
+  await expect(page.getByTestId('preview-stage')).toBeVisible();
+}
+
 /** Every upright drawn by the preview lies inside the visible workspace frame. */
 async function rackInsideFrame(page: Page) {
   const frame = (await page.locator('.configurator-frame-box').first().boundingBox())!;
@@ -127,9 +137,11 @@ test('the orientation control offers only valid choices; choosing a corner keeps
 
   await waitForPrice(page);
   expect(await barTotal(page)).toBe(straightTotal);
-  // The section list names the orientation in section 1's own summary.
-  await selectSection(page, 2);
-  await expect(page.locator('[data-section-row="1"] [data-testid="section-summary"]')).toContainText('Угол слева');
+  // Section 1's own column names its orientation; the new corner opened the
+  // top view with its real plan.
+  await expect(page.locator('[data-section-column="1"] select[aria-label="Расположение секции 1"]')).toHaveValue('LEFT');
+  await expect(page.getByTestId('top-view-corner-plan')).toBeVisible();
+  await showFrontView(page);
   await expect(page.getByTestId('preview-stage')).toContainText('↗ 1000');
   await rackInsideFrame(page);
   await noHorizontalScroll(page);
@@ -147,6 +159,7 @@ test('five sections with both corners: priced like the straight rack, drawn insi
   await waitForPrice(page);
   expect(await barTotal(page)).toBe(straightTotal);
   expect((await storedSections(page)).map((s) => s.corner)).toEqual(['LEFT', 'NONE', 'NONE', 'NONE', 'RIGHT']);
+  await showFrontView(page);
   const stage = page.getByTestId('preview-stage');
   await expect(stage).toContainText('↗ 1500');
   await expect(stage).toContainText('↗ 1000');
@@ -161,6 +174,7 @@ test('a corner width drag follows the receding axis and commits one supported wi
   const errors = trackErrors(page);
   await page.goto(`/ru/configurator?${configurationToShareQuery(kit([section(1000, 2000, 5), section(1000, 2000, 5, 'RIGHT')]))}`);
   await waitForPrice(page);
+  await showFrontView(page);
   await selectSection(page, 2);
   const handle = page.locator('button[data-axis="width"]');
   await expect(handle).toBeVisible();
@@ -191,7 +205,7 @@ test('a corner width drag follows the receding axis and commits one supported wi
   expect(errors).toEqual([]);
 });
 
-test('v4 links and the KZ/RU switch carry every corner of every kit; the top view states its limitation', async ({ page }) => {
+test('v4 links and the KZ/RU switch carry every corner of every kit; the top view draws them', async ({ page }) => {
   const errors = trackErrors(page);
   const second = kit([section(1200, 2000, 5, 'RIGHT')]);
   await page.goto(`/ru/configurator?${workspaceToShareQuery([FIVE_WITH_BOTH, second], 0)}`);
@@ -209,8 +223,11 @@ test('v4 links and the KZ/RU switch carry every corner of every kit; the top vie
   expect(await cornersOf()).toEqual([['LEFT', 'NONE', 'NONE', 'NONE', 'RIGHT'], ['RIGHT']]);
   expect(await barTotal(page)).toBe(ruTotal);
 
-  await page.getByRole('button', { name: 'Үстінен қарағандағы көрініс' }).click();
-  await expect(page.getByTestId('top-view-corner-notice')).toBeVisible();
+  // The kit on screen has corners, so the reloaded page opens in the top
+  // view, drawing the real corner plan.
+  await expect(page.getByRole('button', { name: 'Үстінен қарағандағы көрініс' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('top-view-corner-plan')).toBeVisible();
+  await expect(page.getByTestId('top-view-corner-plan').locator('[data-plan-section]')).toHaveCount(5);
   await noHorizontalScroll(page);
   expect(errors).toEqual([]);
 });

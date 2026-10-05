@@ -19,14 +19,12 @@ import type { PublicCatalog } from '@/lib/data/public-catalog';
 import type { SectionCorner, ShelvingConfiguration, ShelvingSection } from '@/lib/types/domain';
 import { getAllowedKitDepths, getAllowedSectionWidths, getSectionLimits } from '@/lib/configurator/section-limits';
 import { allowedCornersAt } from '@/lib/configurator/corners';
-import { shelvesLabel } from '@/lib/plural';
 import { t, type Entry } from '@/lib/i18n/format';
 import { dimensionOptionLabel, loadCapacityOptionLabel } from '@/lib/i18n/catalog-labels';
 import { CF, CR, G, VL } from '@/lib/i18n/strings';
 import { formatPrice } from '@/lib/money';
 import { MAX_KITS_PER_ORDER } from '@/lib/orders/limits';
 import { canAddWorkspaceRacks, getWorkspaceRackCount } from '@/lib/configurator/workspace';
-import type { Locale } from '@/lib/i18n/locales';
 import { useLocale } from '@/components/i18n/LocaleProvider';
 
 type ProductModel = PublicCatalog['models'][number];
@@ -38,20 +36,24 @@ type ProductModel = PublicCatalog['models'][number];
  *     active one filled graphite, each with its own current server price,
  *     and "+ Комплект" (at most MAX_WORKSPACE_KITS kits and Σ quantity ≤ 5);
  *  1. the active kit ("Комплект N", with duplicate/remove) and its KIT-WIDE
- *     parameters: the shared depth, load and the kit's quantity;
- *  2. its SECTIONS: every section is listed; the active one is expanded with
- *     its own width, height, shelf count, walls and section options, the
- *     others collapse to a one-line summary of their own values that selects
- *     them. Each control edits its own section only (`updateSection`), with a
- *     range read from that section's own values (see section-limits.ts) —
- *     there is no height or shelf control shared by every section. An edge
- *     section also offers its orientation (V2.6): straight, or a corner on
- *     its own edge only (corners.ts) — a middle section has no such choice.
+ *     parameters: load and the kit's quantity;
+ *  2. its DIMENSIONS (2026-10-01): the ONE depth the whole kit shares
+ *     ("Глубина комплекта"), directly above its SECTIONS — one column per
+ *     section, side by side where they fit and wrapping (five on a wide
+ *     screen, stacked full-width on a phone), each its own vertical unit:
+ *     its width, height, shelf count, orientation (edge sections only —
+ *     straight, or a corner on its own edge, see corners.ts), walls and
+ *     section option. Each control edits its own section only
+ *     (`updateSection`), with a range read from that section's own values
+ *     (see section-limits.ts) — there is no height or shelf control shared
+ *     by every section. The selected section's column is outlined like its
+ *     drawing and carries duplicate/remove.
  *
  * Reuses the existing store state/actions only; no new configuration state
- * is introduced (every control edits the active kit's configuration). Every control exists exactly once in the DOM (only the
- * active section's fields are rendered), so plain CSS-attribute locators
- * (e.g. `select[aria-label="Ширина секции 1"]`) never see duplicates.
+ * is introduced (every control edits the active kit's configuration). Every
+ * section's controls carry that section's number in their accessible name
+ * or sit in its labelled column (`data-section-column`), so a locator such
+ * as `select[aria-label="Ширина секции 1"]` names exactly one control.
  */
 export function ParametersSectionsTable({ catalog }: { catalog: PublicCatalog }) {
   const config = useConfiguratorStore(selectConfig);
@@ -132,81 +134,77 @@ export function ParametersSectionsTable({ catalog }: { catalog: PublicCatalog })
         />
       </div>
 
+      {/* The kit's dimensions as one group (2026-10-01): the ONE depth every
+          section shares, directly above the sections' own widths and
+          heights — one column per section. */}
       <section aria-labelledby="configurator-sections-heading" className="border-t border-line">
         <h3 id="configurator-sections-heading" className="px-4 pb-2 pt-3.5 font-display text-base leading-tight lg:px-6">
           {t(CF['CF-105'], locale)}
         </h3>
-        <ul className="border-t border-line">
-          {config.sections.map((section, i) =>
-            section.id === activeSection.id ? (
+        <KitDepthField config={config} model={model} catalog={catalog} setField={setField} />
+        <ul className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(min(100%,13.5rem),1fr))] gap-3 px-4 lg:px-6">
+          {config.sections.map((section, i) => {
+            const active = section.id === activeSection.id;
+            const titleId = `section-title-${section.id}`;
+            return (
               <li
                 key={section.id}
-                data-section-row={i + 1}
-                // Graphite rail + white surface for the active section, matching
+                data-section-column={i + 1}
+                // A graphite outline on the active section's column, matching
                 // the graphite outline the preview draws around that same
                 // section — the two views of one selection must agree.
-                className="border-b border-l-[3px] border-b-line border-l-foreground bg-surface px-4 pb-4 pt-1 lg:px-6"
+                className={`min-w-0 rounded-md border bg-surface px-3 pb-3 ${active ? 'border-foreground' : 'border-line'}`}
               >
-                <div className="flex items-center justify-between gap-2">
+                <div role="group" aria-labelledby={titleId}>
                   <button
                     type="button"
-                    aria-pressed
+                    id={titleId}
+                    aria-pressed={active}
                     onClick={() => setActiveSectionId(section.id)}
-                    className="-ml-1 min-h-11 px-1 text-left text-[15px] font-semibold text-foreground"
+                    className={`-ml-1 min-h-11 px-1 text-left text-[15px] font-semibold transition-colors ${active ? 'text-foreground' : 'text-steel hover:text-foreground'}`}
                   >
                     {t(CF['CF-025'], locale, { N: i + 1 })}
                   </button>
-                  <div className="-mr-2 flex shrink-0 items-center">
-                    <button
-                      type="button"
-                      disabled={!canAdd}
-                      onClick={() => duplicateSection(section.id)}
-                      className="min-h-11 px-2 text-[13px] font-medium text-steel transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      {t(CR['CR-012'], locale)}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!canRemove}
-                      onClick={() => removeSection(section.id)}
-                      aria-label={t(CF['CF-026'], locale)}
-                      title={t(CF['CF-026'], locale)}
-                      className="grid h-11 w-11 place-items-center text-lg leading-none text-steel transition-colors hover:text-danger disabled:cursor-not-allowed disabled:opacity-30"
-                    >
-                      ×
-                    </button>
-                  </div>
+                  <SectionFields
+                    section={section}
+                    index={i}
+                    corners={allowedCornersAt(i, config.sections.length)}
+                    model={model}
+                    catalog={catalog}
+                    widths={getAllowedSectionWidths(model, config.depth)}
+                    crossBraceSelected={config.accessories.some((a) => a.accessoryId === CROSS_BRACE_ID && a.sectionId === section.id)}
+                    onChange={(patch) => updateSection(section.id, patch)}
+                    onToggleCrossBrace={(checked) => toggleCrossBrace(section, checked)}
+                  />
+                  {/* Duplicate and remove act on the selected section, as
+                      before: one of each on the page, at the foot of its
+                      column so every column's fields stay level. */}
+                  {active && (
+                    <div className="-mb-3 mt-2 flex items-center justify-between border-t border-line">
+                      <button
+                        type="button"
+                        disabled={!canAdd}
+                        onClick={() => duplicateSection(section.id)}
+                        className="-ml-1 min-h-11 px-1 text-[13px] font-medium text-steel transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {t(CR['CR-012'], locale)}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!canRemove}
+                        onClick={() => removeSection(section.id)}
+                        aria-label={t(CF['CF-026'], locale)}
+                        title={t(CF['CF-026'], locale)}
+                        className="-mr-2 grid h-11 w-11 place-items-center text-lg leading-none text-steel transition-colors hover:text-danger disabled:cursor-not-allowed disabled:opacity-30"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <SectionFields
-                  section={section}
-                  index={i}
-                  corners={allowedCornersAt(i, config.sections.length)}
-                  model={model}
-                  catalog={catalog}
-                  widths={getAllowedSectionWidths(model, config.depth)}
-                  crossBraceSelected={config.accessories.some((a) => a.accessoryId === CROSS_BRACE_ID && a.sectionId === section.id)}
-                  onChange={(patch) => updateSection(section.id, patch)}
-                  onToggleCrossBrace={(checked) => toggleCrossBrace(section, checked)}
-                />
               </li>
-            ) : (
-              <li key={section.id} data-section-row={i + 1} className="border-b border-l-[3px] border-b-line border-l-transparent bg-background/60">
-                <button
-                  type="button"
-                  aria-pressed={false}
-                  aria-label={t(CF['CF-025'], locale, { N: i + 1 })}
-                  aria-describedby={`section-summary-${section.id}`}
-                  onClick={() => setActiveSectionId(section.id)}
-                  className="flex min-h-12 w-full items-center justify-between gap-3 px-4 text-left transition-colors hover:bg-surface lg:px-6"
-                >
-                  <span className="shrink-0 text-[15px] font-semibold text-steel">{t(CF['CF-025'], locale, { N: i + 1 })}</span>
-                  <span id={`section-summary-${section.id}`} data-testid="section-summary" className="mono min-w-0 truncate text-right text-[13px] text-steel">
-                    {sectionSummary(section, locale)}
-                  </span>
-                </button>
-              </li>
-            ),
-          )}
+            );
+          })}
         </ul>
 
         <div className="p-4 lg:px-6">
@@ -237,13 +235,6 @@ export function ParametersSectionsTable({ catalog }: { catalog: PublicCatalog })
 
 /** Customer label of each orientation (V2.6). */
 const CORNER_LABELS: Record<SectionCorner, Entry> = { NONE: CF['CF-121'], LEFT: CF['CF-122'], RIGHT: CF['CF-123'] };
-
-/** "1200 × 2500 мм · 8 полок" — one section's own values, for its collapsed
- * row; a corner adds its orientation ("… · Угол слева"). */
-function sectionSummary(section: ShelvingSection, locale: Locale): string {
-  const base = `${section.width} × ${section.height} ${t(G['G-008'], locale)} · ${shelvesLabel(section.shelves, locale)}`;
-  return section.corner === 'NONE' ? base : `${base} · ${t(CORNER_LABELS[section.corner], locale)}`;
-}
 
 /** Shared field chrome. On phones one compact row per field — a readable
  * sentence-case label on the left, a 44px control aligned in a consistent
@@ -321,8 +312,41 @@ function KitSwitcher() {
   );
 }
 
-/** Kit-wide parameters: the depth every section shares, the shelf load and
- * how many racks of this kit are ordered. */
+type SetField = <K extends keyof ShelvingConfiguration>(key: K, value: ShelvingConfiguration[K]) => void;
+
+/**
+ * The depth every section of the kit shares — ONE value per kit, never per
+ * section — shown at the head of the sections' dimensions so width, height
+ * and depth read as one group, and named as the kit's own ("Глубина
+ * комплекта · Одна для всех секций") so it is never mistaken for a section
+ * value.
+ */
+function KitDepthField({ config, model, catalog, setField }: { config: ShelvingConfiguration; model: ProductModel; catalog: PublicCatalog; setField: SetField }) {
+  // MS Standard's depth select only offers depths valid for EVERY current
+  // section's width (see ms-standard-compatibility.ts).
+  const allowedDepths = getAllowedKitDepths(model, config.sections);
+  const locale = useLocale();
+  return (
+    <div data-testid="kit-depth" className="flex flex-col gap-1.5 px-4 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 lg:px-6">
+      <label className="flex min-w-0 flex-col gap-1.5 min-[400px]:flex-row min-[400px]:items-center min-[400px]:gap-3">
+        <span className={`${FIELD_LABEL} min-[400px]:shrink-0`}>{t(CF['CF-129'], locale)}</span>
+        <select value={config.depth} onChange={(e) => setField('depth', Number(e.target.value))} className={`${SELECT_CLASS} min-[400px]:w-40`}>
+          {catalog.depths
+            .filter((d) => allowedDepths.includes(d.value))
+            .map((d) => (
+              <option key={d.id} value={d.value}>
+                {dimensionOptionLabel(d, locale)}
+              </option>
+            ))}
+        </select>
+      </label>
+      <p className="text-[13px] leading-tight text-steel">{t(CF['CF-130'], locale)}</p>
+    </div>
+  );
+}
+
+/** Kit-wide parameters other than its dimensions: the shelf load and how
+ * many racks of this kit are ordered. */
 function KitParamsFields({
   config,
   model,
@@ -334,30 +358,14 @@ function KitParamsFields({
   config: ShelvingConfiguration;
   model: ProductModel;
   catalog: PublicCatalog;
-  setField: <K extends keyof ShelvingConfiguration>(key: K, value: ShelvingConfiguration[K]) => void;
+  setField: SetField;
   maxQuantity: number;
   onQuantityChange: (quantity: number) => void;
 }) {
-  // MS Standard's depth select only offers depths valid for EVERY current
-  // section's width (see ms-standard-compatibility.ts).
-  const allowedDepths = getAllowedKitDepths(model, config.sections);
   const locale = useLocale();
 
   return (
     <div role="group" aria-label={t(CF['CF-024'], locale)} className="mt-2 flex flex-col gap-2.5 md:grid md:grid-cols-3 md:gap-x-6 md:gap-y-3">
-      <label className={GRID_FIELD}>
-        <span className={FIELD_LABEL}>{t(CF['CF-031'], locale)}</span>
-        <select value={config.depth} onChange={(e) => setField('depth', Number(e.target.value))} className={SELECT_CLASS}>
-          {catalog.depths
-            .filter((d) => allowedDepths.includes(d.value))
-            .map((d) => (
-              <option key={d.id} value={d.value}>
-                {dimensionOptionLabel(d, locale)}
-              </option>
-            ))}
-        </select>
-      </label>
-
       {/* Load options are words, not a bare number: sans face. */}
       <label className={GRID_FIELD}>
         <span className={FIELD_LABEL}>{t(CF['CF-033'], locale)}</span>
@@ -425,13 +433,12 @@ function SectionFields({
   const mm = t(G['G-008'], locale);
   const heights = catalog.heights.filter((h) => limits.heights.includes(h.value)).map((h) => h.value);
 
-  // From `md` one row: width, height, shelves — and the orientation, on an
-  // edge section that offers one.
-  const fieldGrid = corners.length > 1 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3';
-
+  // One vertical unit per section (its own column): width, height, shelves —
+  // and the orientation, on an edge section that offers one — then its walls
+  // and its own option.
   return (
     <div className="flex flex-col gap-3">
-      <div className={`flex flex-col gap-2.5 md:grid md:gap-x-6 md:gap-y-3 ${fieldGrid}`}>
+      <div className="flex flex-col gap-2.5">
         <label className={GRID_FIELD}>
           <span className={FIELD_LABEL}>
             {t(CF['CF-035'], locale)}, {mm}
@@ -505,12 +512,11 @@ function SectionFields({
         )}
       </div>
 
-      {/* Walls and the section's own option: stacked on phones, side by side
-          from `md`. */}
-      <div className="flex flex-col gap-3 md:grid md:grid-cols-2 md:items-center md:gap-x-6">
+      {/* Walls, then the section's own option. */}
+      <div className="flex flex-col gap-2">
         {/* Wraps instead of squeezing: three chips per line where they fit,
             never a label broken mid-word. */}
-        <div className="flex flex-wrap gap-2 [&>*]:flex-1 [&>*]:basis-[5.75rem]">
+        <div className="flex flex-wrap gap-2 [&>*]:flex-1 [&>*]:basis-[4.75rem]">
           <WallCheckbox label={t(CF['CF-037'], locale)} checked={section.rearWall} onChange={(checked) => onChange({ rearWall: checked })} />
           <WallCheckbox label={t(CF['CF-038'], locale)} checked={section.leftWall} onChange={(checked) => onChange({ leftWall: checked })} />
           <WallCheckbox label={t(CF['CF-039'], locale)} checked={section.rightWall} onChange={(checked) => onChange({ rightWall: checked })} />

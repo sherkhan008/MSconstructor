@@ -34,7 +34,7 @@ const SELLER_ENV = {
   SELLER_KBE: '17',
 };
 
-const SELLER_NAMES = ['SELLER_LEGAL_NAME', 'SELLER_BIN', 'SELLER_ADDRESS', 'SELLER_PHONE', 'SELLER_EMAIL', 'SELLER_BANK_NAME', 'SELLER_IBAN', 'SELLER_BIC', 'SELLER_KBE', 'SELLER_KNP'];
+const SELLER_NAMES = ['SELLER_LEGAL_NAME', 'SELLER_BIN', 'SELLER_ADDRESS', 'SELLER_PHONE', 'SELLER_BANK_NAME', 'SELLER_IBAN', 'SELLER_BIC', 'SELLER_KBE', 'SELLER_KNP'];
 
 /** The row shape Prisma returns for loadOrderDocumentSource's select. */
 function prismaRow(source = orderSource()) {

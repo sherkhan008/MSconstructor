@@ -45,12 +45,6 @@ export default async function ContactsPage({ params }: { params: LocaleParams })
               </dd>
             </div>
             <div>
-              <dt className="tech-label">{t(HM['HM-062'], locale)}</dt>
-              <dd>
-                <a href={`mailto:${site.email}`}>{site.email}</a>
-              </dd>
-            </div>
-            <div>
               <dt className="tech-label">{t(HM['HM-063'], locale)}</dt>
               <dd>{copy.address}</dd>
             </div>

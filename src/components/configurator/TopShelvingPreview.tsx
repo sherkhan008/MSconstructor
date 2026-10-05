@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, type KeyboardEvent } from 'react';
 import type { ColorOption, ShelvingConfiguration } from '@/lib/types/domain';
 import { VIEWBOX_W, depthMmToTopPx } from './resize/dimension-scale';
 import { computeSectionLayout, computeBoundaryXs } from './resize/section-geometry';
@@ -12,6 +12,7 @@ import {
   DRAW_INK_SOFT,
   DRAW_LINE,
   MAX_ROW_WIDTH_PX,
+  POST_WIDTH,
   RACK_LEFT_MARGIN,
   SectionWidthLabel,
   TARGET_FILL_PX,
@@ -19,6 +20,7 @@ import {
 } from './ShelvingPreview';
 import { resolveRackFill } from './rack-colors';
 import { hasCorners } from '@/lib/configurator/corners';
+import { getRackFootprintMm, layoutRackWorld, toWorld } from '@/lib/configurator/rack-world';
 import { t } from '@/lib/i18n/format';
 import { CF } from '@/lib/i18n/strings';
 import { useLocale } from '@/components/i18n/LocaleProvider';
@@ -43,11 +45,13 @@ import { useLocale } from '@/components/i18n/LocaleProvider';
  * view and the section table already share; there is no separate top-view
  * selection state.
  *
- * Straight racks only (V2.6). This plan draws every section as one straight
- * row, which is false for a corner section (its width runs backward). Until
- * the top view is redesigned for corners, a kit with a corner shows a short
- * notice here instead of a drawing — never an invented plan. Nothing else
- * changes: the frame, the preview mode and the configuration are untouched.
+ * Corners (2026-10-01). The straight plan above draws every section as one
+ * straight row, which is false for a corner section (its width runs
+ * backward). A kit with a corner is therefore drawn by `CornerTopView`
+ * instead: the rack's own world plan (rack-world.ts's `layoutRackWorld`, the
+ * same placement the front view, the BOM-free geometry tests and the server
+ * schema rely on) seen from above at one uniform millimetre scale — every
+ * section's real footprint, nothing invented, nothing redesigned.
  */
 
 const TOP_Y = 26;
@@ -70,18 +74,7 @@ interface Props {
 }
 
 export function TopShelvingPreview(props: Props) {
-  const locale = useLocale();
-  if (hasCorners(props.config.sections)) {
-    return (
-      <div
-        data-testid="top-view-corner-notice"
-        className={`relative flex w-full items-center justify-center border border-line bg-surface px-6 text-center text-sm leading-snug text-steel ${props.className ?? ''}`}
-      >
-        <p className="max-w-sm">{t(CF['CF-125'], locale)}</p>
-      </div>
-    );
-  }
-  return <StraightTopView {...props} />;
+  return hasCorners(props.config.sections) ? <CornerTopView {...props} /> : <StraightTopView {...props} />;
 }
 
 function StraightTopView({ config, color, className = '', interactive = false, activeSectionId, onSelectSection }: Props) {
@@ -122,23 +115,9 @@ function StraightTopView({ config, color, className = '', interactive = false, a
           return (
             <g
               key={section.id}
-              role={interactive ? 'button' : undefined}
-              tabIndex={interactive ? 0 : undefined}
-              aria-label={interactive ? t(CF['CF-008'], locale, { N: i + 1, W: section.section.width }) : undefined}
-              aria-pressed={interactive ? isActive : undefined}
-              onClick={interactive ? () => onSelectSection?.(section.id) : undefined}
-              onKeyDown={
-                interactive
-                  ? (e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        onSelectSection?.(section.id);
-                      }
-                    }
-                  : undefined
-              }
-              className={interactive ? 'outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blueprint' : undefined}
-              style={interactive ? { cursor: 'pointer' } : undefined}
+              {...selectableSectionProps(interactive, t(CF['CF-008'], locale, { N: i + 1, W: section.section.width }), isActive, () =>
+                onSelectSection?.(section.id),
+              )}
             >
               <rect x={section.x} y={TOP_Y} width={section.width} height={depthPx} fill={fill} stroke={SEAM} strokeWidth={0.75} />
             </g>
@@ -223,6 +202,220 @@ function StraightTopView({ config, color, className = '', interactive = false, a
           <line x1={rowEnd + 18.5} y1={TOP_Y} x2={rowEnd + 25.5} y2={TOP_Y} stroke={DRAW_LINE} strokeWidth={0.75} />
           <line x1={rowEnd + 18.5} y1={bottom} x2={rowEnd + 25.5} y2={bottom} stroke={DRAW_LINE} strokeWidth={0.75} />
           <DimensionTag x={rowEnd + 22} y={(TOP_Y + bottom) / 2} label={`${config.depth}`} active={false} orientation="vertical" />
+        </g>
+      </svg>
+    </div>
+  );
+}
+
+/** A section footprint's selection behaviour, shared by both plans: the same
+ * `onSelectSection` the front view and the section controls use, by pointer
+ * or keyboard. Nothing at all when the plan is not interactive. */
+function selectableSectionProps(interactive: boolean, label: string, active: boolean, onSelect: () => void) {
+  if (!interactive) return {};
+  return {
+    role: 'button',
+    tabIndex: 0,
+    'aria-label': label,
+    'aria-pressed': active,
+    onClick: onSelect,
+    onKeyDown: (e: KeyboardEvent<SVGGElement>) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onSelect();
+      }
+    },
+    className: 'outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blueprint',
+    style: { cursor: 'pointer' },
+  } as const;
+}
+
+/** The corner plan's room for the rack: its front-line length and its reach
+ * backward, in viewBox units — the straight plan's own row ceiling and a
+ * depth budget. One uniform scale fits whichever is tighter, so the plan
+ * keeps the rack's true proportions. */
+const CORNER_PLAN_W = MAX_ROW_WIDTH_PX;
+const CORNER_PLAN_D = 200;
+/** Room for a vertical dimension (its line 22 units out, plus its rotated
+ * tag) on a side that has one, and the plain margin on a side that has none. */
+const SIDE_DIMENSION_MARGIN = 38;
+const SIDE_PLAIN_MARGIN = 14;
+const PLAN_TOP_MARGIN = 12;
+/** Below the front line: section widths, the total line and its tag. */
+const PLAN_BOTTOM_MARGIN = TOTAL_LINE_Y_OFFSET + 26;
+
+/** One vertical dimension at `x` from `y1` to `y2` — hairline, end ticks and
+ * its value: the straight plan's depth dimension, reused. */
+function VerticalDimension({ x, y1, y2, label, testId }: { x: number; y1: number; y2: number; label: string; testId: string }) {
+  return (
+    <g pointerEvents="none" data-testid={testId}>
+      <line x1={x} y1={y1} x2={x} y2={y2} stroke={DRAW_LINE} strokeWidth={0.75} />
+      <line x1={x - 3.5} y1={y1} x2={x + 3.5} y2={y1} stroke={DRAW_LINE} strokeWidth={0.75} />
+      <line x1={x - 3.5} y1={y2} x2={x + 3.5} y2={y2} stroke={DRAW_LINE} strokeWidth={0.75} />
+      <DimensionTag x={x} y={(y1 + y2) / 2} label={label} active={false} orientation="vertical" />
+    </g>
+  );
+}
+
+/**
+ * The plan of a kit with corner sections: the world plan (rack-world.ts) seen
+ * from above with the customer standing below it — x to the right along the
+ * front line, world z (backward) up the screen — at ONE uniform scale on both
+ * axes, so a corner's width, which runs backward, is drawn exactly as long as
+ * the same width on a straight section.
+ *
+ * Every section is its own real footprint: a straight one spans its width
+ * along the front line and the kit depth backward; a corner spans the kit
+ * depth along the front line and its own width backward. Each one's two end
+ * frames (its own uprights and the side between them) are drawn across its
+ * depth at its own two ends — never shared with a neighbour.
+ *
+ * Dimensions: a straight section's width under its front edge; a corner's
+ * width beside its outer side, along the direction it runs; the front line's
+ * real length (the value the front view's total dimension shows); and the
+ * kit depth on an end where a straight section shows it.
+ */
+function CornerTopView({ config, color, className = '', interactive = false, activeSectionId, onSelectSection }: Props) {
+  const locale = useLocale();
+  const { placements, bounds } = layoutRackWorld(config.sections, config.depth);
+  const planW = Math.max(bounds.x1 - bounds.x0, 1);
+  const planD = Math.max(bounds.z1 - bounds.z0, 1);
+  const s = Math.min(CORNER_PLAN_W / planW, CORNER_PLAN_D / planD);
+  const X = (x: number) => (x - bounds.x0) * s;
+  const Y = (z: number) => (bounds.z1 - z) * s;
+  const frontY = Y(0);
+
+  const first = placements[0];
+  const last = placements[placements.length - 1];
+  // The kit depth is measured on a straight end section, the right one
+  // preferred (as on the straight plan). A kit whose two ends are both
+  // corners has no straight end; its depth stays in the kit dimensions.
+  const depthSide = last.corner === 'NONE' ? 'right' : first.corner === 'NONE' ? 'left' : null;
+  const leftMargin = first.corner === 'LEFT' || depthSide === 'left' ? SIDE_DIMENSION_MARGIN : SIDE_PLAIN_MARGIN;
+  const rightMargin = last.corner === 'RIGHT' || depthSide === 'right' ? SIDE_DIMENSION_MARGIN : SIDE_PLAIN_MARGIN;
+  const viewBox = `${-leftMargin} ${-PLAN_TOP_MARGIN} ${planW * s + leftMargin + rightMargin} ${planD * s + PLAN_TOP_MARGIN + PLAN_BOTTOM_MARGIN}`;
+
+  const fill = resolveRackFill(color);
+  const markActive = interactive && placements.length > 1;
+  const rects = placements.map((p) => ({
+    p,
+    x: X(p.footprint.x0),
+    y: Y(p.footprint.z1),
+    width: (p.footprint.x1 - p.footprint.x0) * s,
+    height: (p.footprint.z1 - p.footprint.z0) * s,
+  }));
+  // Every footprint stands on the front line (z = 0) and they follow each
+  // other left to right, so the plan's outline is a skyline: along the front
+  // line, then back over each section's own far edge.
+  const outline = [
+    `M${X(bounds.x0)} ${frontY}`,
+    `L${X(bounds.x1)} ${frontY}`,
+    ...[...rects].reverse().flatMap((r) => [`L${r.x + r.width} ${r.y}`, `L${r.x} ${r.y}`]),
+    'Z',
+  ].join('');
+  const frontLengthMm = getRackFootprintMm(config.sections, config.depth).width;
+  const totalY = frontY + TOTAL_LINE_Y_OFFSET;
+
+  return (
+    <div data-testid="top-view-corner-plan" className={`relative w-full overflow-hidden border border-line bg-surface ${className}`}>
+      <svg viewBox={viewBox} className="h-full w-full" role="img" aria-label={t(CF['CF-007'], locale)}>
+        {rects.map(({ p, x, y, width, height }) => (
+          <g
+            key={p.section.id}
+            data-plan-section={p.index + 1}
+            data-corner={p.corner}
+            {...selectableSectionProps(interactive, t(CF['CF-008'], locale, { N: p.index + 1, W: p.section.width }), p.section.id === activeSectionId, () =>
+              onSelectSection?.(p.section.id),
+            )}
+          >
+            <rect x={x} y={y} width={width} height={height} fill={fill} stroke={SEAM} strokeWidth={0.75} />
+          </g>
+        ))}
+
+        {/* Each section's two end frames, across its own depth at its own two
+            ends (u = 0 and u = width), placed by the section's own transform —
+            the straight plan's posts. */}
+        {placements.flatMap((p) =>
+          [0, p.section.width].map((end) => {
+            const inset = Math.min(POST_WIDTH / 2 / s, p.section.width / 4);
+            const u = end === 0 ? inset : end - inset;
+            const a = toWorld(p, u, 0);
+            const b = toWorld(p, u, config.depth);
+            const alongX = Math.abs(a.x - b.x) > Math.abs(a.z - b.z);
+            const x0 = Math.min(X(a.x), X(b.x));
+            const y0 = Math.min(Y(a.z), Y(b.z));
+            return (
+              <rect
+                key={`${p.section.id}-${end}`}
+                data-plan-frame
+                x={alongX ? x0 : x0 - POST_WIDTH / 2}
+                y={alongX ? y0 - POST_WIDTH / 2 : y0}
+                width={alongX ? Math.abs(X(a.x) - X(b.x)) : POST_WIDTH}
+                height={alongX ? POST_WIDTH : Math.abs(Y(a.z) - Y(b.z))}
+                fill={fill}
+                stroke={SEAM}
+                strokeWidth={0.75}
+                pointerEvents="none"
+              />
+            );
+          }),
+        )}
+
+        <path d={outline} fill="none" stroke={DRAW_INK_SOFT} strokeWidth={1} pointerEvents="none" />
+
+        {markActive &&
+          rects
+            .filter(({ p }) => p.section.id === activeSectionId)
+            .map(({ p, x, y, width, height }) => (
+              <rect key={`selected-${p.section.id}`} x={x} y={y} width={width} height={height} fill="none" stroke={DRAW_INK} strokeWidth={1.5} pointerEvents="none" />
+            ))}
+
+        {/* Widths, each along the direction it runs: under a straight
+            section's front edge, beside a corner's outer side. */}
+        {rects.map(({ p, x, y, width }) =>
+          p.corner === 'NONE' ? (
+            <SectionWidthLabel
+              key={`w-${p.section.id}`}
+              x={x + width / 2}
+              y={frontY + 15}
+              label={p.section.width}
+              active={markActive && p.section.id === activeSectionId}
+            />
+          ) : (
+            <VerticalDimension
+              key={`w-${p.section.id}`}
+              testId={`plan-corner-width-${p.index + 1}`}
+              x={p.corner === 'LEFT' ? x - 22 : x + width + 22}
+              y1={y}
+              y2={frontY}
+              label={`${p.section.width}`}
+            />
+          ),
+        )}
+
+        {depthSide && (
+          <VerticalDimension
+            testId="plan-depth"
+            x={depthSide === 'right' ? X(bounds.x1) + 22 : X(bounds.x0) - 22}
+            y1={Y(config.depth)}
+            y2={frontY}
+            label={`${config.depth}`}
+          />
+        )}
+
+        {/* The front line's real length — a corner adds the kit depth to it,
+            exactly as the front view's total dimension states. */}
+        <g pointerEvents="none">
+          <line x1={X(bounds.x0)} y1={totalY} x2={X(bounds.x1)} y2={totalY} stroke={DRAW_LINE} strokeWidth={0.75} />
+          <line x1={X(bounds.x0)} y1={totalY - 3.5} x2={X(bounds.x0)} y2={totalY + 3.5} stroke={DRAW_LINE} strokeWidth={0.75} />
+          <line x1={X(bounds.x1)} y1={totalY - 3.5} x2={X(bounds.x1)} y2={totalY + 3.5} stroke={DRAW_LINE} strokeWidth={0.75} />
+          <DimensionTag
+            x={(X(bounds.x0) + X(bounds.x1)) / 2}
+            y={totalY + 14}
+            label={t(CF['CF-023'], locale, { N: Math.round(frontLengthMm) })}
+            active={false}
+            orientation="horizontal"
+          />
         </g>
       </svg>
     </div>

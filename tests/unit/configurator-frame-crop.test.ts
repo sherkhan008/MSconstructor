@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import {
   COMPACT_FRAME,
   FLOOR_Y,
+  PREVIEW_DISPLAY_SCALE,
   RACK_LEFT_MARGIN,
   ShelvingPreview,
   WIDE_FRAME,
@@ -261,6 +263,51 @@ describe('framed workspace crop', () => {
           expect(crop.y + crop.h, `${name} ${height}/${depth}`).toBeGreaterThanOrEqual(FLOOR_Y + 89.5);
         }
       }
+    }
+  });
+});
+
+/**
+ * 2026-10-01 owner requirement: the configurator draws the rack ~30% larger
+ * than the previously accepted workspace. Display only — the drawing's own
+ * geometry (pxPerMm, every coordinate, the envelope) is untouched; only how
+ * many screen pixels one viewBox unit takes changes. From 1024px that is the
+ * frame's height cap × PREVIEW_DISPLAY_SCALE (globals.css, checked in the
+ * e2e layout spec); on phones, whose frame is the screen width, it is the
+ * crop tightening by the same factor wherever the old crop had room to.
+ */
+describe('preview display scale', () => {
+  const LEGACY_COMPACT: FrameProfile = { ...COMPACT_FRAME, minAspect: 0.9 };
+  const crops = (count: number, profiles?: { wide: FrameProfile; compact: FrameProfile }) => {
+    const row = baseConfig({ sections: sections(Array.from({ length: count }, () => 1000)) });
+    return computeFramedCrops(row.sections, 400, CAPACITY, profiles);
+  };
+
+  it('is the ~30% the owner asked for, and the CSS cap uses the same factor', () => {
+    expect(PREVIEW_DISPLAY_SCALE).toBe(1.3);
+    const css = readFileSync('src/app/globals.css', 'utf8');
+    expect(css).toContain(`--preview-display-scale: ${PREVIEW_DISPLAY_SCALE};`);
+    expect(css).toMatch(/\.configurator-frame \{[^}]*var\(--preview-display-scale\)[^}]*\}/s);
+  });
+
+  it('phones: a lone section is drawn 1.3× larger on the same screen width, its crop height unchanged', () => {
+    const legacy = crops(1, { wide: WIDE_FRAME, compact: LEGACY_COMPACT }).compact;
+    const now = crops(1).compact;
+    // Same frame width (the phone), 1.3× fewer viewBox units across it.
+    expect(legacy.w / now.w).toBeCloseTo(PREVIEW_DISPLAY_SCALE, 6);
+    expect(now.h).toBeCloseTo(legacy.h, 6);
+  });
+
+  it('phones: a row that already fills the screen width keeps its fit-to-width crop — never cut', () => {
+    for (const count of [3, 5]) {
+      const legacy = crops(count, { wide: WIDE_FRAME, compact: LEGACY_COMPACT }).compact;
+      expect(crops(count).compact.w, `${count} sections`).toBeCloseTo(legacy.w, 6);
+    }
+  });
+
+  it('desktop/tablet: the wide crop — and so the drawing inside it — is exactly the accepted one', () => {
+    for (const count of [1, 3, 5]) {
+      expect(crops(count).wide).toEqual(crops(count, { wide: WIDE_FRAME, compact: LEGACY_COMPACT }).wide);
     }
   });
 });

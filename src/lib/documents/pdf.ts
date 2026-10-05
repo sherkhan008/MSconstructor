@@ -333,7 +333,6 @@ function sellerFields(model: OrderDocumentModel): DocumentField[] {
   if (s.bin) fields.push({ label: 'БИН', value: s.bin });
   if (s.address) fields.push({ label: 'Адрес', value: s.address });
   if (s.phone) fields.push({ label: 'Телефон', value: s.phone });
-  if (s.email) fields.push({ label: 'Email', value: s.email });
   return fields;
 }
 
@@ -410,7 +409,7 @@ function drawProposal(w: Writer, model: OrderDocumentModel) {
   const s = model.seller;
 
   // Letterhead: brand left, configured contacts right.
-  const contacts = [s.phone, s.email, s.address].filter((v): v is string => Boolean(v)).join('\n');
+  const contacts = [s.phone, s.address].filter((v): v is string => Boolean(v)).join('\n');
   const contactsWidth = 220;
   const brandWidth = CONTENT_WIDTH - contactsWidth - 16;
   const top = w.y;
@@ -601,7 +600,6 @@ function drawInvoice(w: Writer, model: OrderDocumentModel) {
     s.legalName,
     s.address,
     s.phone ? `тел. ${s.phone}` : undefined,
-    s.email,
   ].filter((v): v is string => Boolean(v));
   const buyer = [
     b.binIin ? `${b.idLabel} ${b.binIin}` : undefined,

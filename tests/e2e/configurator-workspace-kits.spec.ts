@@ -131,7 +131,8 @@ test('kits are independent: switch, per-kit controls and preview, each kit remem
   await expect(sectionButtons(page)).toHaveCount(2);
   await expect(previewSections(page)).toHaveCount(2);
   await expect(page.locator('select[aria-label="Ширина секции 2"]')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Секция 1', exact: true })).toContainText('1500');
+  await expect(page.locator('[data-section-column="1"] select[aria-label="Высота секции 1"]')).toHaveValue('1500');
+  await expect(page.getByRole('button', { name: 'Секция 2', exact: true })).toHaveAttribute('aria-pressed', 'true');
 
   await kitTab(page, 2).click();
   await expect(page.locator('select[aria-label="Высота секции 1"]')).toHaveValue('2500');

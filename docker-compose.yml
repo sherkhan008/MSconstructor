@@ -84,7 +84,6 @@ services:
       - SELLER_BIN
       - SELLER_ADDRESS
       - SELLER_PHONE
-      - SELLER_EMAIL
       - SELLER_BANK_NAME
       - SELLER_IBAN
       - SELLER_BIC

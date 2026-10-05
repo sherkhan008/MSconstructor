@@ -33,6 +33,10 @@ const PLACEHOLDERS = [
  * zeros also occur inside SVG float coordinates. */
 const PLACEHOLDER_BIN = /БИН:?\s*0{12}/;
 
+/** Any email address. The company publishes none — WhatsApp is its only
+ * public contact — so no public page may carry one, whatever its value. */
+const ANY_EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/;
+
 /** Server-only SELLER_* banking values, stubbed below with synthetic
  * sentinels. A public page that printed any of these would be leaking the
  * seller's bank account to every visitor. */
@@ -84,7 +88,7 @@ describe('no placeholder seller identity survives on a public page', () => {
     expect(html).not.toMatch(PLACEHOLDER_BIN);
   });
 
-  it('the configuration itself carries no placeholder and no voice phone', () => {
+  it('the configuration itself carries no placeholder, no voice phone and no email', () => {
     const json = JSON.stringify(site);
     for (const placeholder of PLACEHOLDERS) expect(json).not.toContain(placeholder);
     expect(json).not.toContain('000000000000');
@@ -95,25 +99,29 @@ describe('no placeholder seller identity survives on a public page', () => {
     expect(site.legalName).toBe('ИП "ГИДРОПРОЕКТ"');
     expect(site.bin).toBe('970115300155');
     expect(site.address).toBe('г. Астана, ул. А. Иманова, 19');
-    expect(site.email).toBe('serdalybakrambek2@gmail.com');
+    // WhatsApp is the only public contact: no company email field at all.
+    expect(site).not.toHaveProperty('email');
+    expect(json).not.toMatch(ANY_EMAIL);
     // The brand is untouched.
     expect(site.name).toBe('MS Стеллажи');
   });
 });
 
 describe('the real legal seller appears where a customer needs it', () => {
-  it('the public offer names the seller, its BIN, address and email', async () => {
+  it('the public offer names the seller, its BIN and address', async () => {
     const html = await markup('terms');
     expect(html).toContain('ИП &quot;ГИДРОПРОЕКТ&quot;');
     expect(html).toContain('970115300155');
     expect(html).toContain('г. Астана, ул. А. Иманова, 19');
-    expect(html).toContain('serdalybakrambek2@gmail.com');
   });
 
-  it('the privacy policy names the seller and its email', async () => {
+  it('the privacy policy names the seller and directs requests to WhatsApp', async () => {
     const html = await markup('privacy');
     expect(html).toContain('ИП &quot;ГИДРОПРОЕКТ&quot;');
-    expect(html).toContain('serdalybakrambek2@gmail.com');
+    expect(html).toContain('WhatsApp по номеру +7 707 107 8235');
+    expect(html).toContain('WhatsApp — +7 707 107 8235; адрес: г. Астана, ул. А. Иманова, 19');
+    // Every placeholder was filled — none is left for a visitor to see.
+    expect(html).not.toMatch(/\{(email|whatsapp|адрес)\}/);
   });
 
   it('the footer carries the brand, the legal seller and the BIN', async () => {
@@ -127,6 +135,22 @@ describe('the real legal seller appears where a customer needs it', () => {
     const html = await markup('contacts');
     expect(html).toContain('ИП &quot;ГИДРОПРОЕКТ&quot;');
     expect(html).toContain('г. Астана, ул. А. Иманова, 19');
+  });
+});
+
+describe('the company publishes no contact email', () => {
+  it.each(PAGES)('%s renders no mailto: link and no email address', async (page) => {
+    const html = await markup(page);
+    expect(html).not.toContain('mailto:');
+    expect(html).not.toMatch(ANY_EMAIL);
+  });
+
+  it('the Kazakh privacy policy carries the WhatsApp number, not an email', async () => {
+    const mod = await import('@/app/[locale]/privacy/page');
+    const html = await renderInLocale((await mod.default(localeProps('kk'))) as React.ReactElement, 'kk');
+    expect(html).toContain('+7 707 107 8235');
+    expect(html).not.toMatch(ANY_EMAIL);
+    expect(html).not.toMatch(/\{(email|whatsapp|мекенжай)\}/);
   });
 });
 
@@ -176,7 +200,7 @@ describe('Organization structured data', () => {
     expect(ld.name).toBe('ИП "ГИДРОПРОЕКТ"');
     expect(ld.alternateName).toBe('MS Стеллажи');
     expect(ld.taxID).toBe('970115300155');
-    expect(ld.email).toBe('serdalybakrambek2@gmail.com');
+    expect(ld).not.toHaveProperty('email');
     expect(ld.address).toMatchObject({
       streetAddress: 'г. Астана, ул. А. Иманова, 19',
       addressLocality: 'Астана',
@@ -188,6 +212,7 @@ describe('Organization structured data', () => {
     const json = JSON.stringify([organizationJsonLd('ru'), organizationJsonLd('kk')]);
     for (const placeholder of [...PLACEHOLDERS, ...CONFIDENTIAL, '000000000000']) expect(json).not.toContain(placeholder);
     // No fabricated telephone, postal code, coordinates or social profiles.
-    for (const key of ['telephone', 'postalCode', 'geo', 'sameAs']) expect(json).not.toContain(key);
+    for (const key of ['telephone', 'postalCode', 'geo', 'sameAs', 'email']) expect(json).not.toContain(key);
+    expect(json).not.toMatch(ANY_EMAIL);
   });
 });

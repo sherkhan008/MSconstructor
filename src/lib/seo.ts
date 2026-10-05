@@ -68,8 +68,8 @@ export function buildMetadata(input: {
 }
 
 /**
- * The legal seller as an Organization: legal name, BIN, address and public
- * email — the same identity the public offer carries. The legal name and BIN
+ * The legal seller as an Organization: legal name, BIN and address — the same
+ * identity the public offer carries. The legal name and BIN
  * are never translated; the brand and address follow the page locale.
  * Deliberately absent:
  * `telephone` (the seller publishes no voice number, and schema.org must not
@@ -86,7 +86,6 @@ export function organizationJsonLd(locale: Locale) {
     url: absoluteUrl(localizePath('/', locale)),
     logo: new URL('/images/models/ms-standard.svg', appUrl).toString(),
     taxID: site.bin,
-    email: site.email,
     address: {
       '@type': 'PostalAddress',
       streetAddress: copy.address,

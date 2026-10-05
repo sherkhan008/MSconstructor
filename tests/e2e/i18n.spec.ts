@@ -113,7 +113,7 @@ test('a configured rack, its price and every setting survive a language switch',
   // section 1; both sections' widths survive.
   await expect(page.locator('select[aria-label="Ширина секции 1"]')).toHaveValue('1000');
   expect(await storedWidths(page)).toEqual([1000, 1000]);
-  await expect(page.getByTestId('shelf-count')).toContainText('4');
+  await expect(page.locator('[data-section-column="1"]').getByTestId('shelf-count')).toContainText('4');
 
   await switchTo(page, 'KZ');
   expect(await configuratorTotal(page)).toBe(ruTotal);

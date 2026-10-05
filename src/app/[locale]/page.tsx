@@ -461,7 +461,7 @@ export default async function HomePage({ params }: { params: LocaleParams }) {
               {t(HM['HM-060'], locale)}
             </h2>
             <dl className="mt-8 grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-2">
-              <div className="bg-surface p-5">
+              <div className="bg-surface p-5 sm:col-span-2">
                 <dt className="text-sm text-steel">{t(HM['HM-061'], locale)}</dt>
                 <dd className="mono mt-1 text-lg">
                   <a
@@ -471,14 +471,6 @@ export default async function HomePage({ params }: { params: LocaleParams }) {
                     className="inline-flex min-h-9 items-center text-success hover:underline"
                   >
                     {site.whatsappDisplay}
-                  </a>
-                </dd>
-              </div>
-              <div className="bg-surface p-5">
-                <dt className="text-sm text-steel">{t(HM['HM-062'], locale)}</dt>
-                <dd className="mt-1">
-                  <a href={`mailto:${site.email}`} className="inline-flex min-h-9 items-center break-all hover:underline">
-                    {site.email}
                   </a>
                 </dd>
               </div>
