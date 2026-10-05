@@ -3,7 +3,7 @@
 This document is the deployment contract for how MS Shelving identifies a
 client and enforces rate limits. Code: `src/lib/security/client-ip.ts`,
 `src/lib/rate-limit.ts`, `src/lib/redis/resp-client.ts`,
-`deploy/nginx/default.conf`.
+`deploy/nginx/app-proxy.conf` (included by every nginx location that reaches the app).
 
 ## Why this needs explicit configuration
 
@@ -17,10 +17,10 @@ can guarantee that, so the deployment has to declare it.
 
 | Item | Value |
 | --- | --- |
-| Trusted proxy | The `proxy` service in `docker-compose.yml` (nginx, `deploy/nginx/default.conf`). No CDN is configured in this repository. |
+| Trusted proxy | The `proxy` service in `docker-compose.yml` (nginx, `deploy/nginx/app-proxy.conf`, used identically by the HTTP, HTTPS and internal health listeners). No CDN is configured in this repository. |
 | Canonical client-IP header | `X-Real-IP` (`TRUSTED_PROXY_CLIENT_IP_HEADER=x-real-ip`) |
 | Overwrite or append | **Overwrite.** `proxy_set_header X-Real-IP $remote_addr;` and `X-Forwarded-For $remote_addr;`. Client-supplied values, including repeated headers, are discarded. `Forwarded`, `X-Forwarded-Port`, `X-Client-IP`, `True-Client-IP` and `CF-Connecting-IP` are stripped. |
-| App port exposure | The `app` service publishes **no** host port (`expose: 3000` only). Only the `proxy` publishes a port (`PUBLIC_HTTP_BIND`, default 80). PostgreSQL and Redis sit on an `internal` Docker network. The app must never be reachable except through the proxy. `TRUSTED_PROXY_CLIENT_IP_HEADER=x-real-ip` is fixed in `docker-compose.yml`, and production startup refuses to run without it (`src/lib/startup/production-config.ts`). |
+| App port exposure | The `app` service publishes **no** host port (`expose: 3000` only). Only the `proxy` publishes ports (`PUBLIC_HTTP_BIND`, default 80, and `PUBLIC_HTTPS_BIND`, default 443; TLS terminates in nginx, so `$remote_addr` is still the real client). PostgreSQL and Redis sit on an `internal` Docker network. The app must never be reachable except through the proxy. `TRUSTED_PROXY_CLIENT_IP_HEADER=x-real-ip` is fixed in `docker-compose.yml`, and production startup refuses to run without it (`src/lib/startup/production-config.ts`). |
 | Header value format | Exactly one IPv4 or IPv6 literal. A list, a port or a hostname is rejected. The request is then treated as unresolved. |
 
 ### Requirements for any other deployment
@@ -131,3 +131,7 @@ The numbers did not change.
 - Fixed windows allow up to 2 × limit requests across a window boundary.
   This is the same behaviour as before.
 - Clients behind one NAT or carrier-grade NAT share a bucket.
+- IPv6 is not verified end to end: with Docker's default userland proxy an
+  IPv6 client reaches nginx as the Docker gateway address. Keep the domain
+  without an AAAA record until that path is verified
+  ([production-deployment.md](production-deployment.md), §8.7).

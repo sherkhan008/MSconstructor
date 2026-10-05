@@ -1,0 +1,59 @@
+# ==============================================================================
+# MS Shelving proxy — PROXY_TLS_ENABLED=true (nginx terminates TLS).
+#
+# Rendered by deploy/nginx/entrypoint.sh: ${TLS_DOMAIN} is the host of APP_URL
+# (the canonical public origin) and is the ONLY substituted variable. The
+# certificate is the Let's Encrypt lineage named after that host, mounted
+# read-only from the host's /etc/letsencrypt. Nothing here is edited by hand.
+#
+#   :8080 (public 80)   ACME challenges; everything else → 301 https://${TLS_DOMAIN}
+#   :8443 (public 443)  canonical host → app; any other Host (www, bare IP) → 301
+#   127.0.0.1:8081      internal health listener (common.conf), never redirected
+# ==============================================================================
+
+include /etc/nginx/ms-shelving/common.conf;
+
+server {
+    listen 8080 default_server;
+    server_name _;
+
+    # ACME HTTP-01 challenges must stay on plain HTTP for renewals.
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+
+    # Every other public HTTP request goes to the canonical HTTPS origin. The
+    # target is fixed, so a client-supplied Host header is never reflected.
+    location / {
+        return 301 https://${TLS_DOMAIN}$request_uri;
+    }
+}
+
+server {
+    listen 8443 ssl default_server;
+    http2 on;
+    server_name ${TLS_DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${TLS_DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${TLS_DOMAIN}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    # The application sends Strict-Transport-Security on every response
+    # (next.config.ts); nginx does not add a second copy.
+
+    # www.<domain> (when the certificate includes it), a bare IP or any other
+    # Host → the canonical origin, so the app only ever sees APP_URL's host.
+    if ($host != "${TLS_DOMAIN}") {
+        return 301 https://${TLS_DOMAIN}$request_uri;
+    }
+
+    location / {
+        include /etc/nginx/ms-shelving/app-proxy.conf;
+    }
+}

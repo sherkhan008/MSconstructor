@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Post-deploy smoke test, run on the Docker host. Read-only by default.
+# Post-deploy PUBLIC smoke test, run on the Docker host. Read-only by default.
+# This is the external check (real DNS, real certificate, public redirect);
+# internal readiness is scripts/ops/proxy.sh check (also run by deploy.sh).
 #
 #   scripts/ops/smoke-test.sh [--check-ip-contract]
 #
-#   BASE_URL            public entry point (default http://127.0.0.1:<PUBLIC_HTTP_BIND port>)
+#   BASE_URL            public entry point. Default:
+#                         PROXY_TLS_ENABLED=true  → APP_URL (https://<domain>)
+#                         otherwise (bootstrap)   → http://127.0.0.1:<PUBLIC_HTTP_BIND port>
+#                       With TLS enabled an http:// BASE_URL is refused: public
+#                       HTTP only redirects. An https:// BASE_URL also verifies
+#                       the HTTP→HTTPS redirect, ACME path and HSTS.
 #   SMOKE_ADMIN_EMAIL   optional: also verify admin login (records one audit-log row)
 #   SMOKE_ADMIN_PASSWORD
 #   --check-ip-contract sends 6 invalid order POSTs with forged forwarding
@@ -27,8 +34,26 @@ done
 require_env_file
 command -v curl >/dev/null || die "curl is required"
 
-bind="$(setting PUBLIC_HTTP_BIND 80)"
-BASE_URL="${BASE_URL:-http://127.0.0.1:${bind##*:}}"
+tls="$(proxy_tls_mode)"
+if [ -z "${BASE_URL:-}" ]; then
+  if [ "$tls" = "true" ]; then
+    BASE_URL="$(setting APP_URL '')"
+    log "BASE_URL not set; PROXY_TLS_ENABLED=true: testing the public origin APP_URL=$BASE_URL"
+  else
+    bind="$(setting PUBLIC_HTTP_BIND 80)"
+    BASE_URL="http://127.0.0.1:${bind##*:}"
+    log "BASE_URL not set; TLS not enabled: testing the local HTTP bootstrap entry point $BASE_URL"
+  fi
+fi
+BASE_URL="${BASE_URL%/}"
+case "$BASE_URL" in
+  https://*) ;;
+  http://*)
+    [ "$tls" != "true" ] \
+      || die "BASE_URL is http:// but PROXY_TLS_ENABLED=true: public HTTP only redirects to HTTPS. Use BASE_URL=https://<domain> (or leave it unset to use APP_URL)."
+    ;;
+  *) die "BASE_URL must be an http:// or https:// URL" ;;
+esac
 failures=0
 pass() { log "PASS $*"; }
 fail() { log "FAIL $*"; failures=$((failures + 1)); }
@@ -43,6 +68,13 @@ done
 proxy_id="$(compose ps -q proxy 2>/dev/null || true)"
 if [ -n "$proxy_id" ]; then
   pass "proxy publishes: $(docker inspect -f '{{range $port, $bindings := .NetworkSettings.Ports}}{{range $bindings}}{{.HostIp}}:{{.HostPort}}->{{$port}} {{end}}{{end}}' "$proxy_id")"
+  # Only the public listeners; never the internal health listener (8081).
+  for port in $(docker inspect -f '{{range $port, $bindings := .NetworkSettings.Ports}}{{if $bindings}}{{$port}} {{end}}{{end}}' "$proxy_id"); do
+    case "$port" in
+      8080/tcp|8443/tcp) ;;
+      *) fail "proxy publishes unexpected container port $port" ;;
+    esac
+  done
 else
   fail "proxy container is not running"
 fi
@@ -78,6 +110,36 @@ server_header="$(curl -sS -D - -o /dev/null --max-time 10 "$BASE_URL/api/health"
 case "$server_header" in
   *[0-9].[0-9]*) fail "Server header discloses a version: $server_header" ;;
   *) pass "Server header discloses no version" ;;
+esac
+
+# --- 2a. HTTPS (https:// BASE_URL only) ------------------------------------------
+# curl verifies the certificate chain and name on every request above, so a
+# bad certificate already shows up as failures (code 000).
+case "$BASE_URL" in
+  https://*)
+    host="${BASE_URL#https://}"
+    host="${host%%/*}"
+    hsts="$(curl -sS -D - -o /dev/null --max-time 10 "$BASE_URL/" | tr -d '\r' | grep -i '^strict-transport-security:' || true)"
+    case "$hsts" in
+      *max-age=[1-9]*) pass "HTTPS response carries HSTS" ;;
+      *) fail "HTTPS response has no Strict-Transport-Security header" ;;
+    esac
+    case "$host" in
+      *:*) log "SKIP HTTP redirect checks (BASE_URL has an explicit port)" ;;
+      *)
+        headers="$(curl -sS -D - -o /dev/null --max-time 10 "http://$host/catalog?smoke=1" || true)"
+        result="$(printf '%s\n' "$headers" | tr -d '\r' \
+          | awk 'NR == 1 { code = $2 } tolower($1) == "location:" { loc = $2 } END { print code " " loc }')"
+        case "$result" in
+          "301 https://"*"/catalog?smoke=1") pass "public HTTP redirects to HTTPS ($result)" ;;
+          *) fail "public HTTP did not redirect to HTTPS: $result" ;;
+        esac
+        # Renewals need this path on plain HTTP, not redirected (missing file → 404).
+        code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "http://$host/.well-known/acme-challenge/smoke-probe" || echo 000)"
+        if [ "$code" = "404" ]; then pass "ACME challenge path served on HTTP without redirect"; else fail "ACME challenge path on HTTP -> $code (expected 404)"; fi
+        ;;
+    esac
+    ;;
 esac
 
 # --- 3. Admin login (optional) --------------------------------------------------

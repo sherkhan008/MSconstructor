@@ -125,7 +125,7 @@ export function checkProductionConfig(input: ProductionConfigInput): ProductionC
   const header = input.TRUSTED_PROXY_CLIENT_IP_HEADER?.trim();
   if (!header) {
     errors.push(
-      'TRUSTED_PROXY_CLIENT_IP_HEADER is required (x-real-ip behind deploy/nginx/default.conf). ' +
+      'TRUSTED_PROXY_CLIENT_IP_HEADER is required (x-real-ip behind deploy/nginx/app-proxy.conf). ' +
         'Without it every client shares one rate-limit bucket. See docs/production-client-ip-and-rate-limiting.md.',
     );
   } else if (createClientIpPolicy({ trustedHeader: header, productionRuntime: true }).mode !== 'trusted-proxy-header') {

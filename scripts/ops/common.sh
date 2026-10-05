@@ -45,3 +45,32 @@ setting() {
 require_uint() {
   [[ "$2" =~ ^[0-9]+$ ]] || die "$1 must be a non-negative integer"
 }
+
+# proxy_tls_mode — "true" or "false", as the proxy will read PROXY_TLS_ENABLED.
+proxy_tls_mode() {
+  setting PROXY_TLS_ENABLED false
+}
+
+# proxy_preflight — renders the proxy configuration for the CURRENT env file
+# and tracked deploy/nginx files in a throwaway container (no ports published)
+# and runs `nginx -t`, which also loads the certificate when TLS is enabled.
+# The running proxy is not touched.
+proxy_preflight() {
+  compose run --rm --no-deps -T -e NGINX_ENTRYPOINT_QUIET_LOGS=1 proxy nginx -t
+}
+
+# proxy_ready — internal readiness, independent of DNS and of the public
+# HTTP→HTTPS redirect: the proxy container is running AND
+# deploy/nginx/readiness.sh passes inside it (proxy → app → /api/health on the
+# loopback-only listener; plus the TLS listener when PROXY_TLS_ENABLED=true).
+# Retries for ~30 s.
+proxy_ready() {
+  for _ in $(seq 1 15); do
+    if compose ps --status running --services 2>/dev/null | grep -qx proxy \
+      && compose exec -T proxy sh /etc/nginx/ms-shelving/readiness.sh; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}

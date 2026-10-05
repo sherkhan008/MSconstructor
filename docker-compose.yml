@@ -1,7 +1,7 @@
 # ==============================================================================
 # MS Shelving — PRODUCTION stack (single Linux host).
 #
-#   Internet → [TLS boundary] → proxy (nginx, the only published port)
+#   Internet → proxy (nginx: TLS, the only published ports 80 + 443)
 #            → app (Next.js, private) → postgres / redis (internal network only)
 #
 # Always run through scripts/ops/*.sh, or pass the env file explicitly:
@@ -35,17 +35,32 @@ volumes:
 
 services:
   # The only Internet-facing service. Overwrites X-Real-IP / X-Forwarded-For
-  # with the real TCP peer — see deploy/nginx/default.conf and
-  # docs/production-client-ip-and-rate-limiting.md. For TLS see
+  # with the real TCP peer — see deploy/nginx/app-proxy.conf and
+  # docs/production-client-ip-and-rate-limiting.md.
+  # TLS: PROXY_TLS_ENABLED in .env.production selects the tracked nginx
+  # config at container start (deploy/nginx/entrypoint.sh) — false: HTTP
+  # bootstrap; true: 80 redirects to HTTPS, 443 serves the app. Runbook:
   # docs/production-deployment.md ("TLS, domain and proxies").
   proxy:
     image: nginx:1.27-alpine
+    entrypoint: ["/bin/sh", "/etc/nginx/ms-shelving/entrypoint.sh"]
+    command: ["nginx", "-g", "daemon off;"]
+    # Only 8080 and 8443 are published. The internal health listener
+    # (127.0.0.1:8081 inside the container) is deliberately not.
     ports:
       - "${PUBLIC_HTTP_BIND:-80}:8080"
-      # Enable together with deploy/nginx/tls.conf.example:
-      # - "${PUBLIC_HTTPS_BIND:-443}:8443"
+      - "${PUBLIC_HTTPS_BIND:-443}:8443"
+    environment:
+      # Non-secret. APP_URL's host is the canonical TLS domain and redirect target.
+      - APP_URL=${APP_URL:?APP_URL is required}
+      - PROXY_TLS_ENABLED=${PROXY_TLS_ENABLED:-false}
     volumes:
-      - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/nginx:/etc/nginx/ms-shelving:ro
+      # Host-managed Let's Encrypt state (certbot runs on the host). Read-only:
+      # nginx only reads live/<domain>/ and the archive/ files it links to.
+      - ${LETSENCRYPT_DIR:-/etc/letsencrypt}:/etc/letsencrypt:ro
+      # certbot --webroot writes HTTP-01 challenge files here on the host.
+      - ${ACME_WEBROOT:-/var/www/certbot}:/var/www/certbot:ro
     networks: [edge]
     depends_on:
       app:
@@ -75,7 +90,7 @@ services:
       - AUTH_SECRET=${AUTH_SECRET:?AUTH_SECRET is required}
       - APP_URL=${APP_URL:?APP_URL is required}
       - AUTH_URL=${APP_URL:?APP_URL is required}
-      # Fixed by the proxy contract with deploy/nginx/default.conf.
+      # Fixed by the proxy contract with deploy/nginx/app-proxy.conf.
       - TRUSTED_PROXY_CLIENT_IP_HEADER=x-real-ip
       # Optional — passed through only when set in the env file (an unset
       # variable is not created in the container; an empty one would fail

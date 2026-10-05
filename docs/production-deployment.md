@@ -12,12 +12,13 @@ Related: [backups and restore](production-backups.md) ·
 
 ```
 Internet
-  │  HTTPS (443) / HTTP (80)
+  │  HTTP (80) → 301 to HTTPS (ACME challenges excepted)      [PROXY_TLS_ENABLED=true]
+  │  HTTPS (443) → app
   ▼
-[TLS boundary]  nginx in `proxy` (certificates on the host), or a CDN / load
-  │             balancer in front of it — see §8
-  ▼
-proxy   nginx:1.27  ── the ONLY published port. Overwrites X-Real-IP / X-Forwarded-For
+proxy   nginx:1.27  ── the ONLY published ports (80, 443). Terminates TLS with
+  │     the host's Let's Encrypt certificate (read-only mount) — see §8.
+  │     Overwrites X-Real-IP / X-Forwarded-For.
+  │     + internal health listener 127.0.0.1:8081 (container loopback, never published)
   │     network: edge
   ▼
 app     Next.js standalone (node server.js, uid 1001), port 3000 — not published
@@ -37,7 +38,7 @@ through nginx, which is what makes trusting `X-Real-IP` safe.
 
 | Service | Published | Restart | Healthcheck | Persistent data |
 | --- | --- | --- | --- | --- |
-| proxy | `PUBLIC_HTTP_BIND` (default `80`) → 8080 | unless-stopped | — (starts after app is healthy) | none |
+| proxy | `PUBLIC_HTTP_BIND` (default `80`) → 8080, `PUBLIC_HTTPS_BIND` (default `443`) → 8443 | unless-stopped | — (starts after app is healthy; readiness: `scripts/ops/proxy.sh check`) | none (certificates: host `/etc/letsencrypt`, read-only) |
 | app | no | unless-stopped | `GET /api/health` every 30 s | none |
 | migrate | no | no (one-shot) | exit code | none |
 | notifications-worker | no | unless-stopped | — (restarts on crash; see §10a) | none (state lives in PostgreSQL) |
@@ -61,7 +62,9 @@ as required secret / required / optional.
 | `REDIS_PASSWORD` | required secret | `openssl rand -hex 32` |
 | `NEXT_PUBLIC_WHATSAPP_NUMBER` | required (build time) | digits only; baked into the image |
 | `POSTGRES_USER`, `POSTGRES_DB` | optional | default `ms_shelving` |
-| `PUBLIC_HTTP_BIND` | optional | default `80`; `127.0.0.1:8080` behind a host-level TLS terminator |
+| `PROXY_TLS_ENABLED` | required | `false` = HTTP bootstrap (before the first certificate); `true` = HTTPS on 443, HTTP redirects. Exactly `true`/`false`, anything else stops the proxy. Apply with `bash scripts/ops/proxy.sh apply` (§8) |
+| `PUBLIC_HTTP_BIND`, `PUBLIC_HTTPS_BIND` | optional | defaults `80`, `443`; `127.0.0.1:8080` for HTTP behind a host-level TLS terminator |
+| `LETSENCRYPT_DIR`, `ACME_WEBROOT` | optional | host paths mounted read-only into the proxy; defaults `/etc/letsencrypt`, `/var/www/certbot` |
 | `SELLER_*` | optional (required before invoices) | confidential banking details |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | optional (token is a secret) | secondary manager channel, sent in parallel with WhatsApp (not conditional on it): order events `order.created`, `order.status_changed`, `order.paid` with redacted text (no customer data), and `contact.created` (new contact-form lead: name, phone, message). Unset = skipped + warn log; orders, payments and leads are never affected. Attempts are stored in `NotificationDelivery`; transient failures are retried automatically by `notifications-worker` (§10a) |
 | `SMTP_*`, `MANAGER_EMAIL`, `EMAIL_FROM` | optional (password is a secret) | email channel has no transport yet: reported as unavailable, never as sent |
@@ -110,18 +113,25 @@ Development-only: `E2E_BASE_URL`, `NEXT_PUBLIC_APP_URL`, empty
    Enable automatic security updates.
 2. **Firewall**: allow inbound 22 (restricted to your IPs if possible), 80,
    443 only. Docker-published ports bypass `ufw`; that is why only the proxy
-   publishes a port at all.
-3. **DNS / TLS**: point the domain's A/AAAA records at the server; choose the
-   TLS mode in §8.
+   publishes ports at all.
+3. **DNS**: point the domain's **A** record (and `www`'s, if used) at the
+   server. **No AAAA record** for the first release (§8.7). TLS is enabled
+   after the first deploy, following §8.
 4. **Code**: `git clone` into `/opt/ms-shelving` and check out the release commit.
 5. **Env**: `cp .env.production.example .env.production && chmod 600 .env.production`,
    fill it in (§2).
+   Keep `PROXY_TLS_ENABLED=false` for now (HTTP bootstrap).
 6. **Backup directory**: `sudo mkdir -p /var/backups/ms-shelving && sudo chown <deploy-user> /var/backups/ms-shelving`.
-7. **Deploy** (builds images, starts PostgreSQL + Redis, runs migrations,
-   starts the app, waits for health, starts nginx):
+   **ACME webroot**: `sudo mkdir -p /var/www/certbot`.
+7. **Deploy** (tests the proxy config, builds images, starts PostgreSQL +
+   Redis, runs migrations, starts the app, waits for health, starts nginx in
+   HTTP bootstrap mode, verifies internal readiness):
    ```sh
    bash scripts/ops/deploy.sh --first-deploy
    ```
+7a. **Enable HTTPS now** — §8.2 to §8.5 (certificate, `PROXY_TLS_ENABLED=true`,
+   `proxy.sh apply`, verification). Do the remaining steps over HTTPS: admin
+   login needs it (`Secure` cookies).
 8. **Seed the catalog and the first admin — once.** `prisma/seed.ts` is
    idempotent and refuses a weak or default admin password in production.
    Its catalog prices are placeholders: correct them in `/admin/prices` before launch.
@@ -134,8 +144,9 @@ Development-only: `E2E_BASE_URL`, `NEXT_PUBLIC_APP_URL`, empty
      -e ADMIN_EMAIL -e ADMIN_INITIAL_PASSWORD migrate ./node_modules/.bin/tsx prisma/seed.ts
    unset ADMIN_INITIAL_PASSWORD
    ```
-9. **Verify** health, pages, network exposure and admin login, then log in
-   through the browser and change the initial password:
+9. **Verify** health, pages, network exposure, HTTPS/redirect and admin
+   login, then log in through the browser and change the initial password.
+   With `PROXY_TLS_ENABLED=true` the smoke test targets `APP_URL` by default:
    ```sh
    SMOKE_ADMIN_EMAIL=... SMOKE_ADMIN_PASSWORD=... bash scripts/ops/smoke-test.sh
    ```
@@ -196,16 +207,27 @@ bash scripts/ops/deploy.sh
 SMOKE_ADMIN_EMAIL=... SMOKE_ADMIN_PASSWORD=... bash scripts/ops/smoke-test.sh
 ```
 
-`deploy.sh`: validate config → **backup** (aborts the deploy if it fails) →
-build `ms-shelving-app:<commit>` and `ms-shelving-migrate:<commit>` → start
-PostgreSQL/Redis → **migrate** (aborts on failure) → recreate the app and wait
-for `/api/health` → ensure nginx → (re)start `notifications-worker` on the new
-migrate image → check health through nginx → tag the release `:latest` and
-append it to `.deploy/history`.
+`deploy.sh`: validate config → **test the proxy config** for the current
+`PROXY_TLS_ENABLED` in a throwaway container (`nginx -t`, including the
+certificate; aborts before anything changes) → **backup** (aborts the deploy
+if it fails) → build `ms-shelving-app:<commit>` and
+`ms-shelving-migrate:<commit>` → start PostgreSQL/Redis → **migrate** (aborts
+on failure) → recreate the app and wait for `/api/health` → recreate nginx
+from this release's `deploy/nginx/` → (re)start `notifications-worker` on the
+new migrate image → **internal readiness** (below) → tag the release `:latest`
+and append it to `.deploy/history`.
+
+Internal readiness (`proxy_ready`, also `bash scripts/ops/proxy.sh check`)
+runs `deploy/nginx/readiness.sh` inside the proxy: the proxy container is
+running, and nginx → app → `/api/health` succeeds through the proxy's
+loopback-only listener `127.0.0.1:8081`, which is never redirected to HTTPS.
+With TLS enabled it also requests `/api/health` through the TLS listener with
+the `APP_URL` host as SNI, verifying the certificate. It needs no DNS. The
+public check (DNS, real certificate, redirect) is `smoke-test.sh`.
 
 Expect a few seconds of `502` while the app container is replaced (single
-instance). nginx re-resolves the app's address itself (`resolver` +
-`server app:3000 resolve`), so it never needs a reload after a deploy.
+instance) and a ~1 s gap while nginx is recreated. nginx re-resolves the
+app's address itself (`resolver` + `server app:3000 resolve`).
 
 ## 6. Rollback
 
@@ -266,11 +288,173 @@ No domain or certificate is configured in the repository. The contract:
   if every subdomain is HTTPS.
 - Session cookies are `Secure` in production: admin login needs HTTPS (or `localhost`).
 
-**Option A — nginx terminates TLS (recommended for v1).** Use
-`deploy/nginx/tls.conf.example`: certbot on the host (webroot mode), mount
-`/etc/letsencrypt` read-only into `proxy`, publish 80 and 443, redirect HTTP
-to HTTPS, reload nginx after renewal. `$remote_addr` is the real client, so
-the client-IP contract is unchanged.
+**Option A — nginx terminates TLS (the repository default for v1).** Certbot
+runs on the host in webroot mode; the `proxy` container reads the certificate
+from a read-only mount. `$remote_addr` is the real client, so the client-IP
+contract is unchanged. Placeholders below: `<domain>` = the host of
+`APP_URL` (e.g. `example.kz`), `<ops-email>` = the address Let's Encrypt
+sends expiry warnings to.
+
+### 8.1 How it is wired (no hand-edited tracked files)
+
+The mode is one line in `.env.production` (untracked):
+`PROXY_TLS_ENABLED=false|true`. At every start the proxy's entrypoint
+(`deploy/nginx/entrypoint.sh`) renders `/etc/nginx/conf.d/default.conf` from a
+tracked file. `docker-compose.yml`, `deploy/nginx/*` and the scripts are never
+edited on the server; any `docker compose --env-file .env.production …`
+command produces the same proxy.
+
+| | `PROXY_TLS_ENABLED=false` (bootstrap) | `PROXY_TLS_ENABLED=true` |
+| --- | --- | --- |
+| Config | `deploy/nginx/http.conf` | `deploy/nginx/https.conf.template`, `${TLS_DOMAIN}` = `APP_URL` host |
+| Port 80 | app + `/.well-known/acme-challenge/` | `/.well-known/acme-challenge/` from the webroot; **everything else `301 https://<domain>$request_uri`** (fixed target, the client's `Host` is never reflected) |
+| Port 443 | published, nothing listens | TLS 1.2/1.3, HTTP/2, Let's Encrypt certificate; `Host: <domain>` → app; any other Host (`www.<domain>`, bare IP) → `301 https://<domain>…` |
+| `127.0.0.1:8081` (inside the container, never published) | `/api/health` → app, no redirect | same |
+| Certificate | not needed | `/etc/letsencrypt/live/<domain>/{fullchain,privkey}.pem` |
+
+Both modes forward to the app through the same `deploy/nginx/app-proxy.conf`,
+so the `X-Real-IP` / `X-Forwarded-For` overwrite is identical on HTTP, HTTPS
+and the health listener. `X-Forwarded-Proto` is `https` behind 443. HSTS stays
+the app's (`next.config.ts`); nginx neither removes nor duplicates it.
+
+The entrypoint **fails closed**: `PROXY_TLS_ENABLED` other than `true`/`false`,
+an `APP_URL` that is not `https://<host>` (no port, no path), or a missing
+certificate stops the container with a one-line reason.
+
+Mounts (all read-only): `deploy/nginx` → `/etc/nginx/ms-shelving`,
+`/etc/letsencrypt` → `/etc/letsencrypt` (the whole directory: `live/` links
+into `archive/`), `/var/www/certbot` → `/var/www/certbot`. Certificates and
+keys live only on the host and are never in git (`*.pem`, `*.key` are
+gitignored and dockerignored).
+
+### 8.2 First deploy and DNS readiness
+
+1. Deploy with `PROXY_TLS_ENABLED=false` (§3 step 7). The site answers on
+   plain HTTP. Keep this window short and do not announce the site yet.
+2. Create the DNS **A** record for `<domain>` (and for `www.<domain>` if you
+   want www to redirect to the canonical host). No AAAA (§8.7).
+3. Wait until DNS points at this server, from outside the server:
+   ```sh
+   dig +short A <domain>        # must print this server's public IPv4
+   dig +short A www.<domain>    # only if www is used
+   dig +short AAAA <domain>     # must print nothing
+   ```
+4. Prove the challenge path works through DNS before asking Let's Encrypt:
+   ```sh
+   sudo mkdir -p /var/www/certbot/.well-known/acme-challenge
+   echo ok | sudo tee /var/www/certbot/.well-known/acme-challenge/probe
+   curl -fsS http://<domain>/.well-known/acme-challenge/probe   # → ok
+   sudo rm /var/www/certbot/.well-known/acme-challenge/probe
+   ```
+
+### 8.3 First certificate (Certbot, webroot)
+
+Install certbot on the host (`sudo apt install certbot` on Ubuntu; the
+package installs a `certbot.timer` that renews automatically). Rehearse
+against the staging CA first, then issue for real. Drop `-d www.<domain>`
+if www is not used. `--cert-name <domain>` fixes the path the proxy reads.
+
+```sh
+sudo certbot certonly --webroot -w /var/www/certbot \
+  --cert-name <domain> -d <domain> -d www.<domain> \
+  --email <ops-email> --agree-tos --no-eff-email \
+  --deploy-hook "bash /opt/ms-shelving/scripts/ops/proxy.sh reload" \
+  --dry-run
+
+sudo certbot certonly --webroot -w /var/www/certbot \
+  --cert-name <domain> -d <domain> -d www.<domain> \
+  --email <ops-email> --agree-tos --no-eff-email \
+  --deploy-hook "bash /opt/ms-shelving/scripts/ops/proxy.sh reload"
+
+sudo ls /etc/letsencrypt/live/<domain>/     # fullchain.pem privkey.pem …
+```
+
+Certbot stores the `--deploy-hook` in `/etc/letsencrypt/renewal/<domain>.conf`,
+so every future renewal runs it. Right after this first issuance it runs once
+against the still-HTTP proxy, which is harmless.
+
+### 8.4 Enable TLS
+
+```sh
+cd /opt/ms-shelving
+sed -i 's/^PROXY_TLS_ENABLED=.*/PROXY_TLS_ENABLED=true/' .env.production
+grep -E '^(APP_URL|PROXY_TLS_ENABLED)=' .env.production   # APP_URL="https://<domain>"
+bash scripts/ops/proxy.sh apply
+```
+
+`proxy.sh apply` first renders and tests the new configuration with
+`nginx -t` in a throwaway container (which loads the certificate). If that
+fails, the running proxy is **not touched** and the site stays up on HTTP.
+Otherwise it recreates the proxy (~1 s gap) and runs the internal readiness
+check, including the TLS listener. Every later `deploy.sh` keeps TLS, because
+the mode lives in `.env.production`.
+
+### 8.5 Verify HTTPS
+
+```sh
+bash scripts/ops/smoke-test.sh          # BASE_URL defaults to APP_URL when TLS is on
+curl -sSI http://<domain>/catalog       # 301 → https://<domain>/catalog
+curl -sSI https://www.<domain>/         # 301 → https://<domain>/ (if www is used)
+curl -sSI https://<domain>/ | grep -i strict-transport-security
+```
+
+The smoke test refuses an `http://` `BASE_URL` while TLS is on. With an
+`https://` `BASE_URL` it also checks the HTTP→HTTPS redirect, that
+`/.well-known/acme-challenge/` stays on plain HTTP (needed by renewals) and
+HSTS. curl verifies the certificate on every request. Run it from a machine
+outside the server as well, or use an external TLS checker.
+
+### 8.6 Renewal and the nginx reload hook
+
+- `certbot.timer` (twice a day) runs `certbot renew`. It renews within 30
+  days of expiry via the same webroot, which the proxy keeps serving on HTTP.
+- After a **successful** renewal certbot runs the deploy hook
+  `bash /opt/ms-shelving/scripts/ops/proxy.sh reload` as root. It runs
+  `nginx -t` inside the running proxy and then a graceful `nginx -s reload`:
+  no container restart, no dropped connections. If `nginx -t` rejects the new
+  files, nginx is **not** reloaded and keeps serving the previous (still
+  valid) certificate; the hook exits non-zero and certbot logs it in
+  `/var/log/letsencrypt/letsencrypt.log`.
+- Check the setup:
+  ```sh
+  systemctl list-timers certbot.timer
+  sudo grep renew_hook /etc/letsencrypt/renewal/<domain>.conf
+  sudo certbot renew --dry-run                       # challenge path works
+  sudo bash /opt/ms-shelving/scripts/ops/proxy.sh reload   # hook works
+  ```
+- If the server was installed with the snap package instead, its
+  `snap.certbot.renew.timer` does the same; the hook is identical.
+- Monitor `https://<domain>/api/health` externally; an expiring certificate
+  makes it fail before visitors notice.
+
+### 8.7 IPv6
+
+Keep **no AAAA record** for the first release. Docker publishes 80/443 on
+IPv6 too, but with Docker's default userland proxy an IPv6 client reaches
+nginx with the Docker gateway as `$remote_addr`. Every IPv6 visitor would
+then share one rate-limit bucket and the audit log would store no real
+address. Before adding AAAA, verify the IPv6 → nginx client-IP path (e.g.
+IPv6 enabled on the `edge` network with `userland-proxy: false`, then
+`smoke-test.sh --check-ip-contract` over IPv6). Until then you may also bind
+IPv4 only: `PUBLIC_HTTP_BIND="0.0.0.0:80"`, `PUBLIC_HTTPS_BIND="0.0.0.0:443"`.
+
+### 8.8 Rollback when the TLS configuration or certificate is broken
+
+- **`proxy.sh apply` or `deploy.sh` reports the proxy config invalid:**
+  nothing was changed (the test runs in a throwaway container). Read the
+  one-line reason (missing certificate, `APP_URL` not `https://<host>`, bad
+  `PROXY_TLS_ENABLED`), fix it, rerun.
+- **The proxy is up but HTTPS is broken** (deleted or corrupted certificate,
+  failed readiness after apply): return to HTTP immediately, then fix:
+  ```sh
+  sed -i 's/^PROXY_TLS_ENABLED=.*/PROXY_TLS_ENABLED=false/' .env.production
+  bash scripts/ops/proxy.sh apply
+  ```
+  Browsers that already received HSTS will refuse plain HTTP for this domain,
+  so treat this as a short emergency state. Re-issue or restore the
+  certificate (§8.3), then enable TLS again (§8.4).
+- **A bad release changed `deploy/nginx/*`:** `git checkout <previous-release>`
+  and `bash scripts/ops/proxy.sh apply`, or deploy the previous release.
 
 **Option B — a CDN / load balancer terminates TLS (e.g. Cloudflare later).**
 nginx then sees the CDN's address as `$remote_addr`, so every visitor would
@@ -385,7 +569,9 @@ postponed|retry abandoned event=… channel=… order=…|lead=<id> error=… at
 | --- | --- |
 | Status | `docker compose --env-file .env.production ps` |
 | Logs | `docker compose --env-file .env.production logs -f --tail 200 app` |
-| Health | `docker compose --env-file .env.production exec proxy wget -qO- http://127.0.0.1:8080/api/health` |
+| Health (internal) | `docker compose --env-file .env.production exec proxy wget -qO- http://127.0.0.1:8081/api/health` or `bash scripts/ops/proxy.sh check` |
+| Health (public) | `curl -fsS https://<domain>/api/health` |
+| Certificate expiry | `sudo certbot certificates` |
 | Restart app | `docker compose --env-file .env.production restart app` |
 | Stop everything (data kept) | `docker compose --env-file .env.production down` (never add `-v`: it deletes the database volume) |
 | Rotate `AUTH_SECRET` | edit the file, `docker compose --env-file .env.production up -d --no-deps app` (signs out all admins) |
@@ -419,7 +605,7 @@ database is refused rather than carrying stale privileges until it expires.
 
 ## 12. Before renting the real server — remaining decisions
 
-- Domain, DNS and TLS mode (§8).
+- Domain and DNS A record(s); then the TLS bootstrap in §8.
 - Off-host copies of backups (see [production-backups.md](production-backups.md)) — local backups do not survive loss of the server.
 - Real `SELLER_*`, WhatsApp number, notification credentials; real catalog prices.
 - External uptime monitoring of `https://<domain>/api/health` and of backup age.
