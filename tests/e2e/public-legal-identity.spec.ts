@@ -1,5 +1,6 @@
 import { test, expect } from './helpers/test';
 import { SELLER_BANKING_SENTINELS } from '../fixtures/seller-banking-sentinels';
+import { site } from '../../src/lib/config/site';
 
 /**
  * The seller's public legal identity, as a visitor's browser actually
@@ -83,13 +84,17 @@ test('the footer separates the brand from the legal seller', async ({ page }) =>
   expect(await footer.innerText()).not.toMatch(ANY_EMAIL);
 });
 
-test('WhatsApp remains the public contact channel, on the real number', async ({ page }) => {
+test('WhatsApp remains the public contact channel, on the configured public number', async ({ page }) => {
   await page.goto('/ru/contacts');
   // The header's WhatsApp action is an icon with an aria-label only; the
   // contact details in `main` are where the number itself is readable.
-  const link = page.locator('main a[href^="https://wa.me/77071078235"]').first();
+  // The number is the one the app itself resolves from the build's
+  // NEXT_PUBLIC_WHATSAPP_NUMBER (`site`), so this holds with or without a
+  // developer .env; that the configured value is the seller's real number is
+  // pinned in tests/integration/public-legal-identity.test.ts.
+  const link = page.locator(`main a[href^="https://wa.me/${site.whatsapp}"]`).first();
   await expect(link).toBeVisible();
-  await expect(link).toContainText('+7 707 107 8235');
+  await expect(link).toContainText(site.whatsappDisplay);
   // Reachable without a mouse and large enough to tap.
   await link.focus();
   await expect(link).toBeFocused();

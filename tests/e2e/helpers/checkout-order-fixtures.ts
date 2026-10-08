@@ -1,5 +1,6 @@
 import type { Page, TestInfo } from '@playwright/test';
 import type { PrismaClient } from '@prisma/client';
+import { e2eClientIp, trustedProxyHeaders } from './client-identity';
 
 /**
  * Isolated identity + cleanup for E2E specs that drive the real checkout
@@ -23,12 +24,10 @@ import type { PrismaClient } from '@prisma/client';
  * files, never share a database row) and its own simulated client IP (so
  * they never share a rate-limit bucket either), then delete exactly the rows
  * a file+project created once its tests are done. The production limiter
- * itself is untouched. The Playwright server runs with NODE_ENV=development
- * and no TRUSTED_PROXY_CLIENT_IP_HEADER, where the client-IP resolver's
- * development-only fallback reads the leftmost x-forwarded-for. That
- * fallback is never selected in production runtime, where only the header
- * the trusted reverse proxy overwrites is read — so this tagging cannot
- * rotate identities against a real deployment.
+ * itself is untouched. The simulated IP is presented exactly as the trusted
+ * reverse proxy would write it (helpers/client-identity.ts); in production
+ * nginx overwrites those headers with the real peer address, so this
+ * tagging cannot rotate identities against a real deployment.
  *
  * The customer phone range (+7909...) is disjoint from both real Kazakh
  * mobile prefixes and the +7900... range admin-order-fixtures.ts reserves
@@ -87,19 +86,16 @@ export function checkoutIdentity(prefix: string, testInfo: TestInfo): CheckoutId
   };
 }
 
-/** One deterministic simulated client IP per (prefix, test title), so no two
- * tests anywhere in the suite ever share a rate-limit bucket. */
+/** One simulated client IP per (prefix, test title) — and per run, see
+ * helpers/client-identity.ts — so no two tests anywhere in the suite ever
+ * share a rate-limit bucket. */
 export function simulatedClientIp(prefix: string, testInfo: TestInfo): string {
-  const seed = stableHash(`${prefix}::ip::${testInfo.title}`, 255 * 255 * 254);
-  const b = 1 + (Math.floor(seed / (255 * 255)) % 254);
-  const c = Math.floor(seed / 255) % 255;
-  const d = 1 + (seed % 254);
-  return `10.${b}.${c}.${d}`;
+  return e2eClientIp('orders', prefix, testInfo.title);
 }
 
 /**
  * Tags every POST /api/orders this page makes with a simulated
- * per-test x-forwarded-for so it lands in its own rate-limit bucket, never
+ * per-test client IP so it lands in its own rate-limit bucket, never
  * one shared with another test, file or project. Optionally delays the
  * request — the seam checkout.spec.ts's duplicate-submit test needs to
  * observe the button's transient disabled state.
@@ -113,7 +109,7 @@ export async function isolateOrderRequests(
   const ip = simulatedClientIp(prefix, testInfo);
   await page.route('**/api/orders', async (route) => {
     if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
-    await route.continue({ headers: { ...route.request().headers(), 'x-forwarded-for': ip } });
+    await route.continue({ headers: { ...route.request().headers(), ...trustedProxyHeaders(ip) } });
   });
 }
 

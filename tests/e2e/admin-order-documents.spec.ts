@@ -16,6 +16,7 @@ import {
   removeCheckoutFixtures,
   simulatedClientIp,
 } from './helpers/checkout-order-fixtures';
+import { trustedProxyHeaders } from './helpers/client-identity';
 import { clickWhenHydrated } from './helpers/hydration';
 
 /**
@@ -335,7 +336,7 @@ test('a later order from the same customer with new details does not change an e
   const clientIp = simulatedClientIp(checkoutPrefix, testInfo);
   const place = async (p: Page, details: { fullName: string; companyName: string; email: string }) => {
     const response = await p.request.post('/api/orders', {
-      headers: { 'x-forwarded-for': clientIp },
+      headers: trustedProxyHeaders(clientIp),
       data: {
         ...details,
         phone: identity.phone,

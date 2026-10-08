@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './helpers/test';
 import { waitForHydration } from './helpers/hydration';
+import { site } from '../../src/lib/config/site';
 
 /**
  * The redesigned contact page's form (src/components/contact/ContactForm.tsx)
@@ -15,7 +16,10 @@ import { waitForHydration } from './helpers/hydration';
  * number is never rendered.
  */
 
-const PUBLIC_NUMBER = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '77071078235';
+// The number the app itself resolves (NEXT_PUBLIC_WHATSAPP_NUMBER, or its
+// local-development fallback when unset) — never a second copy of that rule,
+// so the expectation holds with and without a developer .env.
+const PUBLIC_NUMBER = site.whatsapp;
 
 function collectErrors(page: Page): string[] {
   const errors: string[] = [];

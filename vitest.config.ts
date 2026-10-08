@@ -13,6 +13,9 @@ export default defineConfig({
     environment: 'node',
     include: ['tests/unit/**/*.test.ts', 'tests/integration/**/*.test.ts'],
     exclude: ['tests/e2e/**'],
+    // Every file starts from the shell environment, never the untracked .env
+    // Prisma would otherwise load — see the file for why.
+    setupFiles: ['tests/setup/test-environment.ts'],
     globals: true,
     reporters: ['default'],
   },

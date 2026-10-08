@@ -29,16 +29,24 @@ const configuration = (deliveryId: string) => ({
   quantity: 1,
 });
 
-/** Opens the configurator on a persisted configuration with the given delivery. */
+/**
+ * Opens the configurator on a persisted configuration with the given delivery.
+ *
+ * The workspace is stored before any page script runs, once per tab. Writing
+ * it into an already running configurator raced the app: the store persists
+ * its whole workspace on every update, so a price arriving after the write
+ * replaced the seeded delivery with the default one (pickup) before the
+ * reload read it back — and the order then went through instead of being
+ * refused.
+ */
 async function openConfiguratorWithDelivery(page: Page, deliveryId: string) {
+  const config = configuration(deliveryId);
+  await page.addInitScript((persisted) => {
+    if (sessionStorage.getItem('e2e-seeded-configurator')) return;
+    sessionStorage.setItem('e2e-seeded-configurator', '1');
+    localStorage.setItem('ms-shelving-configurator', persisted);
+  }, JSON.stringify({ state: { config, activeSectionId: config.sections[0].id }, version: 3 }));
   await page.goto('/ru/configurator');
-  await page.evaluate((config) => {
-    localStorage.setItem(
-      'ms-shelving-configurator',
-      JSON.stringify({ state: { config, activeSectionId: config.sections[0].id }, version: 3 }),
-    );
-  }, configuration(deliveryId));
-  await page.reload();
   await expect(page.getByRole('button', { name: 'Добавить в корзину' })).toBeEnabled({ timeout: 15_000 });
 }
 
