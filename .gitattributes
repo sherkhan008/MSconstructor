@@ -4,3 +4,7 @@
 deploy/**     text eol=lf
 Dockerfile    text eol=lf
 *.yml         text eol=lf
+
+# RFC 4180 CRLF records: scripts/public-strings.ts and the localization tests
+# parse this file byte for byte, so every checkout gets the same CRLF bytes.
+docs/localization/public-strings.csv  text eol=crlf

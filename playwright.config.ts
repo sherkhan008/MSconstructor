@@ -34,12 +34,20 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // No retries anywhere: a test that only passes on a second attempt is a
+  // failure to investigate, not a pass.
+  retries: 0,
+  // Locally Playwright's default (half the logical CPUs). In CI a fixed 2 on
+  // GitHub's 4-vCPU ubuntu runner — the same one-worker-per-two-CPUs ratio,
+  // leaving the rest for the `next start` server, and fixed so the run does
+  // not depend on what the runner reports.
+  workers: process.env.CI ? 2 : undefined,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL,
-    trace: 'on-first-retry',
+    // With no retries, CI keeps the trace of every failed test for the
+    // uploaded report; locally traces stay opt-in (--retries=1).
+    trace: process.env.CI ? 'retain-on-failure' : 'on-first-retry',
     locale: 'ru-RU',
   },
   projects: [

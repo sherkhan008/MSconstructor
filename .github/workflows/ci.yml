@@ -1,0 +1,254 @@
+# ==============================================================================
+# MS Shelving — continuous integration (quality gate only: no deployment).
+#
+# The same bar as the /quality skill (lint → typecheck → test → build →
+# test:e2e), reproduced as plain commands — CI cannot run an interactive
+# skill — plus the real-PostgreSQL/Redis suites that are opt-in locally.
+# Job names are the check names to require in branch protection; see
+# docs/ci.md before renaming one.
+#
+# No secrets: there is no .env here, and every value below is a synthetic
+# credential for a disposable service container that exists only for the run.
+# ==============================================================================
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  # A pull request shares one group, so a newer push cancels its obsolete
+  # run. Every push to main gets a group of its own, so no main commit's
+  # validation is ever cancelled or replaced by a later one.
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: true
+
+env:
+  NEXT_TELEMETRY_DISABLED: '1'
+
+jobs:
+  static:
+    name: Static checks & unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history (the repository is small) so the whitespace check can
+          # diff against the pushed-over commit.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Whitespace errors in the changed range (git diff --check)
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT_NAME" = pull_request ]; then
+            # The checked-out merge commit's first parent is the target branch.
+            base=HEAD^1
+          elif git cat-file -e "${PUSH_BEFORE}^{commit}" 2>/dev/null; then
+            base=$PUSH_BEFORE
+          else
+            echo "::warning::Pushed-over commit '$PUSH_BEFORE' is not in history (new branch or force push); checking the last commit only."
+            base=HEAD^1
+          fi
+          git diff --check "$base" HEAD
+
+      - uses: ./.github/actions/setup-project
+
+      - name: Node.js matches the production image
+        run: |
+          image=$(sed -nE 's/^FROM node:([0-9]+)-alpine AS base$/\1/p' Dockerfile)
+          ci=$(node -p 'process.versions.node.split(".")[0]')
+          echo "Dockerfile node:$image, CI node $(node -v)"
+          [ -n "$image" ] && [ "$image" = "$ci" ] || { echo "::error::CI runs Node $ci but the Dockerfile base is node:${image:-?} — update .github/actions/setup-project."; exit 1; }
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # The whole Vitest suite without external infrastructure: the real
+      # PostgreSQL/Redis blocks skip here by design and run in the integration
+      # job. Includes the production config and infrastructure tests.
+      - name: Vitest
+        run: npm run test
+
+  integration:
+    name: Integration tests (PostgreSQL + Redis)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci-synthetic-password
+          POSTGRES_DB: ms_shelving_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ci -d ms_shelving_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      # 127.0.0.1, not localhost: no IPv6-first connection attempt.
+      DATABASE_URL: postgresql://ci:ci-synthetic-password@127.0.0.1:5432/ms_shelving_ci?schema=public
+      DIRECT_URL: postgresql://ci:ci-synthetic-password@127.0.0.1:5432/ms_shelving_ci?schema=public
+      RATE_LIMIT_TEST_REDIS_URL: redis://127.0.0.1:6379
+      ADMIN_EMAIL: ci-admin@example.com
+      ADMIN_INITIAL_PASSWORD: ci-synthetic-admin-password
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-project
+
+      # The production migration path (never migrate dev/reset), then the
+      # sample catalog the real-database suites price against.
+      - name: Apply migrations
+        run: npm run prisma:deploy
+
+      - name: Seed sample catalog
+        run: npm run prisma:seed
+
+      - name: Vitest — real PostgreSQL and Redis suites
+        run: |
+          # Every suite gated on a real-infrastructure switch (describe.skipIf
+          # on DATABASE_URL or RATE_LIMIT_TEST_REDIS_URL). Discovered rather
+          # than listed, so a new opt-in suite runs here automatically. Only
+          # these files: the rest of the suite is written for the in-memory
+          # catalog and runs in the static job.
+          mapfile -t suites < <(grep -rlE 'skipIf\(' tests/unit tests/integration \
+            | xargs -r grep -lE 'process\.env\.(DATABASE_URL|RATE_LIMIT_TEST_REDIS_URL)' | sort)
+          if [ "${#suites[@]}" -eq 0 ]; then
+            echo "::error::No real-infrastructure Vitest suites found."
+            exit 1
+          fi
+          printf 'Suite: %s\n' "${suites[@]}"
+          npx vitest run --reporter=default --reporter=json --outputFile.json=vitest-infra.json "${suites[@]}"
+          # The infrastructure is provisioned, so nothing may skip: a skip here
+          # would mean a suite silently lost its database or Redis.
+          node -e '
+            const r = require("./vitest-infra.json");
+            const skipped = r.numPendingTests + r.numTodoTests;
+            console.log(r.numPassedTests + " passed, " + r.numFailedTests + " failed, " + skipped + " skipped");
+            if (skipped > 0) {
+              console.error("::error::" + skipped + " real-infrastructure test(s) skipped although PostgreSQL and Redis are provisioned.");
+              process.exit(1);
+            }
+          '
+
+  build:
+    name: Production build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-project
+
+      # No database and no NEXT_PUBLIC_* values, exactly like the image build
+      # (Dockerfile): `next build` needs neither.
+      - name: Build
+        run: npm run build
+
+      - name: Working tree unchanged by install, generation and build
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git status --porcelain
+            git diff
+            echo "::error::npm ci, prisma generate or next build modified or created files that are not ignored."
+            exit 1
+          fi
+
+      # The E2E job serves exactly this build instead of building again.
+      # .next/cache is a build-time cache only, never served.
+      - name: Package build output
+        run: tar -cf next-build.tar --exclude=.next/cache .next
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: next-build
+          path: next-build.tar
+          retention-days: 1
+          if-no-files-found: error
+
+  e2e:
+    name: E2E (Playwright)
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci-synthetic-password
+          POSTGRES_DB: ms_shelving_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ci -d ms_shelving_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      # Seen by both the Playwright runner and the `next start` server it
+      # launches (playwright.config.ts), so the admin specs run instead of
+      # skipping. The server keeps its rate limiting in memory (no REDIS_URL),
+      # as in local E2E runs; Redis is covered by the integration job.
+      DATABASE_URL: postgresql://ci:ci-synthetic-password@127.0.0.1:5432/ms_shelving_ci?schema=public
+      DIRECT_URL: postgresql://ci:ci-synthetic-password@127.0.0.1:5432/ms_shelving_ci?schema=public
+      AUTH_SECRET: ci-only-synthetic-auth-secret-not-used-anywhere-else
+      ADMIN_EMAIL: ci-admin@example.com
+      ADMIN_INITIAL_PASSWORD: ci-synthetic-admin-password
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-project
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: next-build
+
+      - name: Unpack build output
+        run: tar -xf next-build.tar && rm next-build.tar
+
+      - name: Apply migrations
+        run: npm run prisma:deploy
+
+      - name: Seed sample catalog and admin
+        run: npm run prisma:seed
+
+      - name: Install Playwright Chromium
+        run: npm run test:e2e:install
+
+      # Starts its own `next start` (reuseExistingServer: false) on the build
+      # above; workers and retries for CI are set in playwright.config.ts.
+      - name: Playwright
+        run: npm run test:e2e
+
+      - name: Upload Playwright report and traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+          if-no-files-found: ignore

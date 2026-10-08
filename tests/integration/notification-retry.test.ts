@@ -335,7 +335,9 @@ describe('10. order creation is unaffected by WhatsApp failures and never waits 
     );
     expect(response.status).toBe(201);
     const store = await import('@/lib/notifications/store');
-    await vi.waitFor(() => expect(store.getMemoryDeliveries().find((d) => d.channel === 'whatsapp')).toBeDefined());
+    // The route dispatches in the background (outbox.dispatchInBackground), so
+    // the row exists as PENDING before its one attempt settles — wait for that.
+    await vi.waitFor(() => expect(store.getMemoryDeliveries().find((d) => d.channel === 'whatsapp')?.status ?? 'PENDING').not.toBe('PENDING'));
     // One send from the request; the request path never retries.
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const delivery = store.getMemoryDeliveries().find((d) => d.channel === 'whatsapp')!;

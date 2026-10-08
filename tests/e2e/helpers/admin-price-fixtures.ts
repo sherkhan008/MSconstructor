@@ -11,11 +11,15 @@ import { SESSION_COOKIE_NAME, createSessionToken } from '../../../src/lib/auth/s
  * Component/Accessory rows and deletes them (with their price history and
  * audit trail) when it finishes.
  *
- * Every fixture row is `active: false`, which keeps it out of the customer
- * catalog entirely — src/lib/data/db-repository.ts selects `where active:
- * true`, so a fixture can never reach pricing, BOM or the configurator, while
- * the admin price list (which reads the tables directly, by design) still
- * shows it.
+ * Every fixture row is `active: false`, so it is never sold, while the admin
+ * price list (which reads the tables directly, by design) still shows it.
+ * Inactive components still reach the customer catalog, though
+ * (src/lib/data/db-repository.ts loads them unfiltered): an inactive row
+ * scoped to a model shadows that model's generic rows and turns matching
+ * configurations into an individual quote (findComponent in
+ * src/lib/data/repository.ts). So every fixture component is generic
+ * (`models: []`) — an inactive generic row never shadows anything, and the
+ * storefront tests running in parallel keep pricing.
  *
  * Each Playwright project gets its own `prefix`, so desktop-chromium and
  * mobile-chromium can run in parallel without touching each other's rows.
@@ -116,7 +120,7 @@ export async function createPriceFixtures(
       width: 1000,
       depth: 400,
       shelfType: 'STANDARD',
-      models: ['ms-standard'],
+      models: [],
       colors: [],
       active: false,
     },

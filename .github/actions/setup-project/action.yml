@@ -1,0 +1,51 @@
+name: Set up project
+description: >-
+  Node.js 22 with the npm download cache, a clean `npm ci`, and the Prisma
+  client generated from prisma/schema.prisma. The one shared prerequisite of
+  every CI job — keep the Prisma generation here, not per job.
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v7
+      with:
+        # The production image's line (Dockerfile: node:22-alpine). The static
+        # job fails if the two ever diverge.
+        node-version: 22
+        # Caches npm's download cache (~/.npm) keyed on package-lock.json —
+        # never node_modules, build output or anything environment-specific.
+        cache: npm
+        cache-dependency-path: package-lock.json
+
+    - name: Install dependencies
+      shell: bash
+      run: npm ci --no-audit --no-fund
+
+    # Mandatory. @prisma/client's own postinstall generation is best-effort:
+    # depending on platform a clean `npm ci` leaves only a placeholder client,
+    # and typecheck, build and the tests all need the real one. The client is
+    # never committed.
+    - name: Generate Prisma client
+      shell: bash
+      run: npm run prisma:generate
+
+    - name: Verify the Prisma client matches prisma/schema.prisma
+      shell: bash
+      run: |
+        node -e '
+          const fs = require("node:fs");
+          const models = [...fs.readFileSync("prisma/schema.prisma", "utf8").matchAll(/^model\s+(\w+)\s*\{/gm)].map((m) => m[1]);
+          let generated = [];
+          try {
+            generated = Object.keys(require("@prisma/client").Prisma.ModelName ?? {});
+          } catch (error) {
+            console.error("@prisma/client failed to load: " + error.message);
+          }
+          const missing = models.filter((name) => !generated.includes(name));
+          if (models.length === 0 || missing.length > 0) {
+            console.error("::error::The Prisma client is a placeholder or stale (not generated: " + (missing.join(", ") || "no models parsed") + "). npm run prisma:generate must run after npm ci.");
+            process.exit(1);
+          }
+          console.log("Prisma client generated for all " + models.length + " schema models.");
+        '
