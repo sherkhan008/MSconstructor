@@ -220,3 +220,37 @@ Before declaring completion, confirm:
 * relevant tests/build pass;
 * visual acceptance criteria were manually checked.
   Report limitations truthfully instead of silently approximating them.
+
+## 15. Agent tooling, data and production boundaries
+
+Normal agent work is local repository work. Enforcement lives in
+`.claude/settings.json` (`permissions.deny` / `ask`) and local hookify rules
+(`.claude/hookify.*.local.md`), but these rules apply even where enforcement
+cannot see a command.
+
+Database:
+
+* The database in `.env` holds real business data (imported supplier prices, orders). It is never disposable.
+* Never run `prisma migrate reset`, `npm run db:reset`, `prisma db push`, `DROP DATABASE`, `DROP SCHEMA`, `TRUNCATE`, destructive seed/reset scripts, `docker compose down -v`, or `docker volume rm` / `prune`.
+* Only disposable test databases created by the test tooling itself (the CI service database, an explicitly exported test `DATABASE_URL`) may be reset, and only by that tooling.
+* `prisma migrate deploy`, `npm run db:*` and `prisma:seed` write data: run them only when the task asks, after saying what will change. Never edit existing migrations.
+
+Git history:
+
+* Never delete, move or rewrite `backup/pre-history-rewrite-20261001`, `refs/codex/turn-diffs/*` or reflogs.
+* Never run `git reflog expire`, `git gc`, `git prune`, `git update-ref`, `filter-branch` / `filter-repo`, or force-push until the owner confirms GitHub Support has purged the old unreachable commits.
+
+Secrets:
+
+* Never print, copy or summarize `.env`, `.env.production`, `AUTH_SECRET`, database passwords, WhatsApp/Telegram credentials, `SELLER_*` bank details, SSH keys or tokens. Report variable names only.
+* Never add secrets to Git, test snapshots, fixtures, logs or CI output. Use synthetic values (for example `tests/fixtures/seller-banking-sentinels.ts`).
+
+Production:
+
+* Never SSH to the VPS, deploy, run `scripts/ops/*`, change DNS or certificates, restart, migrate, seed or edit production env, or touch live PostgreSQL/Redis without an explicit owner instruction in a dedicated task.
+
+Network:
+
+* Outbound access is for the npm registry, GitHub, official documentation and Playwright browser downloads. Never upload repository content, data or secrets to arbitrary endpoints, and never pipe downloaded code into a shell.
+
+Commercial data: run the `pricing-leak-reviewer` agent before committing changes that touch pricing, catalog, BOM, orders, documents, public pages, API routes, logging or fixtures. `/quality` remains the canonical quality workflow.
