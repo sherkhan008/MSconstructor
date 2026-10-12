@@ -5,11 +5,11 @@ import { selectConfig, useConfiguratorStore } from '@/store/configurator-store';
 import { InstallDeliveryPanel } from './InstallDeliveryPanel';
 import type { PublicCatalog } from '@/lib/data/public-catalog';
 import type { ConfigurationAccessorySelection } from '@/lib/types/domain';
-import { METAL_FOOT_PAD_OPTION, SHELF_CORNER_BRACKETS_OPTION } from '@/lib/configurator/additional-options';
 import { t } from '@/lib/i18n/format';
 import { CF } from '@/lib/i18n/strings';
 import { useLocale } from '@/components/i18n/LocaleProvider';
 import { getTotalSectionShelves } from '@/lib/configurator/section-dimensions';
+import { PUBLIC_ACCESSORY_IDS } from '@/lib/config/launch-visibility';
 
 /**
  * Accessory ids the *customer* configurator may select — a small curated
@@ -20,7 +20,7 @@ import { getTotalSectionShelves } from '@/lib/configurator/section-dimensions';
  * share link carries, without wiping this list too (see that effect's
  * comment).
  */
-export const CUSTOMER_ACCESSORY_IDS = ['acc-adjustable-feet', 'acc-shelf-reinforcement', 'acc-cross-brace'] as const;
+export const CUSTOMER_ACCESSORY_IDS = PUBLIC_ACCESSORY_IDS;
 
 /** The cross brace is a per-section accessory (its selection carries the
  * section's id), offered only for a 1000 mm section. */
@@ -55,7 +55,6 @@ export function AdvancedSettingsAccordion({ catalog }: { catalog: PublicCatalog 
   const [open, setOpen] = useState(false);
   const locale = useLocale();
   const config = useConfiguratorStore(selectConfig);
-  const setField = useConfiguratorStore((s) => s.setField);
   const setMany = useConfiguratorStore((s) => s.setMany);
   const setAccessoryQuantity = useConfiguratorStore((s) => s.setAccessoryQuantity);
   const model = catalog.models.find((m) => m.slug === config.modelSlug);
@@ -82,12 +81,6 @@ export function AdvancedSettingsAccordion({ catalog }: { catalog: PublicCatalog 
     // Both represent a foot upgrade at the same physical spot on the rack —
     // treated as mutually exclusive as a safe default. The catalog has no
     // explicit rule confirming this; see the task report.
-    if (checked && config.metalFootPad) setField('metalFootPad', false);
-  }
-
-  function toggleMetalFootPad(checked: boolean) {
-    setField('metalFootPad', checked);
-    if (checked && adjustableFeetSelected) setAccessoryQuantity('acc-adjustable-feet', 0);
   }
 
   function toggleShelfReinforcement(checked: boolean) {
@@ -121,12 +114,6 @@ export function AdvancedSettingsAccordion({ catalog }: { catalog: PublicCatalog 
               note={t(CF['CF-044'], locale)}
               checked={adjustableFeetSelected}
               onChange={toggleAdjustableFeet}
-            />
-            <OptionCheckbox label={t(METAL_FOOT_PAD_OPTION, locale)} checked={!!config.metalFootPad} onChange={toggleMetalFootPad} />
-            <OptionCheckbox
-              label={t(SHELF_CORNER_BRACKETS_OPTION, locale)}
-              checked={!!config.shelfCornerBrackets}
-              onChange={(checked) => setField('shelfCornerBrackets', checked)}
             />
             <OptionCheckbox
               label={t(CF['CF-047'], locale)}

@@ -5,11 +5,9 @@ import { storedActiveConfiguration } from './helpers/sections';
  * End-to-end coverage for two follow-up configurator changes:
  *  - the customer-facing shelf-type selector was removed (MS Standard now
  *    only offers STANDARD, so there is nothing left to choose);
- *  - five new "Дополнительные параметры" rack options were added, backed by
- *    real configuration state (not fake, click-only checkboxes) — three of
- *    them via the existing accessory mechanism with real catalog pricing,
- *    two as plain config flags with no priced backing yet (see
- *    AdvancedSettingsAccordion.tsx's doc comment for exactly why).
+ *  - only commercially priced public accessories appear in
+ *    "Дополнительные параметры"; unpriced flags must stay unavailable to
+ *    customer configuration.
  */
 
 async function openAdvancedSettings(page: import('@playwright/test').Page) {
@@ -27,17 +25,16 @@ test('the customer configurator has no shelf-type selector', async ({ page }) =>
   expect(bodyText).not.toContain('Оцинкованная');
 });
 
-test('the five additional rack options are visible, real, and survive a reload', async ({ page }) => {
+test('only priced public rack options are visible, real, and survive a reload', async ({ page }) => {
   await page.goto('/ru/configurator');
   await openAdvancedSettings(page);
 
   await expect(page.getByText('Регулируемая по высоте опора')).toBeVisible();
-  await expect(page.getByText('+ металлический подпятник')).toBeVisible();
-  await expect(page.getByText('Металлический подпятник', { exact: true })).toBeVisible();
-  await expect(page.getByText('Уголки жесткости на полки')).toBeVisible();
   await expect(page.getByText('Ребро жесткости в каждую полку')).toBeVisible();
   await expect(page.getByText('Крестовина жесткости')).toBeVisible();
   await expect(page.getByText('Только для секции шириной 1000 мм')).toBeVisible();
+  await expect(page.getByText('Металлический подпятник', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Уголки жесткости на полки')).toHaveCount(0);
 
   const priceLocator = page.locator('text=/[\\d\\s]+\\s?₸/').first();
   const priceBefore = await priceLocator.textContent();
@@ -48,20 +45,10 @@ test('the five additional rack options are visible, real, and survive a reload',
   await expect.poll(() => priceLocator.textContent(), { timeout: 10_000 }).not.toBe(priceBefore);
   await expect(ribCheckbox).toBeChecked();
 
-  // Check the unbacked "metal foot pad" flag — real state, but must not
-  // silently fabricate a price (no BOM rule references it).
-  const metalPadCheckbox = page.getByRole('checkbox', { name: 'Металлический подпятник', exact: true });
-  const priceAfterRib = await priceLocator.textContent();
-  await metalPadCheckbox.check();
-  await page.waitForTimeout(600);
-  expect(await priceLocator.textContent()).toBe(priceAfterRib);
-
   await page.reload();
   await openAdvancedSettings(page);
   const ribAfterReload = page.getByRole('checkbox', { name: 'Ребро жесткости в каждую полку', exact: true });
-  const metalPadAfterReload = page.getByRole('checkbox', { name: 'Металлический подпятник', exact: true });
   await expect(ribAfterReload).toBeChecked();
-  await expect(metalPadAfterReload).toBeChecked();
 });
 
 test('cross brace is only selectable for a 1000mm section, and enforced server-side too', async ({ page }) => {

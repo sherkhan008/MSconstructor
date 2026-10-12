@@ -23,6 +23,7 @@ const PRODUCTION_BASE: ProductionConfigInput = {
   DATABASE_URL: 'postgresql://ms_shelving:0123456789abcdef@postgres:5432/ms_shelving?schema=public',
   AUTH_SECRET: 'test-only-auth-secret-not-a-real-credential-0001',
   APP_URL: 'https://ms-stellazh.kz',
+  CATALOG_PRICING_APPROVAL: 'price-list-2026-10-12',
   TRUSTED_PROXY_CLIENT_IP_HEADER: 'x-real-ip',
   REDIS_URL: 'redis://:0123456789abcdef@redis:6379/0',
   NEXT_PUBLIC_WHATSAPP_NUMBER: '77071234567',

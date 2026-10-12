@@ -138,10 +138,11 @@ async function setup(opts: SetupOptions = {}) {
   // Seller details are per-test input, never ambient: a developer machine
   // with real SELLER_* values in .env must not change what these tests see.
   // Clear every one, then set only what the test asked for, and verify it.
+  const sellerEnv: Record<string, string> = opts.sellerEnv ?? SELLER_ENV;
   for (const name of SELLER_NAMES) vi.stubEnv(name, undefined);
-  for (const [key, value] of Object.entries(opts.sellerEnv ?? {})) vi.stubEnv(key, value);
+  for (const [key, value] of Object.entries(sellerEnv)) vi.stubEnv(key, value);
   for (const name of SELLER_NAMES) {
-    expect(process.env[name], `${name} must come only from the test's sellerEnv`).toBe(opts.sellerEnv?.[name]);
+    expect(process.env[name], `${name} must come only from the test's sellerEnv`).toBe(sellerEnv[name]);
   }
 
   let token: string | undefined;
@@ -348,7 +349,7 @@ describe('GET before issuance', () => {
 
 describe('seller configuration at first issuance', () => {
   it('POST /issue refuses an invoice with 422 and names every missing variable — no fake bank details, no row', async () => {
-    const { issue, table } = await setup();
+    const { issue, table } = await setup({ sellerEnv: {} });
     const response = await issue('order-doc-1', 'invoice');
     expect(response.status).toBe(422);
     const details = ((await response.json()).details as string[]).join('\n');
@@ -358,12 +359,21 @@ describe('seller configuration at first issuance', () => {
     expect(table.rows).toHaveLength(0);
   });
 
-  it('issues a commercial proposal without seller legal details and prints no placeholder BIN', async () => {
+  it('issues a commercial proposal once the seller identity is configured', async () => {
     const { bytes } = await setup();
     const { flat } = await readPdfText(new Uint8Array(await bytes('order-doc-1', 'commercial-proposal')));
     expect(flat).toContain('MS Стеллажи');
     expect(flat).not.toContain('000000000000');
     expect(flat).not.toContain('MS Стеллаж Казахстан');
+  });
+
+  it('refuses a commercial proposal with no seller identity', async () => {
+    const { issue, table } = await setup({ sellerEnv: {} });
+    const response = await issue('order-doc-1', 'commercial-proposal');
+    expect(response.status).toBe(422);
+    const details = ((await response.json()).details as string[]).join('\n');
+    for (const name of ['SELLER_LEGAL_NAME', 'SELLER_BIN', 'SELLER_ADDRESS']) expect(details).toContain(name);
+    expect(table.rows).toHaveLength(0);
   });
 
   it('issues the invoice once the seller is configured', async () => {

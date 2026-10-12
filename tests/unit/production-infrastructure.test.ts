@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readdirSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -158,7 +158,14 @@ describe('docker-compose.yml (production)', () => {
 describe('TLS-ready proxy (deploy/nginx + docker-compose.yml)', () => {
   const proxy = composeServices(read('docker-compose.yml')).get('proxy') ?? '';
   const nginxDir = 'deploy/nginx';
-  const nginxFiles = readdirSync(path.join(root, nginxDir)).sort();
+  // Only inspect files that are actually committed. A developer may have an
+  // ignored local nginx scratch directory, which must neither be shipped nor
+  // make this tracked-file contract fail with EISDIR.
+  const nginxFiles = execFileSync('git', ['ls-files', nginxDir], { cwd: root, encoding: 'utf8' })
+    .split('\n')
+    .filter(Boolean)
+    .map((file) => path.basename(file))
+    .sort();
   const appProxy = withoutComments(read(`${nginxDir}/app-proxy.conf`));
   const common = withoutComments(read(`${nginxDir}/common.conf`));
   const httpServers = nginxServers(read(`${nginxDir}/http.conf`));
@@ -406,7 +413,19 @@ describe('secret files stay out of images and git', () => {
 });
 
 describe('operations scripts', () => {
-  const scripts = ['common.sh', 'deploy.sh', 'backup-postgres.sh', 'restore-postgres.sh', 'rollback-app.sh', 'smoke-test.sh', 'proxy.sh']
+  const scripts = [
+    'common.sh',
+    'deploy.sh',
+    'backup-postgres.sh',
+    'backup-postgres-offsite.sh',
+    'check-offsite-backup-age.sh',
+    'restore-postgres.sh',
+    'restore-postgres-from-restic.sh',
+    'backup-alert.sh',
+    'rollback-app.sh',
+    'smoke-test.sh',
+    'proxy.sh',
+  ]
     .map((name) => [name, read(`scripts/ops/${name}`)] as const)
     .concat(['entrypoint.sh', 'readiness.sh'].map((name) => [name, read(`deploy/nginx/${name}`)] as const));
 

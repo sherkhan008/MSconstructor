@@ -108,6 +108,13 @@ models' markups are untouched.
 # 2. review — zero database writes
 npm run db:import-supplier-prices
 
+Purchase costs are redacted from console output by default. An approved
+operator may reveal them only for a private local review with:
+
+```bash
+npm run db:import-supplier-prices -- --show-purchase-prices
+```
+
 # 3. apply, in one transaction
 npm run db:import-supplier-prices -- --apply
 ```

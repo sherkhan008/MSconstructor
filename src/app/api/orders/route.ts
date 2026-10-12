@@ -69,12 +69,12 @@ export async function POST(request: NextRequest) {
 
     for (const rawItem of input.items) {
       const submitted = withoutClientPriceLevel(rawItem.configuration);
-      const result = calculatePrice(submitted, catalog, { now });
+      const result = calculatePrice(submitted, catalog, { now, publicLaunch: true });
       if (!result.ok) {
         // The same calculation in the customer's language — a pure,
         // deterministic function, so it fails identically; only its
         // message texts differ.
-        const localized = locale === 'ru' ? result : calculatePrice(submitted, catalog, { locale, now });
+        const localized = locale === 'ru' ? result : calculatePrice(submitted, catalog, { locale, now, publicLaunch: true });
         const failure = localized.ok ? result : localized;
         // Through the public projection, never straight off the engine
         // result: a PriceFailure can carry server-only diagnostics

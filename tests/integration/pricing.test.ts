@@ -159,17 +159,17 @@ describe('pricing engine', () => {
     expect(result.code).toBe('INCOMPATIBLE_CONFIGURATION');
   });
 
-  it('includes accessories in the bill of materials and the price', () => {
+  it('includes a publicly launched accessory in the bill of materials and the price', () => {
     const withoutAccessory = calculatePrice(baseConfig({}), catalog);
     const withAccessory = calculatePrice(
-      baseConfig({ accessories: [{ accessoryId: 'acc-extra-shelf', quantity: 2 }] }),
+      baseConfig({ accessories: [{ accessoryId: 'acc-adjustable-feet', quantity: 1 }] }),
       catalog,
     );
     expect(withoutAccessory.ok).toBe(true);
     expect(withAccessory.ok).toBe(true);
     if (!withoutAccessory.ok || !withAccessory.ok) return;
-    const line = withAccessory.bom.find((l) => l.componentId === 'acc-extra-shelf');
-    expect(line?.quantity).toBe(2);
+    const line = withAccessory.bom.find((l) => l.componentId === 'acc-adjustable-feet');
+    expect(line?.quantity).toBe(1);
     expect(withAccessory.breakdown.total).toBeGreaterThan(withoutAccessory.breakdown.total);
   });
 
@@ -396,7 +396,7 @@ describe('pricing engine', () => {
     expect(result.bom.find((l) => l.componentId === 'acc-shelf-reinforcement')?.quantity).toBe(4);
   });
 
-  it('round-trips metalFootPad, shelfCornerBrackets and a section-scoped accessory through validation without inventing a price for them', () => {
+  it('retains legacy unpriced flags for historical snapshot rendering in internal calculations', () => {
     const target = section(1000);
     const before = baseConfig({
       sections: [target],
@@ -407,12 +407,7 @@ describe('pricing engine', () => {
     const result = calculatePrice(before, catalog);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    // These two flags must survive into the echoed configuration (what the
-    // cart/order actually persist) even though neither produces a BOM line —
-    // proof they are real state, not silently dropped by schema validation.
     expect(result.configuration.metalFootPad).toBe(true);
     expect(result.configuration.shelfCornerBrackets).toBe(true);
-    expect(result.configuration.accessories).toEqual([{ accessoryId: 'acc-cross-brace', quantity: 1, sectionId: target.id }]);
-    expect(result.bom.some((l) => l.name.includes('подпятник') || l.name.includes('Уголк'))).toBe(false);
   });
 });

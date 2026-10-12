@@ -47,6 +47,8 @@ import {
  *   --apply              actually write (otherwise dry run)
  *   --uplift-percent <n> expected selling uplift over the supplier price (default 15)
  *   --no-uplift-check    accept selling prices that do not match that uplift
+ *   --show-purchase-prices  print sensitive purchase figures for an approved
+ *                           operator review (redacted by default)
  *
  * Safety properties, all deliberate:
  *   - DRY RUN BY DEFAULT. `--apply` is the only thing that opens a write.
@@ -186,7 +188,7 @@ const pad = (value: string, width: number) => (value.length >= width ? value : v
 const padLeft = (value: string, width: number) =>
   value.length >= width ? value : ' '.repeat(width - value.length) + value;
 
-function printReviewTable(plans: RowPlan[]): void {
+function printReviewTable(plans: RowPlan[], showPurchasePrices: boolean): void {
   const header = [
     pad('IDENTITY', 20),
     pad('DIMENSIONS', 11),
@@ -214,8 +216,8 @@ function printReviewTable(plans: RowPlan[]): void {
         pad(sku, 18),
         pad(plan.action === 'CREATE' ? plan.template.sku : '—', 9),
         pad(source ? (source.inStock ? 'yes' : 'no') : '—', 6),
-        padLeft(existing ? formatPriceDecimal(existing.purchasePrice) : '—', 11),
-        padLeft(formatPriceDecimal(row.purchasePrice), 11),
+        padLeft(showPurchasePrices && existing ? formatPriceDecimal(existing.purchasePrice) : '[private]', 11),
+        padLeft(showPurchasePrices ? formatPriceDecimal(row.purchasePrice) : '[private]', 11),
         padLeft(existing ? formatPriceDecimal(existing.sellingPrice) : '—', 11),
         padLeft(formatPriceDecimal(row.sellingPrice), 11),
         plan.action === 'BLOCKED' ? `BLOCKED: ${plan.reason}` : plan.action,
@@ -461,14 +463,16 @@ interface Options {
   apply: boolean;
   upliftPercent: number;
   checkUplift: boolean;
+  showPurchasePrices: boolean;
 }
 
 function parseArgs(argv: string[]): Options {
-  const options: Options = { file: DEFAULT_FILE, apply: false, upliftPercent: 15, checkUplift: true };
+  const options: Options = { file: DEFAULT_FILE, apply: false, upliftPercent: 15, checkUplift: true, showPurchasePrices: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--apply') options.apply = true;
     else if (arg === '--no-uplift-check') options.checkUplift = false;
+    else if (arg === '--show-purchase-prices') options.showPurchasePrices = true;
     else if (arg === '--file') options.file = argv[++i] ?? '';
     else if (arg === '--uplift-percent') options.upliftPercent = Number(argv[++i]);
     else throw new Error(`Unknown option ${JSON.stringify(arg)}`);
@@ -509,7 +513,7 @@ async function main() {
 
   console.log(`Model: ${profile.slug} (${profile.label})`);
   console.log(`Rows in file: ${rows.length}; required by the ${profile.slug} matrix: ${expected}\n`);
-  printReviewTable(plans);
+  printReviewTable(plans, options.showPurchasePrices);
   printRestoreTable(restorations);
 
   const ready = plans.filter((p) => p.plan.action !== 'BLOCKED');

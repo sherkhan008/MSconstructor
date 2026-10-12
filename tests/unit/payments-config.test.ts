@@ -108,6 +108,7 @@ describe('production preflight — payments', () => {
     DATABASE_URL: 'postgresql://u:p@db:5432/app',
     AUTH_SECRET: 'a'.repeat(48),
     APP_URL: 'https://shelving.example',
+    CATALOG_PRICING_APPROVAL: 'price-list-2026-10-12',
     TRUSTED_PROXY_CLIENT_IP_HEADER: 'x-real-ip',
     NEXT_PUBLIC_WHATSAPP_NUMBER: '77071234567',
   };

@@ -5,8 +5,10 @@ history, customers, orders, order snapshots, issued documents, admin users,
 audit log. Redis holds only rate-limit counters and is not backed up
 ([production-deployment.md](production-deployment.md), §7).
 
-Scripts: `scripts/ops/backup-postgres.sh`, `scripts/ops/restore-postgres.sh`.
-Schedule: `deploy/systemd/ms-shelving-backup.{service,timer}`.
+Scripts: `scripts/ops/backup-postgres.sh`, `scripts/ops/backup-postgres-offsite.sh`,
+`scripts/ops/restore-postgres.sh`, `scripts/ops/restore-postgres-from-restic.sh`.
+Schedule: `deploy/systemd/ms-shelving-backup.{service,timer}` plus the off-host
+freshness and integrity-check timers below.
 
 ## Backups
 
@@ -77,6 +79,72 @@ choice). Encrypt copies that leave the host: dumps contain customer contact
 data and admin password hashes. This repository deliberately does not pick a
 storage vendor.
 
+## Encrypted off-host copies (restic, required before launch)
+
+`backup-postgres-offsite.sh` wraps the existing local backup rather than
+replacing it. After its `pg_restore` read-back and SHA-256 sidecar succeed, it
+uploads exactly the newest `.dump` and `.dump.sha256` to an encrypted restic
+repository. It then runs `restic check --read-data-subset=5%`, confirms a
+remote snapshot, records `BACKUP_DIR/OFFSITE_VERIFIED`, and only then applies
+the explicit remote retention policy: 30 daily and 12 monthly snapshots.
+
+No bucket, endpoint, credential, password, or alert recipient is committed.
+Use any S3-compatible provider chosen by the owner. Install restic from the
+host OS package source, initialise the empty remote repository once with the
+protected runtime environment below, and retain the recovery password outside
+the server.
+
+`/etc/ms-shelving/restic.env` must be root-owned (`0600`) and is loaded only
+by systemd. It contains runtime credentials and paths, never repository source:
+
+```sh
+# root-owned protected file; values are examples, not repository defaults
+RESTIC_REPOSITORY="s3:https://<s3-endpoint>/<bucket>/ms-shelving"
+RESTIC_PASSWORD_FILE="/etc/ms-shelving/restic-password"
+RESTIC_RETENTION_POLICY="30-daily-12-monthly"
+AWS_ACCESS_KEY_ID="..."
+AWS_SECRET_ACCESS_KEY="..."
+```
+
+The password file is likewise root-owned `0600`, contains only the restic
+repository password, and is never echoed. Do not put credentials in
+`.env.production`, a shell command, a URL, or `RESTIC_REPOSITORY`; the wrapper
+rejects embedded URL credentials. Before enabling the timer, initialise and
+test the repository using that protected environment, then run one manual
+backup through systemd and inspect its journal (never with `bash -x`).
+
+Install the units:
+
+```sh
+sudo cp deploy/systemd/ms-shelving-backup.service deploy/systemd/ms-shelving-backup.timer /etc/systemd/system/
+sudo cp deploy/systemd/ms-shelving-backup-alert@.service /etc/systemd/system/
+sudo cp deploy/systemd/ms-shelving-offsite-backup-{age,check}.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ms-shelving-backup.timer ms-shelving-offsite-backup-age.timer ms-shelving-offsite-backup-check.timer
+sudo systemctl start ms-shelving-backup.service
+```
+
+The existing daily `ms-shelving-backup` timer now invokes the wrapper. The
+hourly age job fails if `OFFSITE_VERIFIED` is older than 26 hours, independently
+of the backup job. The monthly `--check` job runs a full `restic check`; either
+failure triggers `ms-shelving-backup-alert@.service`.
+
+For external notification, set `BACKUP_ALERT_COMMAND` in the separately
+protected `/etc/ms-shelving/backup-alert.env` to an absolute executable path.
+That local wrapper receives only the failed unit name and may implement the
+owner's webhook, email, or monitoring integration without exposing its secret
+in this repository. If it is unset, the failure remains visible in systemd and
+the journal, and the unit logs that external alerting is not configured.
+
+Operational checks:
+
+```sh
+systemctl list-timers 'ms-shelving*backup*'
+systemctl status ms-shelving-backup.service ms-shelving-offsite-backup-age.service
+journalctl -u ms-shelving-backup.service -u ms-shelving-offsite-backup-check.service -n 100
+sudo systemctl start ms-shelving-offsite-backup-check.service
+```
+
 ## Restore
 
 A backup counts only once a restore has been tested. Repeat the test after
@@ -97,6 +165,25 @@ you can drop.
 
 For a restore **test**, inspect it and drop it afterwards:
 `docker compose --env-file .env.production exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d postgres -c "DROP DATABASE ms_shelving_restored"'`.
+
+### Restore rehearsal from a selected restic snapshot
+
+Run this only against a disposable Compose project/database. It never accepts
+the live database name and never promotes data:
+
+```sh
+sudo systemctl --wait start ms-shelving-offsite-backup-check.service
+sudo -E ENV_FILE=/opt/ms-shelving/.env.restore-test COMPOSE_PROJECT_NAME=ms-shelving-restore-test \
+  bash /opt/ms-shelving/scripts/ops/restore-postgres-from-restic.sh <snapshot-id> ms_shelving_YYYYMMDDTHHMMSSZ.dump ms_shelving_restored
+```
+
+The wrapper first performs a full restic integrity check, restores only the
+selected dump and its `.sha256` sidecar into a new private temporary directory,
+and delegates to `restore-postgres.sh`. That script verifies SHA-256, restores
+in one transaction into a new database, and checks Prisma migration integrity.
+Start a disposable app stack pointed at that new database only after this
+passes; verify login, orders, document rendering, and a new order there. Do
+not point the production app at the restored database during a rehearsal.
 
 ### 2. Promote (disaster recovery only — deliberate, manual)
 

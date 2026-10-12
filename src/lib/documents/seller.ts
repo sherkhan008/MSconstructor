@@ -97,7 +97,7 @@ const SELLER_FIELDS: readonly SellerFieldSpec[] = [
  * non-binding offer, so it prints whatever seller details exist; an invoice
  * is a payment document and needs the full beneficiary block. */
 const REQUIRED_FIELDS: Record<OrderDocumentKind, readonly SellerKey[]> = {
-  'commercial-proposal': [],
+  'commercial-proposal': ['legalName', 'bin', 'address'],
   invoice: ['legalName', 'bin', 'address', 'bankName', 'iban', 'bic', 'kbe'],
 };
 

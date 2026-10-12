@@ -1,0 +1,9 @@
+[Unit]
+Description=MS Shelving monthly full off-host repository integrity check
+OnFailure=ms-shelving-backup-alert@%n.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/ms-shelving/restic.env
+WorkingDirectory=/opt/ms-shelving
+ExecStart=/bin/bash /opt/ms-shelving/scripts/ops/backup-postgres-offsite.sh --check

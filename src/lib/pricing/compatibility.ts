@@ -5,6 +5,7 @@ import { isValidMsStandardConfiguration } from './ms-standard-compatibility';
 import type { Locale } from '@/lib/i18n/locales';
 import { pick, t } from '@/lib/i18n/format';
 import { ER } from '@/lib/i18n/strings';
+import { isAccessoryIdPubliclyVisible, isModelSlugPubliclyVisible } from '@/lib/config/launch-visibility';
 
 /**
  * Server-side compatibility validation. The configurator UI disables
@@ -19,11 +20,12 @@ export function validateCompatibility(
   config: ShelvingConfiguration,
   catalog: Catalog,
   locale: Locale = 'ru',
+  publicLaunch = false,
 ): CompatibilityIssue[] {
   const issues: CompatibilityIssue[] = [];
 
   const model = findModel(catalog, config.modelSlug);
-  if (!model) {
+  if (!model || (publicLaunch && !isModelSlugPubliclyVisible(config.modelSlug))) {
     issues.push({ field: 'modelSlug', message: t(ER['ER-035'], locale) });
     return issues;
   }
@@ -130,6 +132,10 @@ export function validateCompatibility(
   }
 
   for (const selection of config.accessories) {
+    if (publicLaunch && !isAccessoryIdPubliclyVisible(selection.accessoryId)) {
+      issues.push({ field: 'accessories', message: t(ER['ER-050'], locale) });
+      continue;
+    }
     const accessory = findAccessory(catalog, selection.accessoryId);
     if (!accessory) {
       issues.push({ field: 'accessories', message: t(ER['ER-050'], locale) });
@@ -164,6 +170,13 @@ export function validateCompatibility(
         });
       }
     }
+  }
+
+  // Legacy flags remain in the schema to render historic order snapshots,
+  // but have no catalog component, BOM entry, or price. Reject them rather
+  // than turning a crafted public request into a free item.
+  if (publicLaunch && (config.metalFootPad || config.shelfCornerBrackets)) {
+    issues.push({ field: 'accessories', message: t(ER['ER-050'], locale) });
   }
 
   return issues;

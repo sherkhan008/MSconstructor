@@ -32,6 +32,9 @@ export interface PricingContext {
    * one instant so every item sees the same answer.
    */
   now?: Date;
+  /** Public routes opt in to the temporary launch allowlist. Internal/admin
+   * catalog work may still price hidden models for operational workflows. */
+  publicLaunch?: boolean;
 }
 
 /**
@@ -64,7 +67,7 @@ export function calculatePrice(rawConfig: unknown, catalog: Catalog, context: Pr
     return { ok: false, code: 'UNKNOWN_MODEL', message: t(ER['ER-020'], locale) };
   }
 
-  const issues = validateCompatibility(config, catalog, locale);
+  const issues = validateCompatibility(config, catalog, locale, context.publicLaunch === true);
   if (issues.length > 0) {
     return {
       ok: false,

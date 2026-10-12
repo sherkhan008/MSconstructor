@@ -20,6 +20,10 @@ const serverSchema = z.object({
   AUTH_SECRET: optionalString,
   AUTH_URL: optionalString,
   APP_URL: optionalString,
+  // A non-secret approval reference set only after the actual launch catalog
+  // has been reviewed. Production preflight rejects an absent or placeholder
+  // value; development and test remain deliberately friction-free.
+  CATALOG_PRICING_APPROVAL: optionalString,
 
   ADMIN_EMAIL: optionalString,
   ADMIN_INITIAL_PASSWORD: optionalString,

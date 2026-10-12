@@ -15,8 +15,21 @@
  */
 export const PUBLIC_MODEL_SLUGS: readonly string[] = ['ms-standard'];
 
+/** Customer-selectable accessories at this launch. This is deliberately
+ * narrower than the active catalog: the remainder stays available to admin
+ * workflows until it has an approved public launch decision. */
+export const PUBLIC_ACCESSORY_IDS: readonly string[] = [
+  'acc-adjustable-feet',
+  'acc-shelf-reinforcement',
+  'acc-cross-brace',
+];
+
 export function isModelSlugPubliclyVisible(slug: string): boolean {
   return PUBLIC_MODEL_SLUGS.includes(slug);
+}
+
+export function isAccessoryIdPubliclyVisible(accessoryId: string): boolean {
+  return PUBLIC_ACCESSORY_IDS.includes(accessoryId);
 }
 
 export function filterPubliclyVisibleModels<T extends { slug: string }>(models: readonly T[]): T[] {

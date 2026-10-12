@@ -246,7 +246,9 @@ describe('POST /api/orders writes both snapshots', () => {
     companyName: 'ТОО «Первое»',
     binIin: '123456789012',
     paymentPreference: 'BANK_INVOICE',
-    items: [{ configuration: shelving() }],
+    // Public checkout rejects legacy unpriced flags and non-launch accessories;
+    // historic snapshot tests above still exercise their rendering separately.
+    items: [{ configuration: shelving({ accessories: [], metalFootPad: false }) }],
     ...overrides,
   });
 

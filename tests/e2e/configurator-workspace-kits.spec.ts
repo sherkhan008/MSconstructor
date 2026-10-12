@@ -92,7 +92,7 @@ function kit(overrides: Partial<ShelvingConfiguration>): ShelvingConfiguration {
 const LINKED_KITS = [
   kit({ sections: [section(1000, 1500, 4, { rearWall: true }), section(1200, 2500, 8)], quantity: 2 }),
   kit({ sections: [section(700, 1000, 2), section(1000, 2000, 5, { leftWall: true }), section(1000, 3000, 6)], accessories: [] }),
-  kit({ sections: [section(1000, 2000, 5)], metalFootPad: true }),
+  kit({ sections: [section(1000, 2000, 5)] }),
 ];
 
 test('kits are independent: switch, per-kit controls and preview, each kit remembers its active section', async ({ page }) => {

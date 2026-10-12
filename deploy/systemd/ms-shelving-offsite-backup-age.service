@@ -1,0 +1,8 @@
+[Unit]
+Description=MS Shelving verified off-host backup age check
+OnFailure=ms-shelving-backup-alert@%n.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/ms-shelving
+ExecStart=/bin/bash /opt/ms-shelving/scripts/ops/check-offsite-backup-age.sh

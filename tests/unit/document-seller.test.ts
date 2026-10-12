@@ -32,9 +32,13 @@ describe('seller configuration', () => {
     expect(config.invalid).toEqual([]);
   });
 
-  it('a commercial proposal needs no seller legal details; an invoice needs the full beneficiary block', () => {
+  it('a commercial proposal needs a seller identity; an invoice needs the full beneficiary block', () => {
     const config = readSellerConfig({});
-    expect(sellerConfigIssues('commercial-proposal', config)).toEqual([]);
+    expect(sellerConfigIssues('commercial-proposal', config).map((issue) => issue.envName)).toEqual([
+      'SELLER_LEGAL_NAME',
+      'SELLER_BIN',
+      'SELLER_ADDRESS',
+    ]);
     const missing = sellerConfigIssues('invoice', config).map((issue) => issue.envName);
     expect(missing).toEqual([
       'SELLER_LEGAL_NAME',
@@ -128,6 +132,8 @@ describe('seller snapshot (frozen at first issuance)', () => {
     const withoutIban = { ...good, details: { ...good.details, iban: undefined } };
     expect(parseSellerSnapshot(withoutIban, 'invoice')).toBeNull();
     expect(parseSellerSnapshot(withoutIban, 'commercial-proposal')).not.toBeNull();
+    const withoutSellerIdentity = { ...good, details: { ...good.details, bin: undefined } };
+    expect(parseSellerSnapshot(withoutSellerIdentity, 'commercial-proposal')).toBeNull();
     expect(parseSellerSnapshot(null, 'commercial-proposal')).toBeNull();
     expect(parseSellerSnapshot({ version: 1, brandName: '', details: {} }, 'commercial-proposal')).toBeNull();
     // Unknown keys never reach a document.

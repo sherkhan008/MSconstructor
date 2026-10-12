@@ -66,6 +66,7 @@ as required secret / required / optional.
 | `PUBLIC_HTTP_BIND`, `PUBLIC_HTTPS_BIND` | optional | defaults `80`, `443`; `127.0.0.1:8080` for HTTP behind a host-level TLS terminator |
 | `LETSENCRYPT_DIR`, `ACME_WEBROOT` | optional | host paths mounted read-only into the proxy; defaults `/etc/letsencrypt`, `/var/www/certbot` |
 | `SELLER_*` | optional (required before invoices) | confidential banking details |
+| `CATALOG_PRICING_APPROVAL` | required before app startup | non-secret approved private price-list/version reference; set only after import and admin review, never a placeholder |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | optional (token is a secret) | secondary manager channel, sent in parallel with WhatsApp (not conditional on it): order events `order.created`, `order.status_changed`, `order.paid` with redacted text (no customer data), and `contact.created` (new contact-form lead: name, phone, message). Unset = skipped + warn log; orders, payments and leads are never affected. Attempts are stored in `NotificationDelivery`; transient failures are retried automatically by `notifications-worker` (§10a) |
 | `SMTP_*`, `MANAGER_EMAIL`, `EMAIL_FROM` | optional (password is a secret) | email channel has no transport yet: reported as unavailable, never as sent |
 | `WHATSAPP_NOTIFICATIONS_ENABLED`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ADMIN_RECIPIENT`, `WHATSAPP_TEMPLATE_NAME`, `WHATSAPP_CONTACT_TEMPLATE_NAME`, `WHATSAPP_TEMPLATE_LANGUAGE`, `WHATSAPP_GRAPH_API_VERSION` | optional, off by default (token is a secret) | internal manager alerts via the official Cloud API, sent FROM the technical Cloud API number (`WHATSAPP_PHONE_NUMBER_ID`, never shown to customers) TO the manager's working/public number (`WHATSAPP_ADMIN_RECIPIENT` — the same number as `NEXT_PUBLIC_WHATSAPP_NUMBER`). Two approved templates: `WHATSAPP_TEMPLATE_NAME` for `order.created` (6 body parameters: order number, customer name, phone, city, total, delivery method) and `WHATSAPP_CONTACT_TEMPLATE_NAME` for `contact.created` (3: customer name, phone, message). Enabled with any required value missing = startup error. Failures are logged as codes and stored in `NotificationDelivery`, and transient ones are retried automatically by `notifications-worker` (§10a); orders and leads are never affected. Never sent to customers |
@@ -134,7 +135,11 @@ Development-only: `E2E_BASE_URL`, `NEXT_PUBLIC_APP_URL`, empty
    login needs it (`Secure` cookies).
 8. **Seed the catalog and the first admin — once.** `prisma/seed.ts` is
    idempotent and refuses a weak or default admin password in production.
-   Its catalog prices are placeholders: correct them in `/admin/prices` before launch.
+   Its catalog prices are placeholders: import or correct the approved private
+   prices before launch, review the published MS Standard catalog, then set the
+   non-secret `CATALOG_PRICING_APPROVAL` reference. Production preflight fails
+   closed until that reference is present and non-placeholder; it is a release
+   approval gate, not a substitute for reviewing the database.
    It seeds **no promo codes** in production: the demo codes in
    `src/lib/data/seed-data.ts` are public and development-only. A promo code
    stops being accepted once its `validUntil` instant has passed (server time).
@@ -607,7 +612,9 @@ database is refused rather than carrying stale privileges until it expires.
 
 - Domain and DNS A record(s); then the TLS bootstrap in §8.
 - Off-host copies of backups (see [production-backups.md](production-backups.md)) — local backups do not survive loss of the server.
-- Real `SELLER_*`, WhatsApp number, notification credentials; real catalog prices.
+- Real `SELLER_*` (legal name, BIN and address before proposals; full banking
+  block before invoices), WhatsApp number, notification credentials; approved
+  catalog prices and a `CATALOG_PRICING_APPROVAL` reference.
 - External uptime monitoring of `https://<domain>/api/health` and of backup age.
 - Whether online payment is wanted at launch at all (§13) — it is off today.
 

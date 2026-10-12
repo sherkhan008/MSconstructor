@@ -22,6 +22,7 @@ export interface ProductionConfigInput extends WhatsAppEnvInput {
   DATABASE_URL?: string;
   AUTH_SECRET?: string;
   APP_URL?: string;
+  CATALOG_PRICING_APPROVAL?: string;
   NEXT_PUBLIC_APP_URL?: string;
   TRUSTED_PROXY_CLIENT_IP_HEADER?: string;
   REDIS_URL?: string;
@@ -119,6 +120,18 @@ export function checkProductionConfig(input: ProductionConfigInput): ProductionC
     } else if (appUrl.protocol !== 'https:') {
       warnings.push('APP_URL is not https://. Use plain HTTP only for local production rehearsals.');
     }
+  }
+
+  // --- Launch catalog approval --------------------------------------------
+  // The repository ships demo prices. This non-secret reference is a human
+  // release gate: the owner sets it only after the approved private price list
+  // is imported and reviewed. It does not pretend to prove database contents;
+  // it makes an accidental seeded-price launch fail closed.
+  const catalogPricingApproval = input.CATALOG_PRICING_APPROVAL?.trim();
+  if (!catalogPricingApproval) {
+    errors.push('CATALOG_PRICING_APPROVAL is required after the approved launch price list is imported and reviewed.');
+  } else if (looksLikePlaceholder(catalogPricingApproval) || !/^[A-Za-z0-9][A-Za-z0-9._-]{2,120}$/.test(catalogPricingApproval)) {
+    errors.push('CATALOG_PRICING_APPROVAL must be a non-placeholder approval/version reference using letters, digits, dot, underscore, or hyphen.');
   }
 
   // --- Client IP trust contract (rate limiting, audit log) -----------------

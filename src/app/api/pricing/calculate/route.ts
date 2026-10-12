@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const catalog = await getCatalog();
-    const result = calculatePrice(withoutClientPriceLevel(body), catalog, { locale });
+    const result = calculatePrice(withoutClientPriceLevel(body), catalog, { locale, publicLaunch: true });
 
     if (!result.ok) {
       const statusByCode: Record<typeof result.code, number> = {
