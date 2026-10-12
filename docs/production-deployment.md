@@ -66,7 +66,7 @@ as required secret / required / optional.
 | `PUBLIC_HTTP_BIND`, `PUBLIC_HTTPS_BIND` | optional | defaults `80`, `443`; `127.0.0.1:8080` for HTTP behind a host-level TLS terminator |
 | `LETSENCRYPT_DIR`, `ACME_WEBROOT` | optional | host paths mounted read-only into the proxy; defaults `/etc/letsencrypt`, `/var/www/certbot` |
 | `SELLER_*` | optional (required before invoices) | confidential banking details |
-| `CATALOG_PRICING_APPROVAL` | required before app startup | non-secret approved private price-list/version reference; set only after import and admin review, never a placeholder |
+| `CATALOG_PRICING_APPROVAL` | required before app startup | non-secret, owner-chosen approved price-list/version reference (`3`-`121` characters: letters, digits, dot, underscore or hyphen; first character alphanumeric). Set only after import and admin review, never a placeholder. It is a static release reference, not an automatically generated timestamp |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | optional (token is a secret) | secondary manager channel, sent in parallel with WhatsApp (not conditional on it): order events `order.created`, `order.status_changed`, `order.paid` with redacted text (no customer data), and `contact.created` (new contact-form lead: name, phone, message). Unset = skipped + warn log; orders, payments and leads are never affected. Attempts are stored in `NotificationDelivery`; transient failures are retried automatically by `notifications-worker` (§10a) |
 | `SMTP_*`, `MANAGER_EMAIL`, `EMAIL_FROM` | optional (password is a secret) | email channel has no transport yet: reported as unavailable, never as sent |
 | `WHATSAPP_NOTIFICATIONS_ENABLED`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ADMIN_RECIPIENT`, `WHATSAPP_TEMPLATE_NAME`, `WHATSAPP_CONTACT_TEMPLATE_NAME`, `WHATSAPP_TEMPLATE_LANGUAGE`, `WHATSAPP_GRAPH_API_VERSION` | optional, off by default (token is a secret) | internal manager alerts via the official Cloud API, sent FROM the technical Cloud API number (`WHATSAPP_PHONE_NUMBER_ID`, never shown to customers) TO the manager's working/public number (`WHATSAPP_ADMIN_RECIPIENT` — the same number as `NEXT_PUBLIC_WHATSAPP_NUMBER`). Two approved templates: `WHATSAPP_TEMPLATE_NAME` for `order.created` (6 body parameters: order number, customer name, phone, city, total, delivery method) and `WHATSAPP_CONTACT_TEMPLATE_NAME` for `contact.created` (3: customer name, phone, message). Enabled with any required value missing = startup error. Failures are logged as codes and stored in `NotificationDelivery`, and transient ones are retried automatically by `notifications-worker` (§10a); orders and leads are never affected. Never sent to customers |
@@ -97,9 +97,13 @@ Development-only: `E2E_BASE_URL`, `NEXT_PUBLIC_APP_URL`, empty
    silently switched the process to development mode.
    It also exits when `PAYMENTS_ENABLED=true` but `PAYMENTS_PROVIDER` does not
    name a provider adapter this build contains (§13).
-   Warnings (logged, not fatal): no Redis, non-https `APP_URL`,
-   `ADMIN_INITIAL_PASSWORD` present at runtime, WhatsApp number not built in,
-   `PAYMENTS_ENABLED` set to something other than `true`/`false`.
+   It also exits when `CATALOG_PRICING_APPROVAL` is absent, malformed or a
+   placeholder; when the required public WhatsApp number was not built into
+   the image; or when WhatsApp notifications are enabled with incomplete
+   provider configuration. Warnings (logged, not fatal): no Redis, non-https
+   `APP_URL`, `ADMIN_INITIAL_PASSWORD` present at runtime, or
+   `PAYMENTS_ENABLED` / `WHATSAPP_NOTIFICATIONS_ENABLED` set to something
+   other than `true`/`false`.
    Log lines name the variable, never the value. This applies to any
    production-mode start, including a local `npm run start` without
    `NODE_ENV=development` (Playwright sets it; see `playwright.config.ts`).
@@ -124,15 +128,14 @@ Development-only: `E2E_BASE_URL`, `NEXT_PUBLIC_APP_URL`, empty
    Keep `PROXY_TLS_ENABLED=false` for now (HTTP bootstrap).
 6. **Backup directory**: `sudo mkdir -p /var/backups/ms-shelving && sudo chown <deploy-user> /var/backups/ms-shelving`.
    **ACME webroot**: `sudo mkdir -p /var/www/certbot`.
-7. **Deploy** (tests the proxy config, builds images, starts PostgreSQL +
-   Redis, runs migrations, starts the app, waits for health, starts nginx in
-   HTTP bootstrap mode, verifies internal readiness):
+7. **Bootstrap PostgreSQL without starting the app.** Leave
+   `CATALOG_PRICING_APPROVAL` unset: approval does not exist yet. Build the
+   operational image, start only PostgreSQL and Redis, and apply migrations:
    ```sh
-   bash scripts/ops/deploy.sh --first-deploy
+   docker compose --env-file .env.production build migrate
+   docker compose --env-file .env.production up -d --wait postgres redis
+   docker compose --env-file .env.production run --rm --no-deps migrate
    ```
-7a. **Enable HTTPS now** — §8.2 to §8.5 (certificate, `PROXY_TLS_ENABLED=true`,
-   `proxy.sh apply`, verification). Do the remaining steps over HTTPS: admin
-   login needs it (`Secure` cookies).
 8. **Seed the catalog and the first admin — once.** `prisma/seed.ts` is
    idempotent and refuses a weak or default admin password in production.
    Its catalog prices are placeholders: import or correct the approved private
@@ -149,17 +152,36 @@ Development-only: `E2E_BASE_URL`, `NEXT_PUBLIC_APP_URL`, empty
      -e ADMIN_EMAIL -e ADMIN_INITIAL_PASSWORD migrate ./node_modules/.bin/tsx prisma/seed.ts
    unset ADMIN_INITIAL_PASSWORD
    ```
-9. **Verify** health, pages, network exposure, HTTPS/redirect and admin
+9. **Import and approve launch pricing before the app can start.** Follow
+   [supplier-price-import.md](supplier-price-import.md): dry-run and review the
+   private list, apply it transactionally, then review all launch models,
+   accessories, walls, colours, assembly, delivery, discounts and minimum
+   margin in the source-of-truth data. Only after that review, add an
+   owner-chosen `CATALOG_PRICING_APPROVAL` reference to `.env.production`.
+   The importer deliberately does not create or rotate this marker; a later
+   approved pricing release requires a new reference and an app restart so
+   the runtime configuration records the newly approved version. The
+   notification worker does not consume pricing and does not require it.
+10. **Run the first deploy** (tests the proxy config, builds images, confirms
+    migrations, starts the app and worker, waits for health, starts nginx in
+    HTTP bootstrap mode, and verifies internal readiness):
+    ```sh
+    bash scripts/ops/deploy.sh --first-deploy
+    ```
+11. **Enable HTTPS now** by following section 8.2 through 8.5 (certificate,
+    `PROXY_TLS_ENABLED=true`, `proxy.sh apply`, verification). Admin login
+    needs HTTPS because production cookies are `Secure`.
+12. **Verify** health, pages, network exposure, HTTPS/redirect and admin
    login, then log in through the browser and change the initial password.
    With `PROXY_TLS_ENABLED=true` the smoke test targets `APP_URL` by default:
    ```sh
    SMOKE_ADMIN_EMAIL=... SMOKE_ADMIN_PASSWORD=... bash scripts/ops/smoke-test.sh
    ```
-10. **Critical public flows by hand**: open `/configurator`, change sections /
+13. **Critical public flows by hand**: open `/configurator`, change sections /
     height, confirm the price updates; add to cart; submit a test order;
     open it in `/admin/orders`; generate the commercial proposal PDF (and the
     invoice once `SELLER_*` is set). Cancel the test order afterwards.
-11. **Backups**: install the timer (see [production-backups.md](production-backups.md)),
+14. **Backups**: install the timer (see [production-backups.md](production-backups.md)),
     run one backup manually, and do a restore test.
 
 ## 4. Migrations

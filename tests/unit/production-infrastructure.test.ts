@@ -126,6 +126,13 @@ describe('docker-compose.yml (production)', () => {
     expect(withoutComments(services.get('app') ?? '')).not.toMatch(/ADMIN_INITIAL_PASSWORD/);
   });
 
+  it('allows database bootstrap before pricing approval but keeps the marker in the app preflight', () => {
+    const app = withoutComments(services.get('app') ?? '');
+    expect(app).toMatch(/^ {6}- CATALOG_PRICING_APPROVAL$/m);
+    expect(app).not.toMatch(/CATALOG_PRICING_APPROVAL=\$\{CATALOG_PRICING_APPROVAL:\?/);
+    expect(read('src/lib/startup/production-config.ts')).toMatch(/CATALOG_PRICING_APPROVAL is required/);
+  });
+
   it('declares the trusted client-IP header that nginx overwrites', () => {
     expect(services.get('app')).toMatch(/- TRUSTED_PROXY_CLIENT_IP_HEADER=x-real-ip$/m);
     const nginx = withoutComments(read('deploy/nginx/app-proxy.conf'));

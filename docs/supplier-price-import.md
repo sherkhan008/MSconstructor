@@ -127,20 +127,21 @@ dev toolchain (`tsx`) and a direct database connection. The `app` image is a
 Next.js standalone bundle and cannot run this script.
 
 ```bash
-# 0. deploy as usual — the migrate service applies committed migrations
-docker compose up -d --build
+# 0. on a first deploy, bootstrap only postgres/redis/migrations as described
+#    in docs/production-deployment.md; do not start the app and do not set
+#    CATALOG_PRICING_APPROVAL yet
 
 # 1. copy the private list to the host, out-of-band, readable only by you
 #    (scp / password manager / secure share), e.g.
 #    /srv/msconstructor/private-data/pricing/ms-standard.csv   (chmod 600)
 
 # 2. REVIEW — zero database writes; read the 26-row table before going further
-docker compose run --rm --no-deps \
+docker compose --env-file .env.production run --rm --no-deps \
   -v /srv/msconstructor/private-data:/app/private-data:ro \
   migrate npm run db:import-supplier-prices
 
 # 3. APPLY — one transaction, all 26 rows or none
-docker compose run --rm --no-deps \
+docker compose --env-file .env.production run --rm --no-deps \
   -v /srv/msconstructor/private-data:/app/private-data:ro \
   migrate npm run db:import-supplier-prices -- --apply
 ```
@@ -152,6 +153,14 @@ host copy once the import is done if that machine should not retain it.
 
 The running `app` containers pick the new prices up within
 `CATALOG_CACHE_TTL_MS` (60s) — no restart or redeploy is needed.
+
+The importer does not read, create or rotate `CATALOG_PRICING_APPROVAL`.
+For first launch, leave that marker unset until the applied prices and all
+launch pricing policies have been reviewed, then record the owner-chosen
+price-list/version reference and start the app. For a later approved pricing
+release, replace the marker with a new reference and restart the app so the
+running configuration records that approval. The notification worker does not
+consume pricing and does not receive this marker.
 
 Re-running `prisma db seed` afterwards is safe: every upsert in `prisma/seed.ts`
 uses `update: {}`, so a re-seed never overwrites an imported price. Real supplier

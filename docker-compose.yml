@@ -89,7 +89,11 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/0
       - AUTH_SECRET=${AUTH_SECRET:?AUTH_SECRET is required}
       - APP_URL=${APP_URL:?APP_URL is required}
-      - CATALOG_PRICING_APPROVAL=${CATALOG_PRICING_APPROVAL:?CATALOG_PRICING_APPROVAL is required}
+      # Deliberately not Compose-required: first-deploy database bootstrap,
+      # seed and private price import must run before an approval can exist.
+      # The production app preflight still requires and validates it, so an
+      # app container cannot become healthy until review is complete.
+      - CATALOG_PRICING_APPROVAL
       - AUTH_URL=${APP_URL:?APP_URL is required}
       # Fixed by the proxy contract with deploy/nginx/app-proxy.conf.
       - TRUSTED_PROXY_CLIENT_IP_HEADER=x-real-ip

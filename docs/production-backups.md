@@ -104,6 +104,9 @@ RESTIC_PASSWORD_FILE="/etc/ms-shelving/restic-password"
 RESTIC_RETENTION_POLICY="30-daily-12-monthly"
 AWS_ACCESS_KEY_ID="..."
 AWS_SECRET_ACCESS_KEY="..."
+# Set when the selected S3-compatible provider requires an explicit region.
+AWS_DEFAULT_REGION="<provider-region>"
+# AWS_SESSION_TOKEN="..."  # only for temporary credentials
 ```
 
 The password file is likewise root-owned `0600`, contains only the restic
