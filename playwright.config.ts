@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { defineConfig, devices } from '@playwright/test';
-import { SELLER_BANKING_SENTINELS } from './tests/fixtures/seller-banking-sentinels';
+import { SELLER_E2E_ENV, SELLER_ENV_NAMES } from './tests/fixtures/seller-e2e-sentinels';
 
 /**
  * Next.js loads `.env` itself, so the app under test already sees
@@ -16,6 +16,10 @@ try {
 } catch {
   // No .env — admin specs will skip, everything else runs unchanged.
 }
+
+// Seller state is always the synthetic fixture below, never a developer's
+// legal or banking data inherited through the local `.env`.
+for (const name of SELLER_ENV_NAMES) delete process.env[name];
 
 /**
  * One id per `playwright test` invocation. Evaluated first in the runner,
@@ -66,15 +70,14 @@ export default defineConfig({
         // already running server on purpose, set E2E_BASE_URL.
         reuseExistingServer: false,
         timeout: 180_000,
-        // These tests run the real production build against no database —
-        // NODE_ENV=development keeps src/lib/env.ts's production-requires-
-        // DATABASE_URL guard (see docs/production-database.md) from firing,
-        // so the app serves from the in-memory sample catalog exactly like
-        // local dev, without weakening that guard for an actual deployment
-        // (which sets NODE_ENV=production itself and never touches this file).
-        // The seller's banking variables are synthetic sentinels, so
-        // tests/e2e/public-legal-identity.spec.ts always has known banking
-        // values to prove absent from every public page and bundle.
+        // These tests serve the real production build. Runtime launch values
+        // that are not secrets are explicit synthetic E2E inputs; database
+        // and auth credentials still come from the caller (the disposable CI
+        // service or the developer's test environment).
+        // Seller identity and banking are explicit synthetic sentinels. This
+        // keeps document readiness independent of a developer's .env, gives
+        // invoice scenarios their required beneficiary fields, and lets the
+        // public-identity spec prove banking values stay out of public output.
         //
         // TRUSTED_PROXY_CLIENT_IP_HEADER puts the server under the production
         // client-IP trust model (the header deploy/nginx/app-proxy.conf
@@ -83,9 +86,11 @@ export default defineConfig({
         // Playwright and Next.js. The tests then act as that proxy — see
         // tests/e2e/helpers/client-identity.ts.
         env: {
-          NODE_ENV: 'development',
+          NODE_ENV: 'production',
+          APP_URL: baseURL,
+          CATALOG_PRICING_APPROVAL: 'e2e-synthetic-catalog-v1',
           TRUSTED_PROXY_CLIENT_IP_HEADER: 'x-real-ip',
-          ...SELLER_BANKING_SENTINELS,
+          ...SELLER_E2E_ENV,
         },
       },
 });

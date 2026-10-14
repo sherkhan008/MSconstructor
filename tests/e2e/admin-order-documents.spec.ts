@@ -18,6 +18,7 @@ import {
 } from './helpers/checkout-order-fixtures';
 import { trustedProxyHeaders } from './helpers/client-identity';
 import { clickWhenHydrated } from './helpers/hydration';
+import { SELLER_IDENTITY_SENTINELS } from '../fixtures/seller-e2e-sentinels';
 
 /**
  * "Документы" on /admin/orders/[id] — commercial proposal and invoice PDFs.
@@ -201,6 +202,9 @@ test('clicking "Сформировать" issues the proposal once; Order.update
   expect(flat).toContain(`№ KP-${fixtures.legacy.orderNumber} от ${issuedDate}`);
   expect(flat).toContain(fixtures.legacy.companyName);
   expect(flat).toContain(`БИН ${fixtures.legacy.binIin}`);
+  expect(flat).toContain(SELLER_IDENTITY_SENTINELS.SELLER_LEGAL_NAME);
+  expect(flat).toContain(`БИН ${SELLER_IDENTITY_SENTINELS.SELLER_BIN}`);
+  expect(flat).toContain(SELLER_IDENTITY_SENTINELS.SELLER_ADDRESS);
   // Fixture totals: net 844 828, VAT 135 172, total 980 000; one row, 1 × 844 828.
   expect(flat).toContain('1 компл. × 844 828,00 ₸ = 844 828,00 ₸');
   expect(flat).toContain('Итого без НДС 844 828,00 ₸');
@@ -244,37 +248,22 @@ test('issuing a document does not make an open order page hit a false edit confl
   await expect(page.getByText('Заметка сохранена.')).toBeVisible();
 });
 
-test('the invoice is either ready to issue or blocked with the exact missing seller settings — never faked', async ({ page, context, baseURL }) => {
+test('the invoice is ready to issue with the explicit synthetic beneficiary fixture', async ({ page, context, baseURL }) => {
   await signIn(context, 'ADMIN', baseURL!);
   await page.goto(`/admin/orders/${fixtures.unassigned.id}`);
   const invoice = page.getByTestId('order-documents').locator('[data-document-kind="invoice"]');
 
-  if ((await invoice.getByTestId('document-blockers').count()) > 0) {
-    await expect(invoice.getByRole('link')).toHaveCount(0);
-    await expect(invoice.getByTestId('issue-document')).toHaveCount(0);
-    await expect(invoice.getByTestId('document-blockers')).toContainText('SELLER_');
-
-    const issueResponse = await page.request.post(issuePath(fixtures.unassigned.id, 'invoice'));
-    expect(issueResponse.status()).toBe(422);
-    const json = await issueResponse.json();
-    expect((json.details as string[]).some((d) => d.includes('SELLER_'))).toBe(true);
-    expect(await prisma.orderDocument.count({ where: { orderId: fixtures.unassigned.id, kind: 'INVOICE' } })).toBe(0);
-
-    // GET never even mentions seller configuration — it only ever says
-    // "not issued", regardless of whether issuing would succeed.
-    const getResponse = await page.request.get(documentPath(fixtures.unassigned.id, 'invoice'));
-    expect(getResponse.status()).toBe(409);
-  } else {
-    await clickWhenHydrated(invoice.getByTestId('issue-document'));
-    await expect(invoice.getByRole('link', { name: 'Открыть PDF: Счёт на оплату' })).toBeVisible();
-    const href = await invoice.getByRole('link', { name: 'Открыть PDF: Счёт на оплату' }).getAttribute('href');
-    const response = await page.request.get(href!);
-    expect(response.status()).toBe(200);
-    const { flat } = await pdfText(await response.body());
-    expect(flat).toContain(`№ INV-${fixtures.unassigned.orderNumber}`);
-    expect(flat).toContain('Всего к оплате 145 000,00 ₸');
-    expect(await prisma.orderDocument.count({ where: { orderId: fixtures.unassigned.id, kind: 'INVOICE' } })).toBe(1);
-  }
+  await expect(invoice.getByTestId('document-blockers')).toHaveCount(0);
+  await expect(invoice.getByRole('link')).toHaveCount(0);
+  await clickWhenHydrated(invoice.getByTestId('issue-document'));
+  const open = invoice.getByRole('link', { name: 'Открыть PDF: Счёт на оплату' });
+  await expect(open).toBeVisible();
+  const response = await page.request.get((await open.getAttribute('href'))!);
+  expect(response.status()).toBe(200);
+  const { flat } = await pdfText(await response.body());
+  expect(flat).toContain(`№ INV-${fixtures.unassigned.orderNumber}`);
+  expect(flat).toContain('Всего к оплате 145 000,00 ₸');
+  expect(await prisma.orderDocument.count({ where: { orderId: fixtures.unassigned.id, kind: 'INVOICE' } })).toBe(1);
 });
 
 test('an order placed before document snapshots explains why no document can be generated, from either route', async ({ page, context, baseURL }) => {

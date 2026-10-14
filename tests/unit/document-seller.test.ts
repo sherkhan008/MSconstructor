@@ -14,6 +14,7 @@ import {
   readSellerConfig,
   sellerConfigIssues,
 } from '@/lib/documents/seller';
+import { SELLER_E2E_ENV, SELLER_IDENTITY_SENTINELS } from '../fixtures/seller-e2e-sentinels';
 
 const COMPLETE = {
   SELLER_LEGAL_NAME: 'ТОО «Тестовый Продавец»',
@@ -49,6 +50,17 @@ describe('seller configuration', () => {
       'SELLER_BIC',
       'SELLER_KBE',
     ]);
+  });
+
+  it('the canonical E2E seller fixture satisfies proposal and invoice requirements with synthetic identity', () => {
+    const config = readSellerConfig(SELLER_E2E_ENV);
+    expect(config.details).toMatchObject({
+      legalName: SELLER_IDENTITY_SENTINELS.SELLER_LEGAL_NAME,
+      bin: SELLER_IDENTITY_SENTINELS.SELLER_BIN,
+      address: SELLER_IDENTITY_SENTINELS.SELLER_ADDRESS,
+    });
+    expect(sellerConfigIssues('commercial-proposal', config)).toEqual([]);
+    expect(sellerConfigIssues('invoice', config)).toEqual([]);
   });
 
   it('normalises valid values and reports an invoice as ready', () => {

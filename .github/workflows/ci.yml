@@ -30,6 +30,10 @@ concurrency:
 
 env:
   NEXT_TELEMETRY_DISABLED: '1'
+  # Public, synthetic build/test input. Keeping it workflow-wide ensures the
+  # production artifact and Playwright's server-side expectations use the
+  # same contact number without deployment or developer environment data.
+  NEXT_PUBLIC_WHATSAPP_NUMBER: '77000000000'
 
 jobs:
   static:
@@ -162,8 +166,9 @@ jobs:
 
       - uses: ./.github/actions/setup-project
 
-      # No database and no NEXT_PUBLIC_* values, exactly like the image build
-      # (Dockerfile): `next build` needs neither.
+      # No database is needed to build. The synthetic public contact above is
+      # baked into this E2E-only artifact, matching the production image's
+      # required build argument without using deployment data.
       - name: Build
         run: npm run build
 
